@@ -1,0 +1,13 @@
+[project]
+name = "multimodal-rag-system"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "openai>=2.44.0",
+    "pandas>=3.0.3",
+    "pydantic-ai>=2.5.0",
+    "qdrant-client>=1.18.0",
+    "streamlit>=1.59.1",
+]

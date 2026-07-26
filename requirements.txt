@@ -1,0 +1,36 @@
+fastapi
+uvicorn
+pydantic
+python-dotenv
+python-multipart
+
+langchain-core
+langchain-groq
+groq
+langchain-sambanova
+sambanova
+
+qdrant-client
+fastembed
+transformers
+accelerate
+
+docling
+unstructured[pdf]
+unstructured[csv]
+pandas
+PyMuPDF
+pdfplumber
+Pillow
+google-genai
+langchain-google-genai
+openai
+
+# CPU PyTorch (default). For Qwen AWQ on GPU, install requirements-gpu.txt instead.
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.4.0
+
+paddlepaddle
+paddleocr
+gptqmodel
+tqdm

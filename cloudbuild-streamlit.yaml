@@ -1,0 +1,6 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', 'us-central1-docker.pkg.dev/project-ad23f18a-9e1a-43eb-84b/rag-repo/financial-rag-ui', '-f', 'Dockerfile.streamlit', '.']
+
+images:
+- 'us-central1-docker.pkg.dev/project-ad23f18a-9e1a-43eb-84b/rag-repo/financial-rag-ui'

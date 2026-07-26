@@ -1,0 +1,149 @@
+176
+
+Figure 4.2
+
+Firms in lower-income countries
+
+gain proportionately more sales from
+
+adopting voluntary international standards
+
+than do firms in more developed countries
+
+Sales (log scale)
+
+17.8
+
+17.6
+
+17.4
+
+17.2
+
+17.0
+
+Low
+
+income Lower middle Upper middle income income Standard adopted No standard adopted
+
+Source:
+
+WDR 2025 team, based on World Bank Enterprise
+
+Surveys (dashboard), World Bank, https://www.enterprise
+
+[surveys  .org/en/data.](https://www.enterprisesurveys.org/en/data)
+
+Note:
+
+The figure shows the conditional prediction for
+
+average log sales by income level and whether firms
+
+adopted a voluntary standard, based on a regression
+
+of firms' total sales controlling for employment, capital
+
+intensity, and sector.
+
+Table 4.2
+
+Examples of certification costs for firms in selected markets for meeting the ISO 14001
+
+quality standard
+
+COUNTRY
+
+Developed
+
+countries
+
+Germany a
+
+United
+
+States b High income INITIAL CERTIFICATION COSTS
+
+Small companies pay total costs of about
+
+US$3,000 (€2,613), larger ones up to
+
+US$11,500 (€10,017).
+
+Initial certification costs for small businesses
+
+with fewer than 10 employees and a single
+
+location range from US$5,000 to US$8,000.
+
+These costs increase with an organization's
+
+size and complexity.
+
+Limited  access  to  credit,  managerial  know-how,
+
+and  domestic  facilities for testing  needed  to
+
+demonstrate  compliance  with  standards  further
+
+amplifies
+
+face.
+
+the challenges developing countries
+
+12   Germany  has  more  than  12,000  auditors
+
+for ISO 9001; Ethiopia has fewer than 100. Even
+
+if nominal certification fees are comparable across
+
+countries  (refer  to  table  4.2  for  those  associated
+
+with  ISO  14001),  firms  in  developing  countries
+
+have relatively higher total compliance costs
+
+because  ancillary  investments-for  technology,
+
+consulting, and logistics-represent a much larger
+
+share of their total costs. When domestic testing
+
+for  compliance  is  unavailable,  samples  must  be
+
+sent abroad, significantly increasing expenses. 13
+
+Figure  4.3  shows  that  the  likelihood  a  firm  will
+
+adopt  standards  increases  with  firm  size  and
+
+country income level. In lower-income countries,
+
+small  and  medium  enterprises  (SMEs)  face  dis-
+
+proportionate obstacles, because their size makes
+
+the fixed costs of certification harder for them to
+
+absorb.
+
+SURVEILLANCE AND
+
+RECERTIFICATION COSTS
+
+Not available.
+
+External consultants charge US$500 to
+
+US$1,500 per day for additional technical
+
+assistance. Budget for annual audit costs as
+
+part of the three-year certification cycle also
+
+need to be considered.
+
+(Table continues next page)
+
+World Development Report 2025
