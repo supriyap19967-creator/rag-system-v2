@@ -15,11 +15,16 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: "3.11"
+    - name: Install System Dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential libpcre2-dev libpcre3-dev pcre2-utils
+
     - name: Install Dependencies
       run: |
-        python -m pip install --upgrade pip setuptools wheel
+        python -m pip install --upgrade pip setuptools wheel pcre
         pip install "torch>=2.7.1" --extra-index-url https://download.pytorch.org/whl/cpu
-        pip install --no-build-isolation -r requirements.txt
+        pip install --only-binary=:all: gptqmodel || pip install --prefer-binary -r requirements.txt
     - name: Run Pytest Evaluation Suite
       run: |
         pytest
