@@ -23,13 +23,12 @@ jobs:
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip setuptools wheel
-        pip install "torch>=2.2.0" "transformers>=4.40.0" sentence-transformers pytest pytest-cov
-        pip install gptqmodel --no-build-isolation
         pip install --no-build-isolation -r requirements.txt
+        pip install --upgrade "torch>=2.2.0" "transformers>=4.44.0" sentence-transformers pytest pytest-cov
 
     - name: Run Pytest Evaluation Suite
       env:
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
-        GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || 'dummy_key' }}
+        GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY || 'dummy_key' }}
       run: |
         pytest
