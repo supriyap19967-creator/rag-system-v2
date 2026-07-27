@@ -33,3 +33,4 @@ openai
 paddlepaddle
 paddleocr
 tqdm
+langfuse>=2
