@@ -15,6 +15,7 @@ sambanova
 qdrant-client
 fastembed
 transformers
+datasets
 accelerate
 
 docling
