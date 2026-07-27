@@ -23,12 +23,13 @@ jobs:
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip setuptools wheel
-        pip install --no-build-isolation -r requirements.txt
-        pip install --upgrade "torch>=2.2.0" "transformers>=4.44.0" sentence-transformers pytest pytest-cov
+        pip install --prefer-binary torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+        pip install --prefer-binary transformers sentence-transformers pytest pytest-cov
+        pip install --prefer-binary -r requirements.txt
 
     - name: Run Pytest Evaluation Suite
       env:
-        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || 'dummy_key' }}
-        GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY || 'dummy_key' }}
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || 'dummy_key_for_testing' }}
+        GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY || 'dummy_key_for_testing' }}
       run: |
         pytest
