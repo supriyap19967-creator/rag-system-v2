@@ -22,10 +22,10 @@ jobs:
 
     - name: Install Dependencies
       run: |
-        python -m pip install --upgrade pip setuptools wheel pypcre
+        python -m pip install --upgrade pip setuptools wheel
         pip install "torch>=2.7.1" --extra-index-url https://download.pytorch.org/whl/cpu
         pip install gptqmodel --no-build-isolation
-        pip install --prefer-binary -r requirements.txt
+        pip install --no-build-isolation -r requirements.txt
     - name: Run Pytest Evaluation Suite
       run: |
         pytest
