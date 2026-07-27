@@ -33,4 +33,4 @@ openai
 paddlepaddle
 paddleocr
 tqdm
-langfuse>=2
+langfuse==2.60.10
