@@ -26,6 +26,7 @@ jobs:
         pip install "torch>=2.7.1" --extra-index-url https://download.pytorch.org/whl/cpu
         pip install gptqmodel --no-build-isolation
         pip install --no-build-isolation -r requirements.txt
+        pip install pytest pytest-cov
     - name: Run Pytest Evaluation Suite
       run: |
         pytest
