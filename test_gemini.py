@@ -1,13 +1,18 @@
-from google import genai
 import os
+import pytest
+from google import genai
 
-# Initialize client
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+def test_gemini_response():
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if not api_key or api_key == "dummy_key_for_testing":
+        pytest.skip("Skipping test: GOOGLE_API_KEY is not set.")
 
-# Use correct model
-response = client.models.generate_content(
-    model="gemini-2.0-flash",
-    contents="Explain RAG in simple terms"
-)
+    # Initialize client
+    client = genai.Client(api_key=api_key)
 
-print(response.text)
+    # Use correct model
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents="Explain RAG in simple terms"
+    )
+    print(response.text)
