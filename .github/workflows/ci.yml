@@ -18,7 +18,8 @@ jobs:
     - name: Install Dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
+        pip install "torch>=2.7.1" --index-url https://download.pytorch.org/whl/cpu
+        pip install gptqmodel --no-build-isolation
         pip install -r requirements.txt
     - name: Run Pytest Evaluation Suite
       run: |
