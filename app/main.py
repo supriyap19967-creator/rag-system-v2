@@ -3204,6 +3204,36 @@ def _filter_visual_documents_for_query(query: str, documents: list) -> list:
     return filtered
 
 
+def _visual_results_from_documents(documents: list) -> list[dict]:
+    visuals = []
+    for doc in documents:
+        meta = doc.metadata or {}
+        if meta.get("content_type") != "visual":
+            continue
+        v_type = meta.get("visual_type")
+        if v_type == "paragraph":
+            continue
+
+        quality = meta.get("crop_quality")
+        score = meta.get("crop_quality_score", 1.0)
+
+        if quality == "chart_expanded_low_quality" or score < 0.3:
+            continue
+
+        if v_type == "figure" and quality == "figure_layout_region_accepted":
+            continue
+
+        visuals.append({
+            "page_number": int(meta.get("page", 1)),
+            "image_path": meta.get("image_path", ""),
+            "caption": meta.get("caption", ""),
+            "visual_type": v_type,
+            "crop_quality": quality,
+            "crop_quality_score": score
+        })
+    return visuals
+
+
 def _build_retrieval_queries(query: str, history: list) -> list[str]:
     return RAGModules.module_condense_query(query, history, nvidia_llama_model())
 
