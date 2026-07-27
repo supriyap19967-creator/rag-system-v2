@@ -24,7 +24,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip setuptools wheel
         pip install --prefer-binary torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-        pip install --prefer-binary transformers sentence-transformers datasets pytest pytest-cov
+        pip install --prefer-binary transformers sentence-transformers datasets pinecone-client llama-index-core llama-index-vector-stores-pinecone pytest pytest-cov
         pip install --prefer-binary -r requirements.txt
 
     - name: Run Pytest Evaluation Suite
@@ -32,4 +32,4 @@ jobs:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || 'dummy_key_for_testing' }}
         GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY || 'dummy_key_for_testing' }}
       run: |
-        pytest
+        PYTHONPATH=. pytest

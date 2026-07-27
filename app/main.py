@@ -3084,6 +3084,18 @@ def run_agent_query(request: AgentQueryRequest) -> dict[str, Any]:
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+def _build_retrieval_queries(query: str, history: list) -> list[str]:
+    return RAGModules.module_condense_query(query, history, nvidia_llama_model())
+
+
+def _execute_single_query(query: str, session_id: str = "default", history: list = None) -> dict[str, Any]:
+    if history:
+        for turn in history:
+            if isinstance(turn, dict) and "role" in turn and "content" in turn:
+                memory_manager.update_history(session_id, turn["role"], turn["content"])
+    return query_rag(QueryRequest(question=query, session_id=session_id))
+
+
 if __name__ == "__main__":
     import uvicorn
 
