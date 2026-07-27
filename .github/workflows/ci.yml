@@ -24,7 +24,7 @@ jobs:
       run: |
         python -m pip install --upgrade pip setuptools wheel
         pip install --prefer-binary torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-        pip install --prefer-binary transformers sentence-transformers datasets pinecone-client llama-index-core llama-index-vector-stores-pinecone rank-bm25 pytest pytest-cov
+        pip install --prefer-binary transformers sentence-transformers datasets pinecone-client llama-index-core llama-index-vector-stores-pinecone rank-bm25 opentelemetry-api opentelemetry-sdk pytest pytest-cov
         pip install --prefer-binary -r requirements.txt
 
     - name: Run Pytest Evaluation Suite
