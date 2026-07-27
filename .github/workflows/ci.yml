@@ -26,7 +26,10 @@ jobs:
         pip install "torch>=2.7.1" --extra-index-url https://download.pytorch.org/whl/cpu
         pip install gptqmodel --no-build-isolation
         pip install --no-build-isolation -r requirements.txt
-        pip install pytest pytest-cov
+        pip install pytest pytest-cov sentence-transformers
     - name: Run Pytest Evaluation Suite
+      env:
+        GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || 'dummy_key_for_tests' }}
+        GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY || 'dummy_key_for_tests' }}
       run: |
         pytest
