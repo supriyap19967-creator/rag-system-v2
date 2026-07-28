@@ -138,7 +138,14 @@ def extract_indicators(question: str) -> List[str]:
 
 
 def extract_countries(question: str) -> List[Tuple[str, Optional[str]]]:
-    normalized_question = f" {_normalize(question)} "
+    words = _normalize(question).split()
+    normalized_words = []
+    for w in words:
+        if w.endswith("s") and w != "us" and len(w) > 2:
+            normalized_words.append(w[:-1])
+        else:
+            normalized_words.append(w)
+    normalized_question = f" {' '.join(normalized_words)} "
     matches: List[Tuple[int, int, Tuple[str, Optional[str]]]] = []
     aliases = _country_aliases_from_tables()
     for alias, country in aliases.items():

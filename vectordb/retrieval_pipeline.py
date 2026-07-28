@@ -66,16 +66,17 @@ class ConversationalRetrievalPipeline:
 
     def _query_with_context(self, query: str, history: list[dict[str, str]]) -> str:
         if not history:
-            return self.gateway.mask_pii(query)
+            return self.gateway._redact_pii(query)[0]
         recent = history[-self.max_history_turns :]
         history_text = "\n".join(
             f"{turn.get('role', 'user')}: {turn.get('content', '')}"
             for turn in recent
             if turn.get("content")
         )
-        return self.gateway.mask_pii(
+        sanitized_text, _ = self.gateway._redact_pii(
             "Conversation context:\n"
             f"{history_text}\n\n"
             "Current retrieval question:\n"
             f"{query}"
-        ).strip()
+        )
+        return sanitized_text.strip()

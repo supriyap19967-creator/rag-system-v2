@@ -305,14 +305,21 @@ class MultimodalConversationManager:
             return []
         assets: list[str] = []
         for turn in reversed(history[-4:]):
-            if turn.asset_paths:
-                assets.extend(turn.asset_paths)
+            asset_paths = getattr(turn, "asset_paths", None) or (turn.get("asset_paths") if isinstance(turn, dict) else None)
+            if asset_paths:
+                assets.extend(asset_paths)
                 break
         return self._dedupe_paths(assets)
 
     @staticmethod
-    def _format_transcript(history: list[ConversationTurn]) -> str:
-        return "\n".join(f"{turn.role.title()}: {turn.content}" for turn in history if turn.content)
+    def _format_transcript(history: list) -> str:
+        formatted = []
+        for turn in history:
+            role = getattr(turn, "role", None) or (turn.get("role") if isinstance(turn, dict) else None)
+            content = getattr(turn, "content", None) or (turn.get("content") if isinstance(turn, dict) else None)
+            if role and content:
+                formatted.append(f"{role.title()}: {content}")
+        return "\n".join(formatted)
 
     @staticmethod
     def _format_context(chunks: list[dict[str, Any]]) -> str:

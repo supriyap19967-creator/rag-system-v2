@@ -219,9 +219,6 @@ class GatewayInfrastructure:
 
     def mask_pii(self, text: str) -> str:
         """Return text with supported PII patterns redacted."""
-        if getattr(self, "bypass", False):
-            return text
-
         sanitized_text, _redaction_count = self._redact_pii(str(text or ""))
         return sanitized_text
 
