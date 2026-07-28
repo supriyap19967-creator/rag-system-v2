@@ -1205,6 +1205,11 @@ def _resolve_existing_image_path(value: object) -> str:
     filename = Path(raw_path).name
     if not filename:
         return ""
+    import tempfile
+    temp_dir = Path(tempfile.gettempdir())
+    direct_temp_path = (temp_dir / filename).resolve()
+    if direct_temp_path.is_file():
+        return direct_temp_path.as_posix()
     for asset_dir in IMAGE_ASSET_DIRS:
         if not str(asset_dir) or not asset_dir.exists() or not asset_dir.is_dir():
             continue

@@ -115,8 +115,16 @@ class RAGInvariantsValidator:
 
     def validate_asset_paths(self, asset_paths: list[str]) -> int:
         from app.multimodal_assets import build_asset_registry, normalize_entity_id
-        registry = None
+        from app.main import _resolve_existing_image_path
+        resolved_paths = []
         for path in asset_paths:
+            resolved = _resolve_existing_image_path(path)
+            if resolved and os.path.exists(resolved):
+                resolved_paths.append(resolved)
+            else:
+                resolved_paths.append(path)
+        registry = None
+        for path in resolved_paths:
             if os.path.exists(path):
                 continue
             # If the path is a .pdf or generic .csv citation, skip raising path error

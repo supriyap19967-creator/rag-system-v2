@@ -129,6 +129,28 @@ class RAGMasterSafetyGauntlet:
         payload = dict(model_output_payload) if isinstance(model_output_payload, dict) else {"text_response": str(model_output_payload)}
         payload.setdefault("confidence_score", 1.0)
         payload.setdefault("metadata", {})
+        from app.main import _resolve_existing_image_path
+        def resolve_payload_paths(obj: Any) -> Any:
+            if isinstance(obj, dict):
+                new_dict = {}
+                for k, v in obj.items():
+                    if k in {
+                        "image_path", "image_paths", "csv_path", "csv_paths",
+                        "asset_path", "asset_paths", "file_path", "file_paths",
+                        "table_path", "table_paths", "figure_image_path", "chart_image_path", "table_image_path"
+                    } and isinstance(v, str):
+                        resolved = _resolve_existing_image_path(v)
+                        if resolved:
+                            new_dict[k] = resolved
+                        else:
+                            new_dict[k] = v
+                    else:
+                        new_dict[k] = resolve_payload_paths(v)
+                return new_dict
+            elif isinstance(obj, list):
+                return [resolve_payload_paths(item) for item in obj]
+            return obj
+        payload = resolve_payload_paths(payload)
 
         execution_context = {
             "gateway_result": None,
