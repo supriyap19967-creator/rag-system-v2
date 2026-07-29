@@ -34,3 +34,5 @@ paddlepaddle
 paddleocr
 tqdm
 langfuse==2.60.10
+opentelemetry-api
+opentelemetry-sdk

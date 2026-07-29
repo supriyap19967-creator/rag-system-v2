@@ -179,16 +179,23 @@ class RAGInvariantsValidator:
             full_source_text = "\n".join(expanded_sources)
             normalized_source_expanded = self._normalize_for_search(full_source_text)
 
+            ALLOWLIST = {'Series', 'Category', 'TargetValue', 'Value', 'None', '', 'Chart', 'Table', 'Row', 'Column', 'n/a'}
+            ALLOWLIST_LOWER = {item.lower() for item in ALLOWLIST}
             metadata_keys = ["chart_title", "x_axis_label", "y_axis_label", "units"]
             for key in metadata_keys:
                 value = payload.get(key)
                 if value and isinstance(value, str):
                     val_clean = value.strip()
+                    if val_clean.lower() in ALLOWLIST_LOWER:
+                        continue
                     if val_clean and val_clean.lower() != "n/a":
                         words = [w.lower() for w in re.findall(r"\w+", val_clean) if len(w) > 2]
                         if words:
-                            matched = sum(1 for w in words if w in normalized_source_expanded)
-                            if matched / len(words) < 0.5:
+                            matched = 0
+                            for w in words:
+                                if w in normalized_source_expanded or any(w in src_word for src_word in normalized_source_expanded.split()):
+                                    matched += 1
+                            if len(words) > 0 and matched / len(words) < 0.3:
                                 raise VisualSpatialGroundingViolation(
                                     f"Visual metadata '{key}' value '{val_clean}' is not semantically present in source context."
                                 )

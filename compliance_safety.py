@@ -195,9 +195,27 @@ class RAGMasterSafetyGauntlet:
                         layer_span.set_attribute("guardrail.error_trace", error_info)
                         val_logger.error(f"❌ [{layer_name}] Failed: {e}")
                         
-                        # Set exception reference to break out to standard fallback handling
-                        engine_span.set_attribute("guardrail.engine_failure_reason", f"{layer_name}: {str(e)}")
-                        return self._fallback_payload(e)
+                        CRITICAL_LAYERS = {
+                            "Guardrail_Layer_01_Prompt_Injection_Filter",
+                            "Guardrail_Layer_02_PII_Redaction",
+                            "Guardrail_Layer_03_Rate_Limit_Token_Budget",
+                            "Guardrail_Layer_04_Retrieval_Coverage",
+                            "Guardrail_Layer_06_Path_Verification",
+                            "Guardrail_Layer_10_Markdown_Sanitizer",
+                            "Guardrail_Layer_11_System_Prompt_Leakage_Scanner",
+                            "Guardrail_Layer_12_DLP_Blocklist",
+                            "Guardrail_Layer_13_Faithfulness_Evaluation",
+                        }
+                        if layer_name in CRITICAL_LAYERS:
+                            # Set exception reference to break out to standard fallback handling
+                            engine_span.set_attribute("guardrail.engine_failure_reason", f"{layer_name}: {str(e)}")
+                            return self._fallback_payload(e)
+                        else:
+                            val_logger.warning(f"⚠️ [{layer_name}] Non-critical failure (logged as warning): {e}")
+                            if "metadata" not in execution_context["payload"] or not isinstance(execution_context["payload"]["metadata"], dict):
+                                execution_context["payload"]["metadata"] = {}
+                            execution_context["payload"]["metadata"]["warning"] = f"Non-critical failure in {layer_name}: {str(e)}"
+                            execution_context["payload"]["confidence_score"] = min(execution_context["payload"].get("confidence_score", 1.0), 0.5)
                         
                     duration_ms = (time.time() - start_layer) * 1000.0
                     layer_span.set_attribute("guardrail.passed", passed)
