@@ -39,3 +39,4 @@ opentelemetry-sdk
 opentelemetry-exporter-otlp
 pydantic-ai
 sentence-transformers
+langchain-experimental
