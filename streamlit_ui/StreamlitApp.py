@@ -351,6 +351,9 @@ class ChartTableData(BaseModel):
         return self
 
 
+ChartTableRow.model_rebuild()
+ChartTableData.model_rebuild()
+
 agent_settings = ModelSettings(
     temperature=0.0
 )
