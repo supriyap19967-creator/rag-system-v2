@@ -119,6 +119,44 @@ class SystemPipelinesDeps:
         self.retrieved_chunks = []
 
 
+def swap_and_clean_row(series: str, category: str, target_val: Any) -> tuple[str, str, Any]:
+    s = str(series).strip()
+    c = str(category).strip()
+    v = target_val
+    
+    income_groups = {"low income", "lower middle income", "upper middle income", "high income"}
+    
+    # 1. Swap if income group is in Series
+    if s.lower() in income_groups and c.lower() not in income_groups:
+        s, c = c, s
+        
+    # 2. Swap if c is a line/series name and s is an income group
+    if s.lower() in income_groups:
+        s, c = c, s
+        
+    # If category matches income groups but Series is empty or dummy, make Series "Standard adopted"
+    if c.lower() in income_groups and (s == "" or s.lower() in ("n/a", "data point")):
+        s = "Standard adopted"
+        
+    # 3. If s is numeric, it shouldn't be the Series. If v is dummy/empty, move s to v.
+    is_s_numeric = False
+    try:
+        float(s.replace(",", "").strip())
+        is_s_numeric = True
+    except ValueError:
+        pass
+        
+    if is_s_numeric:
+        try:
+            val_clean = float(s.replace(",", "").strip())
+            v = int(val_clean) if val_clean.is_integer() else val_clean
+        except ValueError:
+            v = s
+        s = "Standard adopted" if c.lower() in income_groups else "Data Point"
+
+    return s, c, v
+
+
 def parse_markdown_table_to_dicts(text: str) -> list[dict[str, Any]]:
     if not text:
         return []
@@ -195,6 +233,11 @@ def parse_markdown_table_to_dicts(text: str) -> list[dict[str, Any]]:
                 row_dict["TargetValue"] = raw_val if raw_val else "N/A"
         
         # Absolute Safeguard: Fill in any empty or None values to bypass validator failures
+        s, c, v = swap_and_clean_row(row_dict.get("Series", ""), row_dict.get("Category", ""), row_dict.get("TargetValue", ""))
+        row_dict["Series"] = s
+        row_dict["Category"] = c
+        row_dict["TargetValue"] = v
+
         if not row_dict.get("Series"):
             row_dict["Series"] = "Data Point"
         if not row_dict.get("Category"):
@@ -343,7 +386,13 @@ class ChartTableData(BaseModel):
                 if len(keys) > 1 and not val_found:
                     mapped_row["TargetValue"] = row_dict[keys[1]]
             
-            val_logger.info(f"[HEALED ROW {index}] Mapped keys {keys} -> Series, Category, TargetValue")
+            # Apply swap and clean
+            s_clean, c_clean, v_clean = swap_and_clean_row(mapped_row.get("Series", ""), mapped_row.get("Category", ""), mapped_row.get("TargetValue", ""))
+            mapped_row["Series"] = s_clean
+            mapped_row["Category"] = c_clean
+            mapped_row["TargetValue"] = v_clean
+            
+            val_logger.info(f"[HEALED ROW {index}] Mapped keys -> Series: {s_clean}, Category: {c_clean}, TargetValue: {v_clean}")
             healed_v.append(ChartTableRow(**mapped_row))
 
         self.extracted_table = healed_v
@@ -494,8 +543,8 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
         "Format them completely into a structured Markdown table using logical, generic column headers inside the 'text_reasoning' field. "
         "Additionally, you MUST programmatically populate the 'extracted_table' field of the output schema with a list of dictionaries "
         "representing these extracted data points. Each dictionary in 'extracted_table' must have exactly these keys:\n"
-        "  - 'Series': The name of the data series/entity/group (e.g. country name, variable name, or indicator).\n"
-        "  - 'Category': The category/X-axis label/dimension (e.g. year, age group, or class).\n"
+        "  - 'Series': The name of the data series/line/group (e.g., 'Standard adopted', country name, or indicator). Line/series names must always go here. Numbers must never be mapped as the Series name.\n"
+        "  - 'Category': The category/X-axis label/dimension. Income groups ('Low income', 'Lower middle income', 'Upper middle income', 'High income') must ALWAYS be extracted into the 'Category' column.\n"
         "  - 'TargetValue': The precise numerical value (must be formatted as a float, integer, or raw number).\n"
         "You must then provide an exhaustive, point-by-point explanation of all extracted data inside the 'text_reasoning' field, ensuring no entity or metric is omitted.\n"
         "3. IF THE ELEMENT IS A DOCUMENT TABLE: Do not force it into a chart format. Provide a comprehensive, highly detailed text overview, row-by-row thematic breakdown, and thorough explanation of the topics covered directly inside the 'text_reasoning' field. The model is fully permitted to populate 'text_reasoning' with this comprehensive text overview while leaving 'extracted_table' empty without triggering any validation failures.\n"
@@ -785,7 +834,11 @@ def process_vision_element(ctx: RunContext[SystemPipelinesDeps], visual_asset_pa
             f"User extraction instructions: {extraction_instructions}\n\n"
             "FORMATTING GUIDELINES:\n"
             "1. If the user instructions ask for a description or explanation of a document table, extract all data points conceptually and format them entirely as standard text paragraphs or clean Markdown sections. Ensure the text fully covers every topic and category dimension visible in the image.\n"
-            "2. If the user instructions ask for data from a visual chart/graph, extract all raw data points across all entities and groups. Present them completely as a clean Markdown table using appropriate generic column names. You must capture and detail every single data point and entity present in the figure without shortcuts or omissions. Do not round approximations unnecessarily."
+            "2. If the user instructions ask for data from a visual chart/graph, extract all raw data points across all entities and groups. Present them completely as a clean Markdown table using appropriate generic column names. You must capture and detail every single data point and entity present in the figure without shortcuts or omissions. Do not round approximations unnecessarily.\n"
+            "STRICT COLUMN MAPPING RULES:\n"
+            "- Income groups ('Low income', 'Lower middle income', 'Upper middle income', 'High income') must ALWAYS be mapped to the 'Category' column.\n"
+            "- Line/Series names (e.g., 'Standard adopted') belong in the 'Series' column.\n"
+            "- Numbers must never be mapped to the 'Series' column name."
         )
         
         messages = [
@@ -2361,23 +2414,31 @@ IMAGE_FILENAME_PATTERN = re.compile(
 
 
 def display_image_robustly(img_path: str):
-    if not img_path or not os.path.exists(img_path):
-        st.warning(f"Image file not found: {img_path}")
+    resolved_path = img_path
+    if resolved_path:
+        resolved_path = resolved_path.replace("\\", "/")
+        if "C:/" in resolved_path or (len(resolved_path) > 1 and resolved_path[1] == ":") or resolved_path.startswith("/"):
+            filename = os.path.basename(resolved_path)
+            for candidate_dir in ["assets/extracted_images", "extracted_images", "assets/extracted_charts", "extracted_charts"]:
+                local_dir_path = os.path.join(os.getcwd(), candidate_dir)
+                candidate_path = os.path.join(local_dir_path, filename)
+                if os.path.exists(candidate_path):
+                    resolved_path = candidate_path
+                    break
+                    
+    st.write(f"DEBUG Image Path: {resolved_path}, Exists: {os.path.exists(resolved_path)}")
+    
+    if not resolved_path or not os.path.exists(resolved_path):
+        st.warning(f"Image file not found: {resolved_path}")
         return
+        
     try:
-        with open(img_path, "rb") as f:
-            img_bytes = f.read()
-        st.image(img_bytes)
+        st.image(resolved_path, use_column_width=True)
     except Exception as e:
         try:
-            import base64
-            import mimetypes
-            mime_type, _ = mimetypes.guess_type(img_path)
-            if not mime_type:
-                mime_type = "image/png"
-            with open(img_path, "rb") as f:
-                encoded = base64.b64encode(f.read()).decode("utf-8")
-            st.markdown(f'<img src="data:{mime_type};base64,{encoded}" style="width:100%; max-width:600px; display:block; margin:auto;" />', unsafe_allow_html=True)
+            with open(resolved_path, "rb") as f:
+                img_bytes = f.read()
+            st.image(img_bytes)
         except Exception as e2:
             st.error(f"Could not render image: {e} | {e2}")
 
