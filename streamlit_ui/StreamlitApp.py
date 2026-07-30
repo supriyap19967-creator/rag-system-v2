@@ -2737,6 +2737,7 @@ def _chunk_image_path(chunk: dict[str, Any]) -> str:
         or _resolve_existing_image_path(metadata.get("chart_image_path"))
         or _resolve_existing_image_path(metadata.get("table_image_path"))
         or _resolve_existing_image_path(metadata.get("image_local_path"))
+        or _resolve_existing_image_path(metadata.get("visual_path"))
         or _resolve_existing_image_path(_extract_image_filename_from_text(chunk.get("content", "")))
     )
 
@@ -5783,6 +5784,8 @@ def _image_path_from_retrieval_metadata(retrieval_results: list[dict[str, Any]],
             "chart_image_path",
             "table_image_path",
             "diagram_image_path",
+            "image_local_path",
+            "visual_path",
         ):
             raw_path = str(metadata.get(key) or chunk.get(key) or "").strip()
             if not raw_path:
@@ -5818,6 +5821,8 @@ def _all_image_paths_from_retrieval_metadata(retrieval_results: list[dict[str, A
                 "chart_image_path",
                 "table_image_path",
                 "diagram_image_path",
+                "image_local_path",
+                "visual_path",
             ):
                 raw_path = str(metadata.get(key) or chunk.get(key) or "").strip()
                 if not raw_path:
@@ -6013,7 +6018,7 @@ def render_retrieved_figure(retrieval_results: list[dict[str, Any]], query: str 
                 continue
 
         # 2. Extract visual information safely
-        img_path = metadata.get("image_path")
+        img_path = _chunk_image_path(chunk)
         
         # Resolve path
         if img_path:
