@@ -2357,26 +2357,76 @@ IMAGE_FILENAME_PATTERN = re.compile(
 )
 
 
+def display_image_robustly(img_path: str):
+    if not img_path or not os.path.exists(img_path):
+        st.warning(f"Image file not found: {img_path}")
+        return
+    try:
+        with open(img_path, "rb") as f:
+            img_bytes = f.read()
+        st.image(img_bytes)
+    except Exception as e:
+        try:
+            import base64
+            import mimetypes
+            mime_type, _ = mimetypes.guess_type(img_path)
+            if not mime_type:
+                mime_type = "image/png"
+            with open(img_path, "rb") as f:
+                encoded = base64.b64encode(f.read()).decode("utf-8")
+            st.markdown(f'<img src="data:{mime_type};base64,{encoded}" style="width:100%; max-width:600px; display:block; margin:auto;" />', unsafe_allow_html=True)
+        except Exception as e2:
+            st.error(f"Could not render image: {e} | {e2}")
+
 def _resolve_existing_image_path(value: object) -> str:
     raw_path = str(value or "").strip()
     if not raw_path:
         return ""
-    raw_path = raw_path.strip(" '\"`")
+    raw_path = raw_path.strip(" '\"`").replace("\\", "/")
+    
+    cleaned_path = raw_path
+    marker = "recovered-rag-project/"
+    if marker in cleaned_path:
+        rel_portion = cleaned_path.split(marker, 1)[1]
+    else:
+        parts = cleaned_path.split("/")
+        if "assets" in parts:
+            rel_portion = "/".join(parts[parts.index("assets"):])
+        elif "extracted_images" in parts:
+            rel_portion = "assets/" + "/".join(parts[parts.index("extracted_images"):])
+        elif "extracted_charts" in parts:
+            rel_portion = "assets/" + "/".join(parts[parts.index("extracted_charts"):])
+        else:
+            rel_portion = cleaned_path
+
+    try_path = Path(os.path.join(os.getcwd(), rel_portion)).resolve()
+    if try_path.is_file():
+        return str(try_path)
+
     path = Path(raw_path).expanduser()
     if not path.is_absolute():
-        path = (Path.cwd() / path).resolve()
+        path = Path(os.path.join(os.getcwd(), str(path))).resolve()
     if path.is_file():
         return str(path)
+        
     filename = Path(raw_path).name
     if not filename:
         return ""
+        
     for asset_dir in IMAGE_ASSET_DIRS:
-        if not str(asset_dir) or not asset_dir.exists() or not asset_dir.is_dir():
+        if not str(asset_dir):
             continue
-        direct_path = (asset_dir / filename).resolve()
+        resolved_dir = asset_dir
+        if not resolved_dir.is_absolute():
+            resolved_dir = Path(os.path.join(os.getcwd(), str(resolved_dir))).resolve()
+        if not resolved_dir.exists() or not resolved_dir.is_dir():
+            continue
+            
+        direct_path = (resolved_dir / filename).resolve()
         if direct_path.is_file():
             return str(direct_path)
-        for candidate in asset_dir.rglob(filename):
+            
+        for candidate in resolved_dir.rglob(filename):
             if candidate.is_file():
                 return str(candidate.resolve())
     return ""
@@ -4995,7 +5045,7 @@ def _render_history() -> None:
                             col1, col2, col3 = st.columns([1, 2, 1])
                             with col2:
                                 st.write(f"### DEBUG: Target Asset Asked: (History Mode) | Path sent to st.image: {img_path}")
-                                st.image(img_path, width="stretch")
+                                display_image_robustly(img_path)
                 
                 if "nearby_context" in message and message["nearby_context"]:
                     formatted_context = format_nearby_context(message["nearby_context"])
@@ -6045,7 +6095,7 @@ def render_retrieved_figure(retrieval_results: list[dict[str, Any]], query: str 
                 col1, col2, col3 = st.columns([1, 2, 1])
                 with col2:
                     st.write(f"### DEBUG: Target Asset Asked: {query} | Path sent to st.image: {display_path}")
-                    st.image(display_path, width="stretch")
+                    display_image_robustly(display_path)
                 
                 # Display the nearby paragraphs cleanly underneath
                 nearby_text = metadata.get("nearby_context")
