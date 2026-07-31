@@ -10,7 +10,10 @@ from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 
 from dotenv import load_dotenv
 from langchain_core.documents import Document
-from pinecone import Pinecone
+try:
+    from pinecone import Pinecone
+except ImportError:
+    Pinecone = None
 from rank_bm25 import BM25Okapi
 
 from app.embeddings import BGE_EMBEDDING_DIMENSIONS, get_bge_embeddings
@@ -476,6 +479,8 @@ def _load_bm25_index() -> _Bm25Index:
 
 @lru_cache(maxsize=1)
 def _pinecone_index():
+    if Pinecone is None:
+        raise ImportError("pinecone-client is not installed. Please add it to your environment or requirements.txt.")
     if not PINECONE_API_KEY or not PINECONE_INDEX_NAME:
         raise RuntimeError("Missing PINECONE_API_KEY or PINECONE_INDEX_NAME.")
     log_event(
