@@ -8,3 +8,5 @@ langchain-sambanova
 sambanova
 langchain-experimental
 pandas
+rank-bm25
+opencv-python-headless

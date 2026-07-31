@@ -40,3 +40,5 @@ opentelemetry-exporter-otlp
 pydantic-ai
 sentence-transformers
 langchain-experimental
+rank-bm25
+opencv-python-headless
