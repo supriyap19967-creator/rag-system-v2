@@ -6592,8 +6592,9 @@ def run_pipeline(
             
         # 4. Append extracted table if present and not blocked
         if result.output.extracted_table:
-            answer_text += "\n\n### Extracted Visual Data\n"
+            answer_text += "\n\n### Extracted Table Data\n"
             df_temp = pd.DataFrame([row.model_dump() for row in result.output.extracted_table])
+            df_temp.rename(columns={"TargetValue": "Target Value"}, inplace=True, errors="ignore")
             answer_text += df_temp.to_markdown(index=False)
 
         timings["agent_execution_seconds"] = time.time() - start_time
@@ -6716,6 +6717,8 @@ def main() -> None:
         st.session_state.current_image_path = _resolve_existing_image_path(resolved_figure_path or image_path) or None
         if st.session_state.current_image_path:
             st.session_state.current_image = st.session_state.current_image_path
+            st.markdown("### Extracted Visual Asset")
+            display_image_robustly(st.session_state.current_image_path)
         active_target_cat, _ = parse_target_asset(user_query)
         _render_multimodal_assets(sources, include_images=False, target_cat=active_target_cat)
         if timings:
