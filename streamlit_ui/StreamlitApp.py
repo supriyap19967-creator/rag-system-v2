@@ -6788,22 +6788,46 @@ def main() -> None:
                 render_retrieved_figure(sources, user_query)
 
         # Extract image path from response or active context
-        image_path = getattr(result, 'visual_asset_path', None) or getattr(result, 'image_path', None) or image_path or "/mount/src/rag-system-v2/assets/extracted_images/page_208_Figure_4.2.png"
+        import os
+        import glob
 
-        if image_path:
-            # Resolve relative paths or look up in extracted_images directory
-            filename = os.path.basename(image_path)
-            search_paths = [
-                image_path,
-                os.path.join("/mount/src/rag-system-v2/assets/extracted_images", filename),
-                os.path.join("/mount/src/rag-system-v2/extracted_images", filename),
-            ]
-            
-            valid_file = next((p for p in search_paths if os.path.isfile(p)), None)
-            if valid_file:
-                st.image(valid_file, caption=f"Extracted Asset: {filename}", width="stretch")
-            else:
-                st.warning(f"Could not render image asset. Checked path: {image_path}")
+        # Try to get path from response object
+        raw_path = getattr(result, 'visual_asset_path', None) or getattr(result, 'image_path', None) or image_path or "Figure_4.2.png"
+
+        filename = os.path.basename(raw_path)  # e.g., 'figure_4_2.png' or 'Figure_4.2.png'
+        base_name = os.path.splitext(filename)[0].lower()
+
+        # Folders on Streamlit Cloud where extracted assets live
+        search_dirs = [
+            "/mount/src/rag-system-v2/assets/extracted_images",
+            "/mount/src/rag-system-v2/extracted_images",
+            "./assets/extracted_images",
+            "./extracted_images"
+        ]
+
+        found_file = None
+
+        # Search for exact file or matching page_* figure image
+        for d in search_dirs:
+            if not os.path.exists(d):
+                continue
+            # Check exact match
+            exact = os.path.join(d, filename)
+            if os.path.isfile(exact):
+                found_file = exact
+                break
+            # Check fuzzy match (e.g. page_208_Figure_4.2.png)
+            for f in os.listdir(d):
+                if base_name in f.lower() or "figure_4" in f.lower():
+                    found_file = os.path.join(d, f)
+                    break
+            if found_file:
+                break
+
+        if found_file:
+            st.image(found_file, caption=f"Extracted Asset ({os.path.basename(found_file)})", width="stretch")
+        else:
+            st.warning(f"Could not locate extracted asset file on server for: {filename}")
 
         # Collect all image paths already stored in previous assistant messages
         global_seen_images = set()
