@@ -2470,20 +2470,23 @@ def display_image_robustly(img_path: str):
                 if os.path.exists(candidate_path):
                     resolved_path = candidate_path
                     break
+
+    if resolved_path:
+        resolved_path = os.path.abspath(resolved_path)
                     
     st.write(f"DEBUG Image Path: {resolved_path}, Exists: {os.path.exists(resolved_path)}")
     
     if not resolved_path or not os.path.exists(resolved_path):
-        st.warning(f"Image file not found: {resolved_path}")
+        st.warning(f"Image file not found at: {resolved_path}")
         return
         
     try:
-        st.image(resolved_path, use_container_width='stretch')
+        st.image(resolved_path, caption="Extracted Chart / Figure", use_container_width='stretch')
     except Exception as e:
         try:
             with open(resolved_path, "rb") as f:
                 img_bytes = f.read()
-            st.image(img_bytes, use_container_width='stretch')
+            st.image(img_bytes, caption="Extracted Chart / Figure", use_container_width='stretch')
         except Exception as e2:
             st.warning(f"Could not render image file: {resolved_path}. Error: {e} | {e2}")
 
