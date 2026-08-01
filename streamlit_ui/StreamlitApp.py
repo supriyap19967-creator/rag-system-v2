@@ -2459,36 +2459,34 @@ IMAGE_FILENAME_PATTERN = re.compile(
 
 
 def display_image_robustly(img_path: str):
-    resolved_path = img_path
-    if resolved_path:
-        resolved_path = resolved_path.replace("\\", "/")
-        if "C:/" in resolved_path or (len(resolved_path) > 1 and resolved_path[1] == ":") or resolved_path.startswith("/") or resolved_path.startswith("/mount") or resolved_path.startswith("/home"):
-            filename = os.path.basename(resolved_path)
-            for candidate_dir in ["assets/extracted_images", "extracted_images", "assets/extracted_charts", "extracted_charts"]:
-                local_dir_path = os.path.join(os.getcwd(), candidate_dir)
-                candidate_path = os.path.join(local_dir_path, filename)
-                if os.path.exists(candidate_path):
-                    resolved_path = candidate_path
-                    break
-
-    if resolved_path:
-        resolved_path = os.path.abspath(resolved_path)
-                    
-    st.write(f"DEBUG Image Path: {resolved_path}, Exists: {os.path.exists(resolved_path)}")
+    import os
     
-    if not resolved_path or not os.path.exists(resolved_path):
-        st.warning(f"Image file not found at: {resolved_path}")
-        return
+    # Priority 1: Check registry path if available in tool output/state
+    visual_asset_path = img_path
+    resolved_registry_path = None
+    
+    image_to_render = resolved_registry_path if 'resolved_registry_path' in locals() and resolved_registry_path else visual_asset_path
+
+    # Fallback path resolution for Streamlit Cloud (/mount/src/rag-system-v2/...)
+    if image_to_render:
+        filename = os.path.basename(image_to_render)
+        possible_paths = [
+            image_to_render,
+            os.path.join("/mount/src/rag-system-v2/assets/extracted_images", filename),
+            os.path.join("/mount/src/rag-system-v2/extracted_images", filename),
+            os.path.abspath(image_to_render)
+        ]
         
-    try:
-        st.image(resolved_path, caption="Extracted Chart / Figure", use_container_width='stretch')
-    except Exception as e:
-        try:
-            with open(resolved_path, "rb") as f:
-                img_bytes = f.read()
-            st.image(img_bytes, caption="Extracted Chart / Figure", use_container_width='stretch')
-        except Exception as e2:
-            st.warning(f"Could not render image file: {resolved_path}. Error: {e} | {e2}")
+        found_path = None
+        for path in possible_paths:
+            if os.path.exists(path):
+                found_path = path
+                break
+
+        if found_path:
+            st.image(found_path, caption=f"Extracted Image: {filename}", use_container_width="stretch")
+        else:
+            st.warning(f"Unable to locate visual image asset at: {image_to_render}")
 
 def _resolve_existing_image_path(value: object) -> str:
     raw_path = str(value or "").strip()
