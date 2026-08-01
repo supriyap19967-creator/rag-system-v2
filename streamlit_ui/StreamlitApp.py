@@ -2908,6 +2908,8 @@ def _chunk_image_path(chunk: dict[str, Any]) -> str:
         or _resolve_existing_image_path(metadata.get("table_image_path"))
         or _resolve_existing_image_path(metadata.get("image_local_path"))
         or _resolve_existing_image_path(metadata.get("visual_path"))
+        or _resolve_existing_image_path(metadata.get("visual_asset_path"))
+        or _resolve_existing_image_path(metadata.get("registry_path"))
         or _resolve_existing_image_path(_extract_image_filename_from_text(chunk.get("content", "")))
     )
 
@@ -5956,6 +5958,8 @@ def _image_path_from_retrieval_metadata(retrieval_results: list[dict[str, Any]],
             "diagram_image_path",
             "image_local_path",
             "visual_path",
+            "visual_asset_path",
+            "registry_path",
         ):
             raw_path = str(metadata.get(key) or chunk.get(key) or "").strip()
             if not raw_path:
@@ -5993,6 +5997,8 @@ def _all_image_paths_from_retrieval_metadata(retrieval_results: list[dict[str, A
                 "diagram_image_path",
                 "image_local_path",
                 "visual_path",
+                "visual_asset_path",
+                "registry_path",
             ):
                 raw_path = str(metadata.get(key) or chunk.get(key) or "").strip()
                 if not raw_path:
