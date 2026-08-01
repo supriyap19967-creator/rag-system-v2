@@ -81,6 +81,7 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_ai import Agent, ModelSettings, RunContext
+from pydantic_ai.models.openai import OpenAIModel
 
 # ==========================================
 # PYDANTIC & PYDANTIC_AI SELF-CORRECTING AGENT DEFINITION
@@ -407,8 +408,14 @@ agent_settings = ModelSettings(
     temperature=0.0
 )
 
+openrouter_model = OpenAIModel(
+    'google/gemini-2.5-flash',
+    base_url='https://openrouter.ai/api/v1',
+    api_key=os.getenv('OPENROUTER_API_KEY')
+)
+
 multimodal_agent = Agent(
-    'openrouter:google/gemini-2.5-flash',
+    openrouter_model,
     deps_type=SystemPipelinesDeps,
     output_type=ChartTableData,
     model_settings=agent_settings,
