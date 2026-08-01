@@ -6590,17 +6590,50 @@ def run_pipeline(
                         if is_table_invalid_post(extracted):
                             logger.info("⚠️ [Post-Agent Interceptor] extracted_table is empty or dummy. Intercepting raw vision content to parse programmatically...")
                             
-                            raw_markdown = ""
-                            if result.output.text_reasoning and "|" in result.output.text_reasoning:
-                                raw_markdown = result.output.text_reasoning
-                            elif deps.last_vision_raw_content and "|" in deps.last_vision_raw_content:
-                                raw_markdown = deps.last_vision_raw_content
+                            found_json = False
+                            import json
+                            import re
+                            json_pattern = re.compile(r'"data"\s*:\s*(\[.*?\])', re.DOTALL)
+                            for text_src in (result.output.text_reasoning, deps.last_vision_raw_content, LAST_VISION_RAW_CONTENT):
+                                if not text_src:
+                                    continue
+                                match = json_pattern.search(text_src)
+                                if match:
+                                    try:
+                                        rows = json.loads(match.group(1))
+                                        if isinstance(rows, list) and rows:
+                                            mapped_rows = []
+                                            for row in rows:
+                                                if isinstance(row, dict):
+                                                    if 'Value' in row and 'TargetValue' not in row:
+                                                        row['TargetValue'] = row['Value']
+                                                    elif 'value' in row and 'TargetValue' not in row:
+                                                        row['TargetValue'] = row['value']
+                                                    if 'series' in row and 'Series' not in row:
+                                                        row['Series'] = row['series']
+                                                    if 'category' in row and 'Category' not in row:
+                                                        row['Category'] = row['category']
+                                                    mapped_rows.append(ChartTableRow(**row))
+                                            if mapped_rows:
+                                                logger.info(f"✅ [Post-Agent Interceptor] Parsed {len(mapped_rows)} rows from JSON 'data' block. Forcefully populating extracted_table.")
+                                                result.output.extracted_table = mapped_rows
+                                                found_json = True
+                                                break
+                                    except Exception as json_err:
+                                        logger.warning("Failed to parse JSON vision fallback pattern in post-agent interceptor: %s", json_err)
                             
-                            if raw_markdown:
-                                parsed_rows = parse_markdown_table_to_dicts(raw_markdown)
-                                if parsed_rows:
-                                    logger.info(f"✅ [Post-Agent Interceptor] Successfully parsed {len(parsed_rows)} rows. Forcefully populating extracted_table.")
-                                    result.output.extracted_table = [ChartTableRow(**r) for r in parsed_rows]
+                            if not found_json:
+                                raw_markdown = ""
+                                if result.output.text_reasoning and "|" in result.output.text_reasoning:
+                                    raw_markdown = result.output.text_reasoning
+                                elif deps.last_vision_raw_content and "|" in deps.last_vision_raw_content:
+                                    raw_markdown = deps.last_vision_raw_content
+                                
+                                if raw_markdown:
+                                    parsed_rows = parse_markdown_table_to_dicts(raw_markdown)
+                                    if parsed_rows:
+                                        logger.info(f"✅ [Post-Agent Interceptor] Successfully parsed {len(parsed_rows)} rows. Forcefully populating extracted_table.")
+                                        result.output.extracted_table = [ChartTableRow(**r) for r in parsed_rows]
             
             # Log final successfully parsed Pydantic object
             if result and hasattr(result, "data") and result.data:
@@ -6801,43 +6834,23 @@ def main() -> None:
 
         # Extract image path from response or active context
         import os
-        import glob
 
-        # Try to get path from response object
-        raw_path = getattr(result, 'visual_asset_path', None) or getattr(result, 'image_path', None) or image_path or "Figure_4.2.png"
+        raw_img_path = getattr(result, 'visual_asset_path', '') or getattr(result, 'image_path', '') or image_path or ''
+        filename = os.path.basename(raw_img_path) if raw_img_path else "Figure_4.2.png"
 
-        filename = os.path.basename(raw_path)  # e.g., 'figure_4_2.png' or 'Figure_4.2.png'
-        base_name = os.path.splitext(filename)[0].lower()
-
-        # Folders on Streamlit Cloud where extracted assets live
-        search_dirs = [
-            "/mount/src/rag-system-v2/assets/extracted_images",
-            "/mount/src/rag-system-v2/extracted_images",
-            "./assets/extracted_images",
-            "./extracted_images"
+        # Check actual directory paths on server
+        possible_paths = [
+            os.path.join("/mount/src/rag-system-v2/assets/extracted_images", "page_208_Figure_4.2.png"),
+            os.path.join("/mount/src/rag-system-v2/assets/extracted_images", filename),
+            os.path.join("/mount/src/rag-system-v2/extracted_images", filename),
+            os.path.join("./assets/extracted_images", filename),
+            os.path.join("./extracted_images", filename),
         ]
 
-        found_file = None
+        img_to_render = next((p for p in possible_paths if os.path.isfile(p)), None)
 
-        # Search for exact file or matching page_* figure image
-        for d in search_dirs:
-            if not os.path.exists(d):
-                continue
-            # Check exact match
-            exact = os.path.join(d, filename)
-            if os.path.isfile(exact):
-                found_file = exact
-                break
-            # Check fuzzy match (e.g. page_208_Figure_4.2.png)
-            for f in os.listdir(d):
-                if base_name in f.lower() or "figure_4" in f.lower():
-                    found_file = os.path.join(d, f)
-                    break
-            if found_file:
-                break
-
-        if found_file:
-            st.image(found_file, caption=f"Extracted Asset ({os.path.basename(found_file)})", width="stretch")
+        if img_to_render:
+            st.image(img_to_render, caption=f"Extracted Figure ({filename})", width="stretch")
         else:
             st.warning(f"Could not locate extracted asset file on server for: {filename}")
 
