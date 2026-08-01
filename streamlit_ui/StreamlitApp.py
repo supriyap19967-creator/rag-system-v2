@@ -6651,12 +6651,19 @@ def run_pipeline(
 
         # 2. Format payload and execute the 14-layer compliance gauntlet
         answer_text = result.output.text_reasoning
+        def to_dict(row):
+            if hasattr(row, 'model_dump'):
+                return row.model_dump()
+            elif isinstance(row, dict):
+                return row
+            return getattr(row, '__dict__', {})
+
         try:
             gauntlet = RAGMasterSafetyGauntlet()
             payload_dict = {
                 "text_response": result.output.text_reasoning,
                 "source_routing_trail": result.output.source_routing_trail or "",
-                "extracted_table": [r.model_dump() for r in result.output.extracted_table] if result.output.extracted_table else [],
+                "extracted_table": [to_dict(r) for r in result.output.extracted_table] if result.output.extracted_table else [],
                 "chart_title": result.output.chart_title or "",
                 "x_axis_label": result.output.x_axis_label or "",
                 "y_axis_label": result.output.y_axis_label or "",
@@ -6694,7 +6701,7 @@ def run_pipeline(
         # 4. Append extracted table if present and not blocked
         if result.output.extracted_table:
             answer_text += "\n\n### Extracted Table Data\n"
-            df_temp = pd.DataFrame([row.model_dump() for row in result.output.extracted_table])
+            df_temp = pd.DataFrame([to_dict(row) for row in result.output.extracted_table])
             df_temp.rename(columns={"TargetValue": "Target Value"}, inplace=True, errors="ignore")
             answer_text += df_temp.to_markdown(index=False)
 
