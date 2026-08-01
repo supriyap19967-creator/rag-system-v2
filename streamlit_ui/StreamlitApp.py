@@ -2417,7 +2417,7 @@ def display_image_robustly(img_path: str):
     resolved_path = img_path
     if resolved_path:
         resolved_path = resolved_path.replace("\\", "/")
-        if "C:/" in resolved_path or (len(resolved_path) > 1 and resolved_path[1] == ":") or resolved_path.startswith("/"):
+        if "C:/" in resolved_path or (len(resolved_path) > 1 and resolved_path[1] == ":") or resolved_path.startswith("/") or resolved_path.startswith("/mount") or resolved_path.startswith("/home"):
             filename = os.path.basename(resolved_path)
             for candidate_dir in ["assets/extracted_images", "extracted_images", "assets/extracted_charts", "extracted_charts"]:
                 local_dir_path = os.path.join(os.getcwd(), candidate_dir)
@@ -2433,14 +2433,14 @@ def display_image_robustly(img_path: str):
         return
         
     try:
-        st.image(resolved_path, use_column_width=True)
+        st.image(resolved_path, use_container_width=True)
     except Exception as e:
         try:
             with open(resolved_path, "rb") as f:
                 img_bytes = f.read()
-            st.image(img_bytes)
+            st.image(img_bytes, use_container_width=True)
         except Exception as e2:
-            st.error(f"Could not render image: {e} | {e2}")
+            st.warning(f"Could not render image file: {resolved_path}. Error: {e} | {e2}")
 
 def _resolve_existing_image_path(value: object) -> str:
     raw_path = str(value or "").strip()
@@ -2448,6 +2448,14 @@ def _resolve_existing_image_path(value: object) -> str:
         return ""
     raw_path = raw_path.strip(" '\"`").replace("\\", "/")
     
+    # Check if absolute path, extract basename and resolve using os.path.join(os.getcwd(), ...)
+    if "C:/" in raw_path or (len(raw_path) > 1 and raw_path[1] == ":") or raw_path.startswith("/") or raw_path.startswith("/mount") or raw_path.startswith("/home"):
+        filename = os.path.basename(raw_path)
+        for candidate_dir in ["assets/extracted_images", "extracted_images", "assets/extracted_charts", "extracted_charts", "Data/extracted_visuals_smoke"]:
+            candidate_path = os.path.join(os.getcwd(), candidate_dir, filename)
+            if os.path.exists(candidate_path):
+                return candidate_path
+
     cleaned_path = raw_path
     marker = "recovered-rag-project/"
     if marker in cleaned_path:
