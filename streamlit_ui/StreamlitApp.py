@@ -472,10 +472,15 @@ def validate_result(ctx: RunContext[SystemPipelinesDeps], result: ChartTableData
     def is_table_invalid_res(table: list[ChartTableRow]) -> bool:
         if not table:
             return True
+        def get_val(row, key):
+            if isinstance(row, dict):
+                return row.get(key, "")
+            return getattr(row, key, "")
+
         for row in table:
-            s = str(row.Series).strip()
-            c = str(row.Category).strip()
-            val_raw = row.TargetValue
+            s = str(get_val(row, 'Series')).strip()
+            c = str(get_val(row, 'Category')).strip()
+            val_raw = get_val(row, 'TargetValue')
             val_str = str(val_raw).strip()
             is_dummy = (
                 (s == "" or s.lower() == "n/a") and
