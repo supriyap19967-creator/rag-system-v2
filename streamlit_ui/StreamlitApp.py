@@ -768,7 +768,7 @@ def process_vision_element(ctx: RunContext[SystemPipelinesDeps], visual_asset_pa
                     if page_match:
                         page_no = page_match.group(1)
                         for folder in ["assets/extracted_images", "extracted_images"]:
-                            folder_path = Path("C:/Users/supri/recovered-rag-project") / folder
+                            folder_path = Path(os.getcwd()) / folder
                             if folder_path.exists():
                                 for file in folder_path.glob("*"):
                                     if (file.name.lower().startswith(f"page{page_no}_") or file.name.lower().startswith(f"page_{page_no}_")) and file.suffix.lower() == ".png" and not file.name.lower().endswith(".raw.png"):
@@ -5774,10 +5774,10 @@ def _heuristic_orchestrator_routing(query: str) -> dict[str, Any]:
 
 @st.cache_resource
 def _load_tabular_dataframes() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    gdp_df = pd.read_csv("C:/Users/supri/recovered-rag-project/Data/csv/GDP1.csv", skiprows=4, encoding="utf-8-sig")
-    gdp_metadata_df = pd.read_csv("C:/Users/supri/recovered-rag-project/Data/csv/GDP2.csv", encoding="utf-8-sig")
-    co2_df = pd.read_csv("C:/Users/supri/recovered-rag-project/Data/csv/CO21.csv", skiprows=4, encoding="utf-8-sig")
-    co2_metadata_df = pd.read_csv("C:/Users/supri/recovered-rag-project/Data/csv/CO22.csv", encoding="utf-8-sig")
+    gdp_df = pd.read_csv(os.path.join(os.getcwd(), "Data/csv/GDP1.csv"), skiprows=4, encoding="utf-8-sig")
+    gdp_metadata_df = pd.read_csv(os.path.join(os.getcwd(), "Data/csv/GDP2.csv"), encoding="utf-8-sig")
+    co2_df = pd.read_csv(os.path.join(os.getcwd(), "Data/csv/CO21.csv"), skiprows=4, encoding="utf-8-sig")
+    co2_metadata_df = pd.read_csv(os.path.join(os.getcwd(), "Data/csv/CO22.csv"), encoding="utf-8-sig")
     return gdp_df, gdp_metadata_df, co2_df, co2_metadata_df
 
 
@@ -6427,7 +6427,7 @@ def run_pipeline(
         logger.warning("google-genai Client failed to initialize: %s", e)
 
     deps = SystemPipelinesDeps(
-        image_folder_path="C:/Users/supri/recovered-rag-project/extracted_images",
+        image_folder_path=os.path.join(os.getcwd(), "extracted_images"),
         pandas_df=gdp_df,
         qdrant_client=client,
         vision_runner=vision_runner,
