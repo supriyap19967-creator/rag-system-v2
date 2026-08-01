@@ -2478,12 +2478,12 @@ def display_image_robustly(img_path: str):
         return
         
     try:
-        st.image(resolved_path, use_container_width=True)
+        st.image(resolved_path, use_container_width='stretch')
     except Exception as e:
         try:
             with open(resolved_path, "rb") as f:
                 img_bytes = f.read()
-            st.image(img_bytes, use_container_width=True)
+            st.image(img_bytes, use_container_width='stretch')
         except Exception as e2:
             st.warning(f"Could not render image file: {resolved_path}. Error: {e} | {e2}")
 
