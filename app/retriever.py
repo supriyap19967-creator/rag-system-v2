@@ -14,7 +14,12 @@ try:
     from pinecone import Pinecone
 except ImportError:
     Pinecone = None
-from rank_bm25 import BM25Okapi
+try:
+    from rank_bm25 import BM25Okapi
+    HAS_BM25 = True
+except ImportError:
+    HAS_BM25 = False
+    BM25Okapi = None
 
 from app.embeddings import BGE_EMBEDDING_DIMENSIONS, get_bge_embeddings
 from app.ingestion import (
@@ -422,6 +427,15 @@ def _filter_retrieved_documents(documents: Sequence[Document], top_k: int) -> Li
 @lru_cache(maxsize=1)
 def _load_bm25_index() -> _Bm25Index:
     started_at = time.monotonic()
+    if not HAS_BM25:
+        log_event(
+            logger,
+            logging.WARNING,
+            "bm25_search_disabled",
+            reason="rank_bm25 package is not installed",
+            elapsed_seconds=0.0,
+        )
+        return _Bm25Index(documents=[], model=None, tokenized_documents=[])
     if not BM25_CACHE_PATH.exists():
         log_event(
             logger,
