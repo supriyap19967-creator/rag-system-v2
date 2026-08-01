@@ -266,11 +266,27 @@ class ChartTableRow(BaseModel):
     Category: str = Field(description="The category label/X-axis label/dimension (e.g. year, age group, or class).")
     TargetValue: float | int | str = Field(description="The numerical value or raw value associated with this category/series.")
 
+    @model_validator(mode='before')
+    @classmethod
+    def map_fields(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if 'Value' in data and 'TargetValue' not in data:
+                data['TargetValue'] = data['Value']
+            elif 'value' in data and 'TargetValue' not in data:
+                data['TargetValue'] = data['value']
+            if 'series' in data and 'Series' not in data:
+                data['Series'] = data['series']
+            if 'category' in data and 'Category' not in data:
+                data['Category'] = data['category']
+        return data
+
 
 class ChartTableData(BaseModel):
     source_routing_trail: str = Field(description="The source file and location metadata.")
     text_reasoning: str = Field(description="The step-by-step logical summary.")
-    extracted_table: list[ChartTableRow] = Field(description="List of precise parsed table rows.")
+    extracted_table: list[ChartTableRow | dict[str, Any] | str] = Field(
+        description="List of precise parsed table rows. Each row in extracted_table must be a valid JSON object/dict with keys: Category, Series, Value."
+    )
     chart_title: str | None = Field(default=None, description="The title or caption of the chart/figure, if identifiable.")
     x_axis_label: str | None = Field(default=None, description="The title or label of the X-axis (e.g., GDP per capita).")
     y_axis_label: str | None = Field(default=None, description="The title or label of the Y-axis (e.g., CO2 emissions).")
@@ -359,12 +375,22 @@ class ChartTableData(BaseModel):
         val_logger.info(f"[VALIDATION START] Inspecting and healing {len(v)} visual/tabular extraction rows...")
         healed_v = []
         for index, row in enumerate(v):
-            if not isinstance(row, (dict, ChartTableRow)):
-                val_logger.warning(f"[VALIDATION WARNING] Row {index} is not a dictionary or ChartTableRow: {row}. Skipping row.")
+            if not isinstance(row, (dict, ChartTableRow, str)):
+                val_logger.warning(f"[VALIDATION WARNING] Row {index} is not a dictionary, ChartTableRow, or string: {row}. Skipping row.")
                 continue
             
             # Convert row to dict representation for uniform parsing/healing
-            row_dict = row.model_dump() if isinstance(row, ChartTableRow) else row
+            if isinstance(row, str):
+                row_dict = {}
+                parts = re.split(r'[,;]\s*', row)
+                for part in parts:
+                    subparts = part.split(':', 1)
+                    if len(subparts) == 2:
+                        row_dict[subparts[0].strip()] = subparts[1].strip()
+                if not row_dict:
+                    row_dict = {"Series": row, "Category": "N/A", "TargetValue": "N/A"}
+            else:
+                row_dict = row.model_dump() if isinstance(row, ChartTableRow) else row
             
             # If standard keys exist, keep them
             if "Series" in row_dict and "Category" in row_dict and "TargetValue" in row_dict:
@@ -561,10 +587,10 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
         "2. IF THE ELEMENT IS A CHART, GRAPH, OR DIAGRAM: Extract every single data point, group, and entity present. "
         "Format them completely into a structured Markdown table using logical, generic column headers inside the 'text_reasoning' field. "
         "Additionally, you MUST programmatically populate the 'extracted_table' field of the output schema with a list of dictionaries "
-        "representing these extracted data points. Each dictionary in 'extracted_table' must have exactly these keys:\n"
+        "representing these extracted data points. Each row in 'extracted_table' must be a valid JSON object/dict with keys: Category, Series, Value. Specifically:\n"
         "  - 'Series': The name of the data series/line/group (e.g., 'Standard adopted', country name, or indicator). Line/series names must always go here. Numbers must never be mapped as the Series name.\n"
         "  - 'Category': The category/X-axis label/dimension. Income groups ('Low income', 'Lower middle income', 'Upper middle income', 'High income') must ALWAYS be extracted into the 'Category' column.\n"
-        "  - 'TargetValue': The precise numerical value (must be formatted as a float, integer, or raw number).\n"
+        "  - 'Value': The precise numerical value (must be formatted as a float, integer, or raw number).\n"
         "You must then provide an exhaustive, point-by-point explanation of all extracted data inside the 'text_reasoning' field, ensuring no entity or metric is omitted.\n"
         "3. IF THE ELEMENT IS A DOCUMENT TABLE: Do not force it into a chart format. Provide a comprehensive, highly detailed text overview, row-by-row thematic breakdown, and thorough explanation of the topics covered directly inside the 'text_reasoning' field. The model is fully permitted to populate 'text_reasoning' with this comprehensive text overview while leaving 'extracted_table' empty without triggering any validation failures.\n"
         "4. GENERAL RULE FOR COMPLETENESS: Aim to cover as many distinct topics and data categories as possible. Prioritize explaining all the core themes and concepts visible in the asset thoroughly rather than demanding a rigid, word-for-word replication of every individual text cell.\n\n"
