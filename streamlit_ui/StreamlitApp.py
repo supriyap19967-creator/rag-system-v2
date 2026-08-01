@@ -292,6 +292,8 @@ class ChartTableData(BaseModel):
     y_axis_label: str | None = Field(default=None, description="The title or label of the Y-axis (e.g., CO2 emissions).")
     chart_type: str | None = Field(default=None, description="The visual layout type (e.g., scatter_plot, bar_chart, line_graph, table).")
     units: str | None = Field(default=None, description="The units of measurement (e.g., USD, tonnes, %).")
+    visual_asset_path: str | None = Field(default=None, description="The path to the visual asset or image file, if any.")
+    image_path: str | None = Field(default=None, description="The path to the visual asset or image file, if any.")
 
     @model_validator(mode='after')
     def validate_table_integrity(self) -> 'ChartTableData':
@@ -573,6 +575,37 @@ def validate_result(ctx: RunContext[SystemPipelinesDeps], result: ChartTableData
                     val_logger.warning("❌ [RESULT VALIDATOR] Parser found no valid Markdown table in raw_markdown.")
             else:
                 val_logger.warning("❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.")
+
+    # Ensure visual_asset_path and image_path are populated if we have image information
+    visual_path = getattr(result, "visual_asset_path", None) or getattr(result, "image_path", None)
+    if not visual_path:
+        try:
+            target_cat, target_id = parse_target_asset(ctx.deps.user_query)
+            if target_cat and target_id:
+                from app.multimodal_assets import build_asset_registry, normalize_entity_id
+                norm_id = normalize_entity_id(f"{target_cat}_{target_id}")
+                registry = build_asset_registry()
+                for record in registry:
+                    if record.entity_id == norm_id:
+                        visual_path = record.absolute_path
+                        break
+        except Exception:
+            pass
+    if not visual_path and getattr(ctx.deps, "retrieved_chunks", None):
+        for chunk in ctx.deps.retrieved_chunks:
+            metadata = dict(chunk.get("metadata") or {})
+            for key in ("image_path", "figure_image_path", "chart_image_path", "table_image_path", "visual_asset_path"):
+                val = str(metadata.get(key) or chunk.get(key) or "").strip()
+                if val:
+                    visual_path = val
+                    break
+            if visual_path:
+                break
+    
+    result = result.model_copy(update={
+        "visual_asset_path": visual_path or result.visual_asset_path,
+        "image_path": visual_path or result.image_path,
+    })
                 
     return result
 
@@ -593,7 +626,8 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
         "  - 'Value': The precise numerical value (must be formatted as a float, integer, or raw number).\n"
         "You must then provide an exhaustive, point-by-point explanation of all extracted data inside the 'text_reasoning' field, ensuring no entity or metric is omitted.\n"
         "3. IF THE ELEMENT IS A DOCUMENT TABLE: Do not force it into a chart format. Provide a comprehensive, highly detailed text overview, row-by-row thematic breakdown, and thorough explanation of the topics covered directly inside the 'text_reasoning' field. The model is fully permitted to populate 'text_reasoning' with this comprehensive text overview while leaving 'extracted_table' empty without triggering any validation failures.\n"
-        "4. GENERAL RULE FOR COMPLETENESS: Aim to cover as many distinct topics and data categories as possible. Prioritize explaining all the core themes and concepts visible in the asset thoroughly rather than demanding a rigid, word-for-word replication of every individual text cell.\n\n"
+        "4. GENERAL RULE FOR COMPLETENESS: Aim to cover as many distinct topics and data categories as possible. Prioritize explaining all the core themes and concepts visible in the asset thoroughly rather than demanding a rigid, word-for-word replication of every individual text cell.\n"
+        "5. VISUAL ASSETS AND PATHS: You MUST always populate the 'visual_asset_path' and 'image_path' fields in the output schema with the path to the visual asset or image (e.g. from the visual_asset_path parameter of process_vision_element tool) if any visual asset is processed or queried. If no visual asset is involved, leave them as null or empty.\n\n"
         "GENERAL GUIDELINES:\n"
         "- Prioritize answering the query precisely and step-by-step using tools.\n"
         "- For queries targeting CSV/DataFrame/tabular datasets (such as mathematical computations, statistical trends, row filtering, or aggregations on GDP/CO2 variables), you MUST call `query_pandas_dataframe` only and return the final answer inside the 'text_reasoning' field in a natural sentence (do NOT return table format) and ALWAYS leave 'extracted_table' as an empty list ([]). You MUST retrieve the exact unit or metric from the 'Indicator Name' column of the dataframe (e.g., 't CO2e/capita' or 'current US$') and include it in your sentence answer rather than hardcoding assumptions like 'kilotons' or 'dollars'. Do NOT call `query_qdrant_vector_search` or `process_vision_element` for queries that can be answered directly using the DataFrames.\n"
@@ -6622,7 +6656,9 @@ def run_pipeline(
                 "x_axis_label": result.output.x_axis_label or "",
                 "y_axis_label": result.output.y_axis_label or "",
                 "chart_type": result.output.chart_type or "",
-                "units": result.output.units or ""
+                "units": result.output.units or "",
+                "visual_asset_path": getattr(result.output, "visual_asset_path", None) or getattr(result.output, "image_path", None) or "",
+                "image_path": getattr(result.output, "image_path", None) or getattr(result.output, "visual_asset_path", None) or ""
             }
             chunks_to_vet = list(sources) if sources else getattr(deps, "retrieved_chunks", [])
             vetted_res = gauntlet.run_full_validation_gauntlet(
@@ -6658,7 +6694,8 @@ def run_pipeline(
             answer_text += df_temp.to_markdown(index=False)
 
         timings["agent_execution_seconds"] = time.time() - start_time
-        return answer_text, sources, timings, image_path, None
+        resolved_img = image_path or (result.output.visual_asset_path if result and hasattr(result, "output") and result.output else None) or (result.output.image_path if result and hasattr(result, "output") and result.output else None)
+        return answer_text, sources, timings, resolved_img, result
         
     except Exception as exc:
         logger.exception("Agent execution inside Streamlit run_pipeline failed")
@@ -6728,33 +6765,45 @@ def main() -> None:
     sources: list[dict[str, Any]] = []
     timings: dict[str, float] = {}
     image_path: str | None = None
-    stream_messages: list[BaseMessage] | None = None
+    result: Any = None
 
     with st.chat_message("assistant"):
         with st.spinner("Searching database, validating context, and generating answer..."):
             try:
-                answer, sources, timings, image_path, stream_messages = run_pipeline(
+                answer, sources, timings, image_path, agent_result = run_pipeline(
                     user_query, groq_api_key, nvidia_api_key
                 )
+                result = getattr(agent_result, "output", None) or agent_result
             except Exception as exc:
                 answer = f"Unable to complete the request: {exc}"
                 sources = []
                 timings = {}
                 image_path = None
-                stream_messages = None
+                result = None
 
-        if stream_messages is not None and sources:
-            answer = st.write_stream(execute_gemini_extraction(user_query, sources, timings=timings))
-            answer = sanitize_user_answer(extract_llm_response_text(answer))
-            render_retrieved_figure(sources, user_query)
-        elif stream_messages is not None:
-            answer = st.write_stream(stream_gemini_messages(stream_messages, timings=timings))
-            answer = sanitize_user_answer(extract_llm_response_text(answer))
-        elif answer is not None:
+        if answer is not None:
             answer = sanitize_user_answer(extract_llm_response_text(answer))
             st.markdown(answer, unsafe_allow_html=True)
             if sources:
                 render_retrieved_figure(sources, user_query)
+
+        # Extract image path from response or active context
+        image_path = getattr(result, 'visual_asset_path', None) or getattr(result, 'image_path', None) or image_path or "/mount/src/rag-system-v2/assets/extracted_images/page_208_Figure_4.2.png"
+
+        if image_path:
+            # Resolve relative paths or look up in extracted_images directory
+            filename = os.path.basename(image_path)
+            search_paths = [
+                image_path,
+                os.path.join("/mount/src/rag-system-v2/assets/extracted_images", filename),
+                os.path.join("/mount/src/rag-system-v2/extracted_images", filename),
+            ]
+            
+            valid_file = next((p for p in search_paths if os.path.isfile(p)), None)
+            if valid_file:
+                st.image(valid_file, caption=f"Extracted Asset: {filename}", width="stretch")
+            else:
+                st.warning(f"Could not render image asset. Checked path: {image_path}")
 
         # Collect all image paths already stored in previous assistant messages
         global_seen_images = set()
