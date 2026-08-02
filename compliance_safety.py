@@ -250,49 +250,59 @@ class RAGMasterSafetyGauntlet:
             # 3. answer_relevance: overlap between generated response and user query
             answer_relevance = len(response_tokens & query_tokens) / max(len(query_tokens), 1)
 
-            from langfuse.decorators import langfuse_context
-            from langfuse import Langfuse
-            
-            trace_id = langfuse_context.get_current_trace_id()
-            if trace_id:
-                lf = Langfuse()
-                lf.create_score(name="context_relevance", value=context_relevance, trace_id=trace_id)
-                lf.create_score(name="faithfulness", value=faithfulness_score, trace_id=trace_id)
-                lf.create_score(name="answer_relevance", value=answer_relevance, trace_id=trace_id)
-                
-                # Fetch self-correction validation retries count dynamically
-                val_retries = 0
+            import os
+
+            # Check if keys exist before attempting any score/metric creation
+            if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+                # Execute Langfuse logging safely
                 try:
-                    from streamlit_ui.StreamlitApp import VALIDATION_ATTEMPT_COUNT
-                    val_retries = VALIDATION_ATTEMPT_COUNT
-                except Exception:
-                    pass
-                
-                # Conditional dataset export hook (more than 1 retry or faithfulness score < 0.6)
-                if val_retries >= 1 or faithfulness_score < 0.6:
-                    try:
-                        lf.create_dataset(name="Production_Edge_Cases")
-                    except Exception:
-                        pass
+                    from langfuse.decorators import langfuse_context
+                    from langfuse import Langfuse
                     
-                    lf.create_dataset_item(
-                        dataset_name="Production_Edge_Cases",
-                        input={
-                            "user_query": user_query,
-                            "retrieval_chunks": raw_qdrant_chunks,
-                            "validation_retries": val_retries,
-                            "compliance_score": faithfulness_score
-                        },
-                        expected_output={
-                            "final_response": response_text
-                        },
-                        metadata={
-                            "trace_id": trace_id,
-                            "validation_retries": val_retries,
-                            "compliance_score": faithfulness_score
-                        }
-                    )
-                    val_logger.info(f"Trace {trace_id} exported to regression dataset 'Production_Edge_Cases'.")
+                    trace_id = langfuse_context.get_current_trace_id()
+                    if trace_id:
+                        lf = Langfuse()
+                        lf.create_score(name="context_relevance", value=context_relevance, trace_id=trace_id)
+                        lf.create_score(name="faithfulness", value=faithfulness_score, trace_id=trace_id)
+                        lf.create_score(name="answer_relevance", value=answer_relevance, trace_id=trace_id)
+                        
+                        # Fetch self-correction validation retries count dynamically
+                        val_retries = 0
+                        try:
+                            from streamlit_ui.StreamlitApp import VALIDATION_ATTEMPT_COUNT
+                            val_retries = VALIDATION_ATTEMPT_COUNT
+                        except Exception:
+                            pass
+                        
+                        # Conditional dataset export hook (more than 1 retry or faithfulness score < 0.6)
+                        if val_retries >= 1 or faithfulness_score < 0.6:
+                            try:
+                                lf.create_dataset(name="Production_Edge_Cases")
+                            except Exception:
+                                pass
+                            
+                            lf.create_dataset_item(
+                                dataset_name="Production_Edge_Cases",
+                                input={
+                                    "user_query": user_query,
+                                    "retrieval_chunks": raw_qdrant_chunks,
+                                    "validation_retries": val_retries,
+                                    "compliance_score": faithfulness_score
+                                },
+                                expected_output={
+                                    "final_response": response_text
+                                },
+                                metadata={
+                                    "trace_id": trace_id,
+                                    "validation_retries": val_retries,
+                                    "compliance_score": faithfulness_score
+                                }
+                            )
+                            val_logger.info(f"Trace {trace_id} exported to regression dataset 'Production_Edge_Cases'.")
+                except Exception as e:
+                    val_logger.warning(f"Skipping Langfuse score logging due to error: {e}")
+            else:
+                val_logger.info("Langfuse credentials not configured. Skipping metric logging.")
         except Exception as lf_eval_exc:
             val_logger.warning("Failed to log evaluation metrics or export dataset item to Langfuse: %s", lf_eval_exc)
 

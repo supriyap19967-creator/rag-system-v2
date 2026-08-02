@@ -6486,17 +6486,20 @@ def run_pipeline(
     start_time = time.time()
     
     # Update Langfuse trace metadata with session, user, and deployment tags context
-    try:
-        active_session_id = st.session_state.get("session_id", "anonymous-session")
-        active_user_id = st.session_state.get("user_id", "default-user")
-        tags_list = os.environ.get("DEPLOYMENT_TAGS", "production,v2-rag").split(",")
-        langfuse_context.update_current_trace(
-            session_id=active_session_id,
-            user_id=active_user_id,
-            tags=tags_list
-        )
-    except Exception as lf_exc:
-        logger.warning("Failed to update Langfuse trace metadata context: %s", lf_exc)
+    if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+        try:
+            active_session_id = st.session_state.get("session_id", "anonymous-session")
+            active_user_id = st.session_state.get("user_id", "default-user")
+            tags_list = os.environ.get("DEPLOYMENT_TAGS", "production,v2-rag").split(",")
+            langfuse_context.update_current_trace(
+                session_id=active_session_id,
+                user_id=active_user_id,
+                tags=tags_list
+            )
+        except Exception as lf_exc:
+            logger.warning("Failed to update Langfuse trace metadata context: %s", lf_exc)
+    else:
+        logger.info("Langfuse credentials not configured. Skipping trace metadata update.")
     
     # 1. Initialize dependencies for the Pydantic AI agent
     try:
