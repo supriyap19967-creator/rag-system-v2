@@ -627,3 +627,23 @@ def preview_csv(path: str, max_rows: int = 20) -> list[list[str]]:
     with Path(path).open("r", encoding="utf-8-sig", errors="replace", newline="") as handle:
         rows = list(csv.reader(handle))
     return rows[:max_rows]
+
+
+import os
+from pathlib import Path
+
+def _resolve_existing_image_path(input_path: str) -> str | None:
+    # 1. Direct path check
+    if os.path.exists(input_path):
+        return input_path
+        
+    # 2. Extract raw filename (e.g., "figure_4_2.png" from "../data/images/figure_4_2.png")
+    filename = Path(input_path).name
+    
+    # 3. Look inside allowed directories
+    for dir_path in APPROVED_ASSET_DIRS:
+        possible_path = Path(dir_path) / filename
+        if possible_path.exists():
+            return str(possible_path)
+            
+    return None
