@@ -810,7 +810,7 @@ def process_vision_element(ctx: RunContext[SystemPipelinesDeps], visual_asset_pa
     Call this tool when the query refers to an image, graph, chart, diagram, or figure name.
     Instructs the Vision model to extract visual data points into raw text or structural data.
     """
-    global VISION_ELEMENT_PROCESSED
+    global VISION_ELEMENT_PROCESSED, LAST_RESOLVED_VISION_PATH
     VISION_ELEMENT_PROCESSED = True
     ctx.deps.vision_element_processed = True
     # PROVE IDENTITY & SANITARY BOUNDARY ISOLATION
@@ -893,6 +893,8 @@ def process_vision_element(ctx: RunContext[SystemPipelinesDeps], visual_asset_pa
 
     if not img_path.exists():
         return f"Error: Target visual asset path '{visual_asset_path}' could not be resolved or does not exist on disk."
+
+    LAST_RESOLVED_VISION_PATH = str(img_path)
 
     try:
         import base64
@@ -1024,6 +1026,7 @@ ACTIVE_USER_QUERY = ""
 VISION_ELEMENT_PROCESSED = False
 VISION_TOOL_SUCCEEDED = False
 LAST_VISION_RAW_CONTENT = ""
+LAST_RESOLVED_VISION_PATH = ""
 VALIDATION_ATTEMPT_COUNT = 0
 
 logging.basicConfig(level=logging.INFO, force=True)
@@ -6541,11 +6544,12 @@ def run_pipeline(
 
     # 2. Run the Pydantic AI agent
     try:
-        global ACTIVE_USER_QUERY, VISION_ELEMENT_PROCESSED, VISION_TOOL_SUCCEEDED, VALIDATION_ATTEMPT_COUNT, LAST_VISION_RAW_CONTENT
+        global ACTIVE_USER_QUERY, VISION_ELEMENT_PROCESSED, VISION_TOOL_SUCCEEDED, VALIDATION_ATTEMPT_COUNT, LAST_VISION_RAW_CONTENT, LAST_RESOLVED_VISION_PATH
         ACTIVE_USER_QUERY = user_query
         VISION_ELEMENT_PROCESSED = False
         VISION_TOOL_SUCCEEDED = False
         LAST_VISION_RAW_CONTENT = ""
+        LAST_RESOLVED_VISION_PATH = ""
         VALIDATION_ATTEMPT_COUNT = 0
         
         from pydantic_ai.usage import UsageLimits
@@ -6570,6 +6574,12 @@ def run_pipeline(
                 
                 # Post-Execution Interceptor for Visual Extraction
                 if result and hasattr(result, "output") and result.output:
+                    # Programmatic fallback injection if visual_asset_path/image_path is empty
+                    if LAST_RESOLVED_VISION_PATH:
+                        if not getattr(result.output, "visual_asset_path", None):
+                            result.output.visual_asset_path = LAST_RESOLVED_VISION_PATH
+                        if not getattr(result.output, "image_path", None):
+                            result.output.image_path = LAST_RESOLVED_VISION_PATH
                     if VISION_ELEMENT_PROCESSED and VISION_TOOL_SUCCEEDED:
                         extracted = result.output.extracted_table
                         
