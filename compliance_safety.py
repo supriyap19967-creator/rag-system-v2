@@ -261,10 +261,22 @@ class RAGMasterSafetyGauntlet:
                     
                     trace_id = langfuse_context.get_current_trace_id()
                     if trace_id:
-                        lf = Langfuse()
-                        lf.create_score(name="context_relevance", value=context_relevance, trace_id=trace_id)
-                        lf.create_score(name="faithfulness", value=faithfulness_score, trace_id=trace_id)
-                        lf.create_score(name="answer_relevance", value=answer_relevance, trace_id=trace_id)
+                        langfuse_client = Langfuse()
+                        langfuse_client.create_score(
+                            trace_id=trace_id,
+                            name="context_relevance",
+                            value=context_relevance
+                        )
+                        langfuse_client.create_score(
+                            trace_id=trace_id,
+                            name="faithfulness",
+                            value=faithfulness_score
+                        )
+                        langfuse_client.create_score(
+                            trace_id=trace_id,
+                            name="answer_relevance",
+                            value=answer_relevance
+                        )
                         
                         # Fetch self-correction validation retries count dynamically
                         val_retries = 0
@@ -277,11 +289,11 @@ class RAGMasterSafetyGauntlet:
                         # Conditional dataset export hook (more than 1 retry or faithfulness score < 0.6)
                         if val_retries >= 1 or faithfulness_score < 0.6:
                             try:
-                                lf.create_dataset(name="Production_Edge_Cases")
+                                langfuse_client.create_dataset(name="Production_Edge_Cases")
                             except Exception:
                                 pass
                             
-                            lf.create_dataset_item(
+                            langfuse_client.create_dataset_item(
                                 dataset_name="Production_Edge_Cases",
                                 input={
                                     "user_query": user_query,

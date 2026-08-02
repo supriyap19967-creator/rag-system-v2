@@ -1190,6 +1190,26 @@ def _resolve_existing_image_path(value: object) -> str:
     if not raw_path:
         return ""
     raw_path = raw_path.strip(" '\"`").replace("\\", "/")
+    filename = os.path.basename(raw_path)
+    if filename:
+        try:
+            from app.multimodal_assets import build_asset_registry, normalize_entity_id
+            norm_id = normalize_entity_id(filename)
+            registry = build_asset_registry()
+            for record in registry:
+                if record.entity_id == norm_id:
+                    path_suffix = Path(record.absolute_path).suffix.lower()
+                    if path_suffix in [".png", ".jpg", ".jpeg", ".webp", ".gif"] and os.path.exists(record.absolute_path):
+                        return record.absolute_path
+        except Exception:
+            pass
+
+        # Check allowed candidate directories
+        for candidate_dir in ["assets/extracted_images", "extracted_images", "assets/extracted_charts", "extracted_charts", "Data/extracted_visuals_smoke"]:
+            candidate_path = os.path.join(os.getcwd(), candidate_dir, filename)
+            if os.path.exists(candidate_path):
+                return candidate_path
+
     for marker in ("assets/extracted_images/", "Data/extracted_visuals/"):
         if marker in raw_path:
             return marker + raw_path.split(marker)[-1]
