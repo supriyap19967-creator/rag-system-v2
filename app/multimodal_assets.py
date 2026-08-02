@@ -535,6 +535,11 @@ def validate_asset_path(path_value: object, asset_type: str = "") -> PathValidat
     raw = str(path_value or "").strip()
     if not raw:
         return PathValidationResult(False, reason="asset path was empty or null", asset_type=asset_type)
+    
+    resolved = _resolve_existing_image_path(raw)
+    if resolved:
+        raw = resolved
+
     path = Path(raw).expanduser()
     if not path.is_absolute():
         path = (PROJECT_ROOT / path).resolve()

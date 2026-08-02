@@ -6717,10 +6717,26 @@ def run_pipeline(
         # 2. Format payload and execute the 14-layer compliance gauntlet
         answer_text = result.output.text_reasoning
         def to_dict(row):
-            if hasattr(row, 'model_dump'):
+            if hasattr(row, 'model_dump') and callable(getattr(row, 'model_dump')):
                 return row.model_dump()
+            elif hasattr(row, 'dict') and callable(getattr(row, 'dict')):
+                return row.dict()
             elif isinstance(row, dict):
                 return row
+            elif isinstance(row, str):
+                try:
+                    import json
+                    return json.loads(row)
+                except Exception:
+                    return {"TargetValue": row}
+            res = {}
+            for key in ["Series", "Category", "TargetValue"]:
+                if hasattr(row, key):
+                    res[key] = getattr(row, key)
+                elif hasattr(row, key.lower()):
+                    res[key] = getattr(row, key.lower())
+            if res:
+                return res
             return getattr(row, '__dict__', {})
 
         try:
