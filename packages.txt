@@ -1,1 +1,2 @@
--e "libgl1\nlibglib2.0-data"  
+libgl1
+libglib2.0-data
