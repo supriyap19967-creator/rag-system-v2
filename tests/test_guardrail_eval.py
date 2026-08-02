@@ -134,7 +134,8 @@ def test_archetype3_clean_visual_asset(temp_image):
     )
     
     assert res.get("metadata", {}).get("safe_fallback") is not True, "Archetype 3 triggered safe fallback unexpectedly!"
-    assert res.get("image_path") == temp_image, "Fuzzy path was not resolved or returned!"
+    import os
+    assert os.path.normpath(res.get("image_path")) == os.path.normpath(temp_image), "Fuzzy path was not resolved or returned!"
 
 def test_archetype4_complex_messy_visual_asset(temp_image):
     """

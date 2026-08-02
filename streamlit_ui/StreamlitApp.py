@@ -44,9 +44,9 @@ try:
     secret_key = os.getenv("LANGFUSE_SECRET_KEY")
     base_url = os.getenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com")
     
-    if public_key and secret_key:
+    if public_key:
         import base64
-        auth_token = base64.b64encode(f"{public_key}:{secret_key}".encode()).decode()
+        auth_token = base64.b64encode(f"{public_key}:{secret_key or ''}".encode()).decode()
         endpoint = f"{base_url.rstrip('/')}/api/public/otel/v1/traces"
         headers = {
             "Authorization": f"Basic {auth_token}",
@@ -984,7 +984,12 @@ def process_vision_element(ctx: RunContext[SystemPipelinesDeps], visual_asset_pa
 
 
 from app.embeddings import get_query_vector
-from app.reranker import TransformersReranker
+try:
+    from app.reranker import TransformersReranker
+except Exception as e:
+    import logging
+    logging.getLogger("pydantic_ai").warning("Failed to import TransformersReranker: %s", e)
+    TransformersReranker = None
 from app.conversation_manager import MultimodalConversationManager
 from app.multimodal_assets import (
     candidate_asset_paths,
@@ -1530,6 +1535,8 @@ UNCERTAINTY HANDLING:
 
 @st.cache_resource
 def load_reranker_model() -> TransformersReranker:
+    if TransformersReranker is None:
+        raise ImportError("TransformersReranker is not available (check dependency logs).")
     return TransformersReranker(RERANK_MODEL_NAME)
 
 
@@ -6482,13 +6489,13 @@ def run_pipeline(
     groq_api_key: str,
     nvidia_api_key: str,
 ) -> tuple[str | None, list[dict[str, Any]], dict[str, float], str | None, list[BaseMessage] | None]:
+    active_session_id = st.session_state.get("session_id", "default_session")
     timings: dict[str, float] = {}
     start_time = time.time()
     
     # Update Langfuse trace metadata with session, user, and deployment tags context
-    if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+    if os.getenv("LANGFUSE_PUBLIC_KEY"):
         try:
-            active_session_id = st.session_state.get("session_id", "anonymous-session")
             active_user_id = st.session_state.get("user_id", "default-user")
             tags_list = os.environ.get("DEPLOYMENT_TAGS", "production,v2-rag").split(",")
             langfuse_context.update_current_trace(

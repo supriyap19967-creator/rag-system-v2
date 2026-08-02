@@ -12,7 +12,12 @@ os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
-from transformers import AutoModelForSequenceClassification, AutoTokenizer
+try:
+    from transformers import AutoModelForSequenceClassification, AutoTokenizer
+except ImportError as e:
+    import logging
+    logging.getLogger("pydantic_ai").warning("Failed to import transformers (perhaps missing libgthread-2.0.so.0): %s", e)
+    AutoModelForSequenceClassification, AutoTokenizer = None, None
 
 logging.getLogger("transformers").setLevel(logging.ERROR)
 logging.getLogger("huggingface_hub").setLevel(logging.ERROR)
@@ -39,6 +44,8 @@ class TransformersReranker:
 
     def __init__(self, model_name: str = RERANKER_MODEL) -> None:
         self.model_name = model_name
+        if AutoTokenizer is None or AutoModelForSequenceClassification is None:
+            raise ImportError("transformers module is not available due to a missing dependency (e.g. libgthread-2.0.so.0).")
         self._tokenizer = AutoTokenizer.from_pretrained(
             model_name,
             cache_dir=BGE_CACHE_FOLDER,

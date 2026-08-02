@@ -253,7 +253,7 @@ class RAGMasterSafetyGauntlet:
             import os
 
             # Check if keys exist before attempting any score/metric creation
-            if os.getenv("LANGFUSE_PUBLIC_KEY") and os.getenv("LANGFUSE_SECRET_KEY"):
+            if os.getenv("LANGFUSE_PUBLIC_KEY"):
                 # Execute Langfuse logging safely
                 try:
                     from langfuse.decorators import langfuse_context
