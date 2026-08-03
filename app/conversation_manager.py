@@ -150,8 +150,8 @@ class MultimodalConversationManager:
             len(pinned_assets),
         )
 
-    def update_history(self, session_id: str, user_query: str, ai_response: str) -> None:
-        self.update_after_generation(user_query, ai_response, [], session_id=session_id)
+    def update_history(self, session_id: str, user_query: str, ai_response: str, asset_paths: list[str] | None = None) -> None:
+        self.update_after_generation(user_query, ai_response, [], active_asset_paths=asset_paths, session_id=session_id)
 
     def update_session_state(
         self,
