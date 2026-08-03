@@ -6498,31 +6498,38 @@ def _execute_text_visual_pipeline(
 
 import re
 
-def extract_single_requested_figure(query_text: str, source_chunks: list) -> str | None:
-    """If a user explicitly asks for Figure X.Y, filter out all other figures like 4.9."""
-    match = re.search(r'(?:figure|fig|chart)\s*[-_]?\s*(\d+[\.\_]\d+)', query_text, re.IGNORECASE)
+def resolve_single_figure_path(query_text: str, agent_result: any, source_chunks: list) -> str | None:
+    """
+    Extracts the image path directly from agent results or sources, 
+    and strictly enforces target figure matching if specified in user query.
+    """
+    candidate_paths = []
     
+    if hasattr(agent_result, "data") and agent_result.data:
+        direct_path = getattr(agent_result.data, "visual_asset_path", None) or getattr(agent_result.data, "image_path", None)
+        if direct_path:
+            candidate_paths.append(str(direct_path))
+            
+    for chunk in source_chunks or []:
+        chunk_path = None
+        if isinstance(chunk, dict):
+            chunk_path = chunk.get("image_path") or chunk.get("visual_asset_path")
+        else:
+            chunk_path = getattr(chunk, "image_path", None) or getattr(chunk, "visual_asset_path", None)
+        if chunk_path:
+            candidate_paths.append(str(chunk_path))
+
+    if not candidate_paths:
+        return None
+
+    match = re.search(r'(?:figure|fig|chart)?\s*[-_]?\s*(\d+[\.\_]\d+)', query_text, re.IGNORECASE)
     if match:
         target_num = match.group(1).replace(".", "_")
-        for chunk in source_chunks:
-            chunk_path = ""
-            if isinstance(chunk, dict):
-                chunk_path = chunk.get("image_path") or chunk.get("visual_asset_path") or ""
-            else:
-                chunk_path = str(getattr(chunk, "image_path", chunk))
-            if f"figure_{target_num}" in chunk_path.lower() or f"fig_{target_num}" in chunk_path.lower():
-                return chunk_path
+        for path in candidate_paths:
+            if f"figure_{target_num}" in path.lower() or f"fig_{target_num}" in path.lower() or f"_{target_num}" in path.lower():
+                return path
 
-    for chunk in source_chunks:
-        chunk_path = ""
-        if isinstance(chunk, dict):
-            chunk_path = chunk.get("image_path") or chunk.get("visual_asset_path") or ""
-        else:
-            chunk_path = getattr(chunk, "image_path", None)
-        if chunk_path:
-            return chunk_path
-            
-    return None
+    return candidate_paths[0]
 
 
 from langfuse.decorators import observe, langfuse_context
@@ -6895,10 +6902,8 @@ def main() -> None:
                 answer, sources, timings, image_path, agent_result = run_pipeline(
                     user_query, groq_api_key, nvidia_api_key
                 )
-                # Apply strict figure matching based on user query
-                filtered_image_path = extract_single_requested_figure(user_query, sources)
-                if filtered_image_path:
-                    image_path = filtered_image_path
+                # Updated robust image path resolution
+                image_path = resolve_single_figure_path(user_query, agent_result, sources)
                 result = getattr(agent_result, "output", None) or agent_result
                 # --- DIAGNOSTIC LOGGING IN StreamlitApp.py ---
                 print("="*50)
