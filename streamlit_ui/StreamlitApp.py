@@ -7003,6 +7003,8 @@ def main() -> None:
         st.session_state.messages = []
     st.session_state.messages.append({"role": "user", "content": user_query})
     images_list = [item[0] for item in unique_images] if 'unique_images' in locals() else []
+    if image_path and image_path not in images_list:
+        images_list.append(image_path)
     nearby_contexts = [item[2] for item in unique_images if item[2]] if 'unique_images' in locals() else []
     retrieved_nearby_context_text = "\n\n".join(nearby_contexts) if nearby_contexts else ""
 
