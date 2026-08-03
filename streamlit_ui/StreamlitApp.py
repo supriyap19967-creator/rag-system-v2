@@ -6867,6 +6867,16 @@ def main() -> None:
                     user_query, groq_api_key, nvidia_api_key
                 )
                 result = getattr(agent_result, "output", None) or agent_result
+                # --- DIAGNOSTIC LOGGING IN StreamlitApp.py ---
+                print("="*50)
+                print("DEBUG 1: Raw Agent Result Data:", type(agent_result), agent_result)
+
+                if hasattr(agent_result, "data"):
+                    print("DEBUG 2: agent_result.data dict/model:", agent_result.data)
+                    print("DEBUG 3: extracted_table contents:", getattr(agent_result.data, "extracted_table", "NO_TABLE_ATTR"))
+                    print("DEBUG 4: visual_asset_path:", getattr(agent_result.data, "visual_asset_path", "NO_PATH_ATTR"))
+
+                print("="*50)
             except Exception as exc:
                 answer = f"Unable to complete the request: {exc}"
                 sources = []
