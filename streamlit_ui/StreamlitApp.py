@@ -6496,6 +6496,30 @@ def _execute_text_visual_pipeline(
     return None, top_chunks, image_path or None, stream_messages
 
 
+import re
+
+def filter_requested_figure(user_query: str, retrieved_sources: list) -> str | None:
+    """Matches exact figure requests (e.g. 'Figure 4.2') against source metadata paths."""
+    match = re.search(r'(?:figure|fig|chart)\s*[-_]?\s*(\d+[\.\_]\d+)', user_query, re.IGNORECASE)
+    if match:
+        target_fig = match.group(1).replace(".", "_")
+        for src in retrieved_sources:
+            src_path = ""
+            if isinstance(src, dict):
+                src_path = src.get("image_path") or src.get("visual_asset_path") or ""
+            else:
+                src_path = getattr(src, "image_path", str(src))
+            if f"figure_{target_fig}" in src_path.lower() or f"fig_{target_fig}" in src_path.lower():
+                return src_path
+                
+    if retrieved_sources:
+        first_src = retrieved_sources[0]
+        if isinstance(first_src, dict):
+            return first_src.get("image_path") or first_src.get("visual_asset_path") or ""
+        return getattr(first_src, "image_path", str(first_src))
+    return None
+
+
 from langfuse.decorators import observe, langfuse_context
 
 @observe()
@@ -6866,6 +6890,10 @@ def main() -> None:
                 answer, sources, timings, image_path, agent_result = run_pipeline(
                     user_query, groq_api_key, nvidia_api_key
                 )
+                # Apply strict figure matching based on user query
+                filtered_image_path = filter_requested_figure(user_query, sources)
+                if filtered_image_path:
+                    image_path = filtered_image_path
                 result = getattr(agent_result, "output", None) or agent_result
                 # --- DIAGNOSTIC LOGGING IN StreamlitApp.py ---
                 print("="*50)
@@ -6978,7 +7006,12 @@ def main() -> None:
 
     memory_manager = get_memory_manager()
     resolved_assets = [image_path] if image_path else []
-    memory_manager.update_history(st.session_state.session_id, user_query, answer or "", active_asset_paths=resolved_assets)
+    memory_manager.update_history(
+        st.session_state.session_id,
+        user_query,
+        answer or "",
+        assets=resolved_assets
+    )
     memory_manager.attach_sources(st.session_state.session_id, sources)
     st.session_state.clear_query_after_run = True
     st.session_state.last_voice_audio_hash = ""
