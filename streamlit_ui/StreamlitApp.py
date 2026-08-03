@@ -6977,7 +6977,8 @@ def main() -> None:
     })
 
     memory_manager = get_memory_manager()
-    memory_manager.update_history(st.session_state.session_id, user_query, answer or "")
+    resolved_assets = [image_path] if image_path else []
+    memory_manager.update_history(st.session_state.session_id, user_query, answer or "", active_asset_paths=resolved_assets)
     memory_manager.attach_sources(st.session_state.session_id, sources)
     st.session_state.clear_query_after_run = True
     st.session_state.last_voice_audio_hash = ""
