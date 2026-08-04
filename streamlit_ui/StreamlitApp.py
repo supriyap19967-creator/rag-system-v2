@@ -6807,7 +6807,21 @@ def run_pipeline(
             else:
                 answer_text = vetted_res.get("text_response", result.output.text_reasoning)
                 if "extracted_table" in vetted_res:
-                    result.output.extracted_table = [ChartTableRow(**r) for r in vetted_res["extracted_table"]]
+                    valid_rows = []
+                    for r in vetted_res["extracted_table"]:
+                        if isinstance(r, dict):
+                            # Skip entirely empty dictionaries
+                            if not r:
+                                continue
+                            row_data = {
+                                "Series": r.get("Series") or "Data Point",
+                                "Category": r.get("Category") or "N/A",
+                                "TargetValue": r.get("TargetValue") if r.get("TargetValue") is not None else "N/A"
+                            }
+                            valid_rows.append(ChartTableRow(**row_data))
+                        elif isinstance(r, ChartTableRow):
+                            valid_rows.append(r)
+                    result.output.extracted_table = valid_rows
         except Exception as gauntlet_exc:
             logger.exception("Error running RAGMasterSafetyGauntlet: %s", gauntlet_exc)
 
