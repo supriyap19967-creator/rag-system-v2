@@ -7018,11 +7018,13 @@ def main() -> None:
 
     memory_manager = get_memory_manager()
     resolved_assets = [image_path] if image_path else []
-    memory_manager.update_history(
-        st.session_state.session_id,
-        user_query,
-        answer or "",
-        asset_paths=resolved_assets
+    
+    # STEP 3: Append assistant turn to conversation memory WITH extracted assets
+    memory_manager.append(
+        session_id=st.session_state.session_id,
+        role="assistant",
+        content=getattr(getattr(agent_result, "output", None), "text_reasoning", str(agent_result)) if agent_result else (answer or ""),
+        assets=resolved_assets
     )
     memory_manager.attach_sources(st.session_state.session_id, sources)
     st.session_state.clear_query_after_run = True
