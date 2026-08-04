@@ -3367,18 +3367,18 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
                 generation_payload=generation_payload,
             )
 
-        # 1. Extract image path directly from agent result output
+        # 1. Extract active assets FIRST
         active_assets = []
-        if 'result' in locals() and hasattr(result, "output"):
-            img_path = getattr(result.output, "image_path", None) or getattr(result.output, "visual_asset_path", None)
+        if 'agent_result' in locals() and hasattr(agent_result, "output") and agent_result:
+            img_path = getattr(agent_result.output, "image_path", None) or getattr(agent_result.output, "visual_asset_path", None)
             if img_path:
-                resolved = _resolve_existing_image_path(img_path)
-                active_assets.append(resolved)
+                active_assets.append(img_path)
         elif final_image_path:
             active_assets.append(final_image_path)
 
-        # 2. NOW trigger conversation memory append with active_assets passed
-        memory_manager.append(
+        # 2. THEN call conversation_manager.append with active_assets
+        conversation_manager = memory_manager
+        conversation_manager.append(
             session_id=request.session_id,
             role="assistant",
             content=answer,
