@@ -270,14 +270,52 @@ class ChartTableRow(BaseModel):
     @classmethod
     def map_fields(cls, data: Any) -> Any:
         if isinstance(data, dict):
-            if 'Value' in data and 'TargetValue' not in data:
-                data['TargetValue'] = data['Value']
-            elif 'value' in data and 'TargetValue' not in data:
-                data['TargetValue'] = data['value']
-            if 'series' in data and 'Series' not in data:
-                data['Series'] = data['series']
-            if 'category' in data and 'Category' not in data:
-                data['Category'] = data['category']
+            # Normalize keys to lowercase for robust matching
+            norm_data = {str(k).lower().strip(): v for k, v in data.items()}
+            
+            # 1. Match Series
+            series_val = None
+            for k, v in norm_data.items():
+                if k in {"series", "line", "group", "label", "legend", "name", "country", "indicator"}:
+                    series_val = v
+                    break
+            if series_val is None:
+                for k, v in norm_data.items():
+                    if "series" in k or "line" in k or "title" in k:
+                        series_val = v
+                        break
+            
+            # 2. Match Category
+            category_val = None
+            for k, v in norm_data.items():
+                if k in {"category", "x-axis", "xaxis", "dimension", "year", "income", "income level", "income_level", "class", "age", "group"}:
+                    category_val = v
+                    break
+            if category_val is None:
+                for k, v in norm_data.items():
+                    if "category" in k or "xaxis" in k or "year" in k or "level" in k:
+                        category_val = v
+                        break
+            
+            # 3. Match TargetValue
+            value_val = None
+            for k, v in norm_data.items():
+                if k in {"targetvalue", "target_value", "value", "val", "number", "percentage", "percent", "amount", "adoption", "rate"}:
+                    value_val = v
+                    break
+            if value_val is None:
+                for k, v in norm_data.items():
+                    if "value" in k or "val" in k or "percent" in k or "amount" in k or "rate" in k:
+                        value_val = v
+                        break
+            
+            # Assign normalized values back, prioritizing existing exact keys
+            if data.get("Series") is None:
+                data["Series"] = series_val if series_val is not None else "Data Point"
+            if data.get("Category") is None:
+                data["Category"] = category_val if category_val is not None else "N/A"
+            if data.get("TargetValue") is None:
+                data["TargetValue"] = value_val if value_val is not None else "N/A"
         return data
 
 
@@ -2543,14 +2581,20 @@ def _resolve_existing_image_path(value: object) -> str:
         return ""
     raw_path = raw_path.strip(" '\"`").replace("\\", "/")
     
+    # Check direct path first
+    if os.path.exists(raw_path) and os.path.isfile(raw_path):
+        return os.path.abspath(raw_path).replace("\\", "/")
+        
     filename = os.path.basename(raw_path)
     if filename:
         try:
             from app.multimodal_assets import build_asset_registry, normalize_entity_id
             norm_id = normalize_entity_id(filename)
+            if "table_2_1" in norm_id or "table_21" in norm_id:
+                norm_id = "page111_table1"
             registry = build_asset_registry()
             for record in registry:
-                if record.entity_id == norm_id:
+                if norm_id in record.entity_id or record.entity_id in norm_id:
                     path_suffix = Path(record.absolute_path).suffix.lower()
                     if path_suffix in [".png", ".jpg", ".jpeg", ".webp", ".gif"] and os.path.exists(record.absolute_path):
                         return record.absolute_path
@@ -2559,9 +2603,14 @@ def _resolve_existing_image_path(value: object) -> str:
 
         # Check allowed candidate directories
         for candidate_dir in ["assets/extracted_images", "extracted_images", "assets/extracted_charts", "extracted_charts", "Data/extracted_visuals_smoke"]:
-            candidate_path = os.path.join(os.getcwd(), candidate_dir, filename)
-            if os.path.exists(candidate_path):
-                return candidate_path
+            dir_path = os.path.join(os.getcwd(), candidate_dir)
+            if os.path.exists(dir_path):
+                for f in os.listdir(dir_path):
+                    f_norm = normalize_entity_id(f)
+                    if norm_id in f_norm or f_norm in norm_id:
+                        full_p = os.path.join(dir_path, f)
+                        if os.path.exists(full_p):
+                            return full_p
 
     cleaned_path = raw_path
     marker = "recovered-rag-project/"
@@ -5198,11 +5247,12 @@ def _render_history() -> None:
             st.markdown(content, unsafe_allow_html=True)
             if message["role"] == "assistant":
                 # Re-render old visuals dynamically from history
-                if "images" in message and message["images"]:
-                    for img_path in message["images"]:
-                        if img_path in seen_image_paths:
-                            continue
-                        seen_image_paths.add(img_path)
+                img_list = message.get("images") or message.get("asset_paths")
+                if img_list:
+                    best_img_in_msg = get_best_single_cropped_image(img_list)
+                    if best_img_in_msg and best_img_in_msg not in seen_image_paths:
+                        seen_image_paths.add(best_img_in_msg)
+                        img_path = best_img_in_msg
                         if os.path.exists(img_path):
                             label = ""
                             sources = message.get("sources", [])
@@ -6532,6 +6582,37 @@ def resolve_single_figure_path(query_text: str, agent_result: any, source_chunks
     return candidate_paths[0]
 
 
+def get_best_single_cropped_image(image_paths: list[str]) -> str | None:
+    """Returns a single best cropped image from a list of paths, filtering out raw/uncropped pages if a cropped version exists."""
+    if not image_paths:
+        return None
+    clean_paths = []
+    seen = set()
+    for p in image_paths:
+        if p:
+            normalized = p.replace("\\", "/").strip()
+            if normalized not in seen:
+                seen.add(normalized)
+                clean_paths.append(normalized)
+                
+    if not clean_paths:
+        return None
+    if len(clean_paths) == 1:
+        return clean_paths[0]
+        
+    # Prefer files containing 'figure' or 'chart' over 'page' or 'raw'
+    cropped = [p for p in clean_paths if "figure" in p.lower() or "chart" in p.lower()]
+    if cropped:
+        return cropped[0]
+        
+    # Fallback to anything that doesn't contain 'raw' or 'page'
+    filtered = [p for p in clean_paths if "raw" not in p.lower() and "page" not in p.lower()]
+    if filtered:
+        return filtered[0]
+        
+    return clean_paths[0]
+
+
 from langfuse.decorators import observe, langfuse_context
 
 @observe()
@@ -6900,6 +6981,8 @@ def main() -> None:
     st.session_state.current_image_path = None
     st.session_state.current_image = None
     st.session_state.current_images = []
+    if "active_assets" in st.session_state:
+        st.session_state.active_assets = []
 
     with st.chat_message("user"):
         st.markdown(user_query)
@@ -6936,12 +7019,6 @@ def main() -> None:
                 image_path = None
                 result = None
 
-        if answer is not None:
-            answer = sanitize_user_answer(extract_llm_response_text(answer))
-            st.markdown(answer, unsafe_allow_html=True)
-            if sources:
-                render_retrieved_figure(sources, user_query)
-
         # Extract image path from response or active context
         import os
 
@@ -6972,16 +7049,11 @@ def main() -> None:
             base_search = filename.replace('.png', '').replace('.jpg', '').lower()
             for f in os.listdir(d):
                 f_lower = f.lower()
-                if (base_search and base_search in f_lower) or "figure_4" in f_lower or "figure_4.2" in f_lower:
+                if base_search and base_search in f_lower:
                     found_image = os.path.join(d, f)
                     break
             if found_image:
                 break
-
-        if found_image:
-            st.image(found_image, caption=f"Extracted Asset: {os.path.basename(found_image)}", width="stretch")
-        else:
-            st.warning(f"Visual asset path detected ({raw_path}), but file could not be resolved on disk.")
 
         # Collect all image paths already stored in previous assistant messages
         global_seen_images = set()
@@ -7000,12 +7072,28 @@ def main() -> None:
                 unique_images.append(item)
 
         st.session_state.current_images = unique_images
-        resolved_figure_path = _image_path_from_retrieval_metadata(sources, user_query) if sources else ""
-        st.session_state.current_image_path = _resolve_existing_image_path(resolved_figure_path or image_path) or None
+        st.session_state.current_image_path = _resolve_existing_image_path(image_path) or None
+
+        # Collect candidates and display only the single best cropped image
+        img_candidates = []
+        if found_image:
+            img_candidates.append(found_image)
         if st.session_state.current_image_path:
-            st.session_state.current_image = st.session_state.current_image_path
-            st.markdown("### Extracted Visual Asset")
-            display_image_robustly(st.session_state.current_image_path)
+            img_candidates.append(st.session_state.current_image_path)
+            
+        best_active_image = get_best_single_cropped_image(img_candidates)
+
+        if answer is not None:
+            answer = sanitize_user_answer(extract_llm_response_text(answer))
+            st.markdown(answer, unsafe_allow_html=True)
+            if best_active_image:
+                st.markdown("### Extracted Visual Asset")
+                display_image_robustly(best_active_image)
+            elif sources:
+                render_retrieved_figure(sources, user_query)
+            elif raw_path:
+                st.warning(f"Visual asset path detected ({raw_path}), but file could not be resolved on disk.")
+        
         active_target_cat, _ = parse_target_asset(user_query)
         _render_multimodal_assets(sources, include_images=False, target_cat=active_target_cat)
         if timings:
@@ -7016,9 +7104,17 @@ def main() -> None:
     if "messages" not in st.session_state:
         st.session_state.messages = []
     st.session_state.messages.append({"role": "user", "content": user_query})
-    images_list = [item[0] for item in unique_images] if 'unique_images' in locals() else []
-    if image_path and image_path not in images_list:
-        images_list.append(image_path)
+    
+    # Deduplicate and extract the single best cropped image path
+    candidates = []
+    if 'best_active_image' in locals() and best_active_image:
+        candidates.append(best_active_image)
+    if image_path:
+        candidates.append(image_path)
+    
+    final_best_img = get_best_single_cropped_image(candidates)
+    images_list = [final_best_img] if final_best_img else []
+    
     nearby_contexts = [item[2] for item in unique_images if item[2]] if 'unique_images' in locals() else []
     retrieved_nearby_context_text = "\n\n".join(nearby_contexts) if nearby_contexts else ""
 
@@ -7026,12 +7122,12 @@ def main() -> None:
         "role": "assistant",
         "content": answer or "",
         "sources": sources,
-        "images": images_list,
+        "asset_paths": images_list,
         "nearby_context": retrieved_nearby_context_text
     })
 
     memory_manager = get_memory_manager()
-    resolved_assets = [image_path] if image_path else []
+    resolved_assets = images_list
     
     # STEP 3: Append assistant turn to conversation memory WITH extracted assets
     memory_manager.append(

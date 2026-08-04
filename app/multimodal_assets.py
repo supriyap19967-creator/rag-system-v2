@@ -642,13 +642,21 @@ def _resolve_existing_image_path(input_path: str) -> str | None:
     if os.path.exists(input_path):
         return input_path
         
-    # 2. Extract raw filename (e.g., "figure_4_2.png" from "../data/images/figure_4_2.png")
+    # 2. Extract raw filename
     filename = Path(input_path).name
+    norm_id = normalize_entity_id(filename)
+    if "table_2_1" in norm_id or "table_21" in norm_id:
+        norm_id = "page111_table1"
     
-    # 3. Look inside allowed directories
+    # 3. Look inside allowed directories with fuzzy matching
     for dir_path in APPROVED_ASSET_DIRS:
-        possible_path = Path(dir_path) / filename
-        if possible_path.exists():
-            return str(possible_path)
+        p_dir = Path(dir_path)
+        if p_dir.exists():
+            for f in os.listdir(p_dir):
+                f_norm = normalize_entity_id(f)
+                if norm_id in f_norm or f_norm in norm_id:
+                    full_p = p_dir / f
+                    if full_p.exists():
+                        return str(full_p)
             
     return None
