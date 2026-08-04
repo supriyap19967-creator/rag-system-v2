@@ -3367,11 +3367,15 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
                 generation_payload=generation_payload,
             )
 
+        resolved_paths = list(generation_payload.get("active_asset_paths") or []) if generation_payload else []
+        if final_image_path and final_image_path not in resolved_paths:
+            resolved_paths.append(final_image_path)
+
         memory_manager.update_session_state(
             query=question,
             response=answer,
             chunks=reranked,
-            active_asset_paths=list(generation_payload.get("active_asset_paths") or []) if generation_payload else [],
+            active_asset_paths=resolved_paths,
             session_id=request.session_id,
         )
 
