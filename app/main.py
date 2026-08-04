@@ -3367,24 +3367,22 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
                 generation_payload=generation_payload,
             )
 
-        raw_image_path = None
+        # 1. Extract image path directly from agent result output
+        active_assets = []
         if 'result' in locals() and hasattr(result, "output"):
-            raw_image_path = getattr(result.output, "image_path", None) or getattr(result.output, "visual_asset_path", None)
+            img_path = getattr(result.output, "image_path", None) or getattr(result.output, "visual_asset_path", None)
+            if img_path:
+                resolved = _resolve_existing_image_path(img_path)
+                active_assets.append(resolved)
         elif final_image_path:
-            raw_image_path = final_image_path
+            active_assets.append(final_image_path)
 
-        resolved_paths = list(generation_payload.get("active_asset_paths") or []) if generation_payload else []
-        if raw_image_path:
-            final_path = _resolve_existing_image_path(raw_image_path)
-            if final_path and final_path not in resolved_paths:
-                resolved_paths.append(final_path)
-
-        memory_manager.update_session_state(
-            query=question,
-            response=answer,
-            chunks=reranked,
-            active_asset_paths=resolved_paths,
+        # 2. NOW trigger conversation memory append with active_assets passed
+        memory_manager.append(
             session_id=request.session_id,
+            role="assistant",
+            content=answer,
+            assets=active_assets
         )
 
         final_sources = []

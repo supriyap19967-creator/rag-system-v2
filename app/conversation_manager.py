@@ -153,6 +153,17 @@ class MultimodalConversationManager:
     def update_history(self, session_id: str, user_query: str, ai_response: str, asset_paths: list[str] | None = None) -> None:
         self.update_after_generation(user_query, ai_response, [], active_asset_paths=asset_paths, session_id=session_id)
 
+    def append(self, session_id: str, role: str, content: str, assets: list[str] | None = None) -> None:
+        """Backward-compatible append helper forwarding to _append_turn."""
+        self._append_turn(
+            ConversationTurn(
+                role=role,
+                content=self._mask_pii(content),
+                asset_paths=self._dedupe_paths(assets or []),
+            ),
+            session_id=session_id,
+        )
+
     def update_session_state(
         self,
         *,
