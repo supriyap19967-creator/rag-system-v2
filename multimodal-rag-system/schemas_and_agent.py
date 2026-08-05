@@ -159,10 +159,92 @@ def parse_markdown_table_to_dicts(text: str) -> List[Dict[str, Any]]:
 # ==========================================
 # STEP 2 & 5: STRUCTURAL METRIC COMPLIANCE SCHEMA
 # ==========================================
+class ChartTableRow(BaseModel):
+    Series: str = Field(description="The name of the line, bar group, or data series (e.g. country name, variable name, or indicator).")
+    Category: str = Field(description="The category label/X-axis label/dimension (e.g. year, age group, or class).")
+    TargetValue: float | int | str = Field(description="The numerical value or raw value associated with this category/series.")
+
+    @model_validator(mode='before')
+    @classmethod
+    def map_fields(cls, data: Any) -> Any:
+        if isinstance(data, str):
+            try:
+                import json
+                data = json.loads(data)
+            except Exception:
+                pass
+        if isinstance(data, dict):
+            norm_data = {str(k).lower().strip(): v for k, v in data.items()}
+            
+            series_val = None
+            for k, v in norm_data.items():
+                if k in {"series", "line", "group", "label", "legend", "name", "country", "indicator"}:
+                    series_val = v
+                    break
+            if series_val is None:
+                for k, v in norm_data.items():
+                    if "series" in k or "line" in k or "title" in k:
+                        series_val = v
+                        break
+            if series_val is None and len(data) > 0:
+                series_val = list(data.values())[0]
+
+            category_val = None
+            for k, v in norm_data.items():
+                if k in {"category", "x-axis", "dimension", "year", "age", "class", "income group", "income"}:
+                    category_val = v
+                    break
+            if category_val is None:
+                for k, v in norm_data.items():
+                    if "category" in k or "axis" in k or "dimension" in k:
+                        category_val = v
+                        break
+            if category_val is None and len(data) > 1:
+                category_val = list(data.values())[1]
+
+            target_val = None
+            for k, v in norm_data.items():
+                if k in {"targetvalue", "value", "y-axis", "val", "amount", "number", "quantity", "count", "percentage", "rate"}:
+                    target_val = v
+                    break
+            if target_val is None:
+                for k, v in norm_data.items():
+                    if "value" in k or "val" in k or "amount" in k or "y-axis" in k:
+                        target_val = v
+                        break
+            if target_val is None and len(data) > 2:
+                target_val = list(data.values())[2]
+                
+            if target_val is None:
+                for v in data.values():
+                    if isinstance(v, (int, float)):
+                        target_val = v
+                        break
+                        
+            res = {}
+            res["Series"] = str(series_val) if series_val is not None else "N/A"
+            res["Category"] = str(category_val) if category_val is not None else "N/A"
+            
+            if target_val is not None:
+                if isinstance(target_val, (int, float)):
+                    res["TargetValue"] = target_val
+                else:
+                    try:
+                        val_str = re.sub(r"[^\d.-]", "", str(target_val))
+                        res["TargetValue"] = float(val_str) if "." in val_str else int(val_str)
+                    except ValueError:
+                        res["TargetValue"] = target_val
+            else:
+                res["TargetValue"] = 0
+                
+            return res
+        return data
+
+
 class ChartTableData(BaseModel):
     source_routing_trail: str = Field(description="The source file and location metadata.")
     text_reasoning: str = Field(description="The step-by-step logical summary.")
-    extracted_table: List[Dict[str, Any]] = Field(description="List of precise parsed table rows.")
+    extracted_table: List[ChartTableRow] = Field(description="List of precise parsed table rows.")
 
     @model_validator(mode='after')
     def validate_table_integrity(self) -> 'ChartTableData':
@@ -488,12 +570,18 @@ def process_vision_element(ctx: RunContext[SystemPipelinesDeps], visual_asset_pa
     logger.info("═"*60)
 
     visual_asset_path = os.path.normpath(visual_asset_path.replace("\\\\", "\\"))
+    from app.main import _resolve_existing_image_path
+    resolved_str = _resolve_existing_image_path(visual_asset_path)
+    if resolved_str and os.path.exists(resolved_str):
+        visual_asset_path = resolved_str
     img_path = Path(visual_asset_path)
+    logger.info(f"Resolved visual asset path to: {img_path}")
     if not img_path.exists():
         try:
             from app.multimodal_assets import build_asset_registry, normalize_entity_id
-            norm_id = normalize_entity_id(visual_asset_path)
-            logger.info(f"Normalizing '{visual_asset_path}' to '{norm_id}' for registry lookup")
+            filename = os.path.basename(visual_asset_path)
+            norm_id = normalize_entity_id(filename)
+            logger.info(f"Normalizing filename '{filename}' (from path '{visual_asset_path}') to '{norm_id}' for registry lookup")
             
             registry = build_asset_registry()
             matching_record = None
@@ -507,54 +595,54 @@ def process_vision_element(ctx: RunContext[SystemPipelinesDeps], visual_asset_pa
             # Pass 2: Fallback to any matching record if no image was found
             if not matching_record:
                 for record in registry:
-                    if record.entity_id == norm_id:
-                        matching_record = record
-                        break
-                    
-            if matching_record:
-                resolved_path = Path(matching_record.absolute_path)
-                if resolved_path.suffix.lower() == ".csv":
-                    resolved = False
-                    page_match = re.search(r"page_(\d+)", resolved_path.name, re.IGNORECASE)
-                    if page_match:
-                        page_no = page_match.group(1)
-                        for folder in ["assets/extracted_images", "extracted_images"]:
-                            folder_path = Path("C:/Users/supri/recovered-rag-project") / folder
-                            if folder_path.exists():
-                                for file in folder_path.glob("*"):
-                                    if (file.name.lower().startswith(f"page{page_no}_") or file.name.lower().startswith(f"page_{page_no}_")) and file.suffix.lower() == ".png" and not file.name.lower().endswith(".raw.png"):
-                                        img_path = file
-                                        resolved = True
-                                        logger.info(f"CSV resolved to image fallback: {img_path}")
-                                        break
-                                if resolved:
-                                    break
-                    if not resolved:
-                        img_path = resolved_path
-                else:
-                    img_path = resolved_path
-                logger.info(f"Registry match found: {img_path}")
-            else:
-                # Direct fallback to folder
-                fallback_path = Path(ctx.deps.image_folder_path) / img_path.name
-                if fallback_path.exists():
-                    img_path = fallback_path
-                else:
-                    # Try appending suffix if missing
-                    resolved = False
-                    for ext in [".png", ".jpg", ".jpeg"]:
-                        temp_path = Path(ctx.deps.image_folder_path) / f"{img_path.name}{ext}"
-                        if temp_path.exists():
-                            img_path = temp_path
-                            resolved = True
+                        if record.entity_id == norm_id:
+                            matching_record = record
                             break
-                    if not resolved:
-                        # Try exact match with suffix inside directory
-                        for file in Path(ctx.deps.image_folder_path).glob("*"):
-                            if visual_asset_path.lower() in file.name.lower() or norm_id.lower() in file.name.lower():
-                                img_path = file
+                        
+                if matching_record:
+                    resolved_path = Path(matching_record.absolute_path)
+                    if resolved_path.suffix.lower() == ".csv":
+                        resolved = False
+                        page_match = re.search(r"page_(\d+)", resolved_path.name, re.IGNORECASE)
+                        if page_match:
+                            page_no = page_match.group(1)
+                            for folder in ["assets/extracted_images", "extracted_images"]:
+                                folder_path = Path("C:/Users/supri/recovered-rag-project") / folder
+                                if folder_path.exists():
+                                    for file in folder_path.glob("*"):
+                                        if (file.name.lower().startswith(f"page{page_no}_") or file.name.lower().startswith(f"page_{page_no}_")) and file.suffix.lower() == ".png" and not file.name.lower().endswith(".raw.png"):
+                                            img_path = file
+                                            resolved = True
+                                            logger.info(f"CSV resolved to image fallback: {img_path}")
+                                            break
+                                    if resolved:
+                                        break
+                        if not resolved:
+                            img_path = resolved_path
+                    else:
+                        img_path = resolved_path
+                    logger.info(f"Registry match found: {img_path}")
+                else:
+                    # Direct fallback to folder
+                    fallback_path = Path(ctx.deps.image_folder_path) / img_path.name
+                    if fallback_path.exists():
+                        img_path = fallback_path
+                    else:
+                        # Try appending suffix if missing
+                        resolved = False
+                        for ext in [".png", ".jpg", ".jpeg"]:
+                            temp_path = Path(ctx.deps.image_folder_path) / f"{img_path.name}{ext}"
+                            if temp_path.exists():
+                                img_path = temp_path
                                 resolved = True
                                 break
+                        if not resolved:
+                            # Try exact match with suffix inside directory
+                            for file in Path(ctx.deps.image_folder_path).glob("*"):
+                                if visual_asset_path.lower() in file.name.lower() or norm_id.lower() in file.name.lower():
+                                    img_path = file
+                                    resolved = True
+                                    break
         except Exception as e:
             logger.warning(f"Registry lookup failed: {e}")
 
@@ -565,6 +653,13 @@ def process_vision_element(ctx: RunContext[SystemPipelinesDeps], visual_asset_pa
         import base64
         from openai import OpenAI
         
+        # Load environment variables from .env file if available
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except ImportError:
+            pass
+
         # Load OpenRouter API Key
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:

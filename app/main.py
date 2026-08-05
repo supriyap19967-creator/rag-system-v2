@@ -1200,11 +1200,52 @@ def _resolve_existing_image_path(value: object) -> str:
         try:
             from app.multimodal_assets import build_asset_registry, normalize_entity_id
             norm_id = normalize_entity_id(filename)
-            if "table_2_1" in norm_id or "table_21" in norm_id:
-                norm_id = "page111_table1"
+            
+            sequential_mappings = {
+                "img_04_02": "page_208_Figure_4.2",
+                "figure_4_2": "page_208_Figure_4.2",
+                "figure_42": "page_208_Figure_4.2",
+                "table_2_1": "page111_table1",
+                "table_21": "page111_table1",
+                "table_3_1": "page154_table1",
+                "table_31": "page154_table1",
+                "table_3_2": "page154_table2",
+                "table_32": "page154_table2",
+            }
+            for k, v in sequential_mappings.items():
+                if k in norm_id:
+                    norm_id = v
+                    break
+
+            # Helper to check matching by digits and category
+            def match_by_digits_and_category(req_filename: str, candidate_filename: str) -> bool:
+                req_norm = req_filename.lower()
+                cand_norm = candidate_filename.lower()
+                is_req_table = "table" in req_norm or "tab" in req_norm
+                is_cand_table = "table" in cand_norm or "tab" in cand_norm
+                if is_req_table != is_cand_table:
+                    return False
+                import re
+                req_digits = [str(int(x)) for x in re.findall(r"\d+", req_norm)]
+                cand_digits = [str(int(x)) for x in re.findall(r"\d+", cand_norm)]
+                if not req_digits or not cand_digits:
+                    return False
+                if len(cand_digits) >= len(req_digits):
+                    if cand_digits[-len(req_digits):] == req_digits:
+                        return True
+                return False
+
+            # Check Registry with exact normalized substring match first
             registry = build_asset_registry()
             for record in registry:
                 if norm_id in record.entity_id or record.entity_id in norm_id:
+                    path_suffix = Path(record.absolute_path).suffix.lower()
+                    if path_suffix in [".png", ".jpg", ".jpeg", ".webp", ".gif"] and os.path.exists(record.absolute_path):
+                        return record.absolute_path
+                        
+            # Check Registry with digit sequence match
+            for record in registry:
+                if match_by_digits_and_category(filename, record.source_file):
                     path_suffix = Path(record.absolute_path).suffix.lower()
                     if path_suffix in [".png", ".jpg", ".jpeg", ".webp", ".gif"] and os.path.exists(record.absolute_path):
                         return record.absolute_path
@@ -1215,12 +1256,19 @@ def _resolve_existing_image_path(value: object) -> str:
         for candidate_dir in ["assets/extracted_images", "extracted_images", "assets/extracted_charts", "extracted_charts", "Data/extracted_visuals_smoke"]:
             dir_path = os.path.join(os.getcwd(), candidate_dir)
             if os.path.exists(dir_path):
+                # Try exact normalized substring match first
                 for f in os.listdir(dir_path):
                     f_norm = normalize_entity_id(f)
                     if norm_id in f_norm or f_norm in norm_id:
                         full_p = os.path.join(dir_path, f)
                         if os.path.exists(full_p):
-                            return full_p
+                            return os.path.abspath(full_p).replace("\\", "/")
+                # Try category & digit sequence match
+                for f in os.listdir(dir_path):
+                    if match_by_digits_and_category(filename, f):
+                        full_p = os.path.join(dir_path, f)
+                        if os.path.exists(full_p):
+                            return os.path.abspath(full_p).replace("\\", "/")
 
     for marker in ("assets/extracted_images/", "Data/extracted_visuals/"):
         if marker in raw_path:
@@ -3384,8 +3432,14 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
         if 'agent_result' in locals() and hasattr(agent_result, "output") and agent_result:
             img_path = getattr(agent_result.output, "image_path", None) or getattr(agent_result.output, "visual_asset_path", None)
             if img_path:
+                resolved = _resolve_existing_image_path(img_path)
+                if resolved:
+                    img_path = resolved
                 active_assets.append(img_path)
         elif final_image_path:
+            resolved = _resolve_existing_image_path(final_image_path)
+            if resolved:
+                final_image_path = resolved
             active_assets.append(final_image_path)
 
         # 2. THEN call conversation_manager.append with active_assets

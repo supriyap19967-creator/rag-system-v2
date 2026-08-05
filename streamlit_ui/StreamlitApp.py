@@ -269,6 +269,12 @@ class ChartTableRow(BaseModel):
     @model_validator(mode='before')
     @classmethod
     def map_fields(cls, data: Any) -> Any:
+        if isinstance(data, str):
+            try:
+                import json
+                data = json.loads(data)
+            except Exception:
+                pass
         if isinstance(data, dict):
             # Normalize keys to lowercase for robust matching
             norm_data = {str(k).lower().strip(): v for k, v in data.items()}
@@ -322,8 +328,8 @@ class ChartTableRow(BaseModel):
 class ChartTableData(BaseModel):
     source_routing_trail: str = Field(description="The source file and location metadata.")
     text_reasoning: str = Field(description="The step-by-step logical summary.")
-    extracted_table: list[ChartTableRow | dict[str, Any] | str] = Field(
-        description="List of precise parsed table rows. Each row in extracted_table must be a valid JSON object/dict with keys: Category, Series, Value."
+    extracted_table: list[ChartTableRow] = Field(
+        description="List of precise parsed table rows. Each row in extracted_table must be a valid JSON object/dict with keys: Category, Series, TargetValue."
     )
     chart_title: str | None = Field(default=None, description="The title or caption of the chart/figure, if identifiable.")
     x_axis_label: str | None = Field(default=None, description="The title or label of the X-axis (e.g., GDP per capita).")
@@ -859,12 +865,18 @@ def process_vision_element(ctx: RunContext[SystemPipelinesDeps], visual_asset_pa
     logger.info("═"*60)
 
     visual_asset_path = os.path.normpath(visual_asset_path.replace("\\\\", "\\"))
+    from app.main import _resolve_existing_image_path
+    resolved_str = _resolve_existing_image_path(visual_asset_path)
+    if resolved_str and os.path.exists(resolved_str):
+        visual_asset_path = resolved_str
     img_path = Path(visual_asset_path)
+    logger.info(f"Resolved visual asset path to: {img_path}")
     if not img_path.exists():
         try:
             from app.multimodal_assets import build_asset_registry, normalize_entity_id
-            norm_id = normalize_entity_id(visual_asset_path)
-            logger.info(f"Normalizing '{visual_asset_path}' to '{norm_id}' for registry lookup")
+            filename = os.path.basename(visual_asset_path)
+            norm_id = normalize_entity_id(filename)
+            logger.info(f"Normalizing filename '{filename}' (from path '{visual_asset_path}') to '{norm_id}' for registry lookup")
             
             registry = build_asset_registry()
             matching_record = None
@@ -938,6 +950,13 @@ def process_vision_element(ctx: RunContext[SystemPipelinesDeps], visual_asset_pa
         import base64
         from openai import OpenAI
         
+        # Load environment variables from .env file if available
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+        except ImportError:
+            pass
+
         # Load OpenRouter API Key
         api_key = os.getenv("OPENROUTER_API_KEY")
         if not api_key:
@@ -2590,11 +2609,52 @@ def _resolve_existing_image_path(value: object) -> str:
         try:
             from app.multimodal_assets import build_asset_registry, normalize_entity_id
             norm_id = normalize_entity_id(filename)
-            if "table_2_1" in norm_id or "table_21" in norm_id:
-                norm_id = "page111_table1"
+            
+            sequential_mappings = {
+                "img_04_02": "page_208_Figure_4.2",
+                "figure_4_2": "page_208_Figure_4.2",
+                "figure_42": "page_208_Figure_4.2",
+                "table_2_1": "page111_table1",
+                "table_21": "page111_table1",
+                "table_3_1": "page154_table1",
+                "table_31": "page154_table1",
+                "table_3_2": "page154_table2",
+                "table_32": "page154_table2",
+            }
+            for k, v in sequential_mappings.items():
+                if k in norm_id:
+                    norm_id = v
+                    break
+
+            # Helper to check matching by digits and category
+            def match_by_digits_and_category(req_filename: str, candidate_filename: str) -> bool:
+                req_norm = req_filename.lower()
+                cand_norm = candidate_filename.lower()
+                is_req_table = "table" in req_norm or "tab" in req_norm
+                is_cand_table = "table" in cand_norm or "tab" in cand_norm
+                if is_req_table != is_cand_table:
+                    return False
+                import re
+                req_digits = [str(int(x)) for x in re.findall(r"\d+", req_norm)]
+                cand_digits = [str(int(x)) for x in re.findall(r"\d+", cand_norm)]
+                if not req_digits or not cand_digits:
+                    return False
+                if len(cand_digits) >= len(req_digits):
+                    if cand_digits[-len(req_digits):] == req_digits:
+                        return True
+                return False
+
+            # Check Registry with exact normalized substring match first
             registry = build_asset_registry()
             for record in registry:
                 if norm_id in record.entity_id or record.entity_id in norm_id:
+                    path_suffix = Path(record.absolute_path).suffix.lower()
+                    if path_suffix in [".png", ".jpg", ".jpeg", ".webp", ".gif"] and os.path.exists(record.absolute_path):
+                        return record.absolute_path
+                        
+            # Check Registry with digit sequence match
+            for record in registry:
+                if match_by_digits_and_category(filename, record.source_file):
                     path_suffix = Path(record.absolute_path).suffix.lower()
                     if path_suffix in [".png", ".jpg", ".jpeg", ".webp", ".gif"] and os.path.exists(record.absolute_path):
                         return record.absolute_path
@@ -2605,12 +2665,19 @@ def _resolve_existing_image_path(value: object) -> str:
         for candidate_dir in ["assets/extracted_images", "extracted_images", "assets/extracted_charts", "extracted_charts", "Data/extracted_visuals_smoke"]:
             dir_path = os.path.join(os.getcwd(), candidate_dir)
             if os.path.exists(dir_path):
+                # Try exact normalized substring match first
                 for f in os.listdir(dir_path):
                     f_norm = normalize_entity_id(f)
                     if norm_id in f_norm or f_norm in norm_id:
                         full_p = os.path.join(dir_path, f)
                         if os.path.exists(full_p):
-                            return full_p
+                            return os.path.abspath(full_p).replace("\\", "/")
+                # Try category & digit sequence match
+                for f in os.listdir(dir_path):
+                    if match_by_digits_and_category(filename, f):
+                        full_p = os.path.join(dir_path, f)
+                        if os.path.exists(full_p):
+                            return os.path.abspath(full_p).replace("\\", "/")
 
     cleaned_path = raw_path
     marker = "recovered-rag-project/"
@@ -4980,28 +5047,12 @@ Write your comprehensive, integrated final answer:"""
 
 def _render_sidebar() -> tuple[str, str]:
     with st.sidebar:
-        st.header("Configuration")
-        st.text_input("Qdrant Mode", value=f"server: {QDRANT_HOST}:{QDRANT_PORT}", disabled=True)
-        st.text_input("Collection", value=COLLECTION_NAME, disabled=True)
-        st.text_input("Embedding Model", value=EMBEDDING_MODEL_NAME, disabled=True)
-        st.text_input("Reranker", value=RERANK_MODEL_NAME, disabled=True)
-        st.text_input("Final Answer LLM", value=NVIDIA_FINAL_MODEL_NAME, disabled=True)
-        api_key = st.text_input(
-            "Groq API Key",
-            value=resolve_groq_api_key(),
-            type="password",
-        )
-        nvidia_api_key = st.text_input(
-            "NVIDIA NIM API Key",
-            value=resolve_nvidia_api_key(),
-            type="password",
-        )
         if st.button("Clear Chat", width="stretch"):
             get_memory_manager().clear_history(st.session_state.session_id)
             st.session_state.messages = []
             st.rerun()
 
-    return api_key.strip(), nvidia_api_key.strip()
+    return resolve_groq_api_key(), resolve_nvidia_api_key()
 
 
 def _render_sources(chunks: list[dict[str, Any]]) -> None:
@@ -5199,42 +5250,7 @@ def _render_multimodal_assets(chunks: list[dict[str, Any]], include_images: bool
 
 
 def format_nearby_context(text: str) -> str:
-    if not text:
-        return ""
-        
-    lines = [line.strip() for line in text.split('\n')]
-    paragraphs = []
-    current_para = []
-    
-    for line in lines:
-        if not line:
-            if current_para:
-                paragraphs.append(" ".join(current_para))
-                current_para = []
-            continue
-            
-        if line.startswith(('-', '*', '•', '1.', '2.', '3.')):
-            if current_para:
-                paragraphs.append(" ".join(current_para))
-                current_para = []
-            paragraphs.append(line)
-        else:
-            current_para.append(line)
-            
-    if current_para:
-        paragraphs.append(" ".join(current_para))
-        
-    cleaned_paras = []
-    for p in paragraphs:
-        p_clean = re.sub(r'\s+', ' ', p).strip()
-        if len(p_clean) < 15 and (p_clean.isdigit() or p_clean.lower() in ("references", "wdr 2025", "world development report")):
-            continue
-        cleaned_paras.append(p_clean)
-        
-    if not cleaned_paras:
-        return ""
-        
-    return "### Nearby Document Context\n\n" + "\n\n".join(cleaned_paras)
+    return ""
 
 
 def _render_history() -> None:

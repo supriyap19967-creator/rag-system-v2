@@ -15928,3 +15928,1053 @@
 2026-08-05 03:11:29,572 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_13_Faithfulness_Evaluation] Failed: Faithfulness score below threshold: score=0.00, threshold=0.40.
 2026-08-05 03:11:29,572 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: EvaluationFaithfulnessViolation: Faithfulness score below threshold: score=0.00, threshold=0.40.
 2026-08-05 03:11:31,678 [INFO] httpx: HTTP Request: POST https://cloud.langfuse.com/api/public/ingestion "HTTP/1.1 207 Multi-Status"
+2026-08-05 03:33:03,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:33:03,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:33:03,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:33:03,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:33:03,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:33:03,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:33:03,315 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:33:03,319 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:33:03,319 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:33:03,319 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:33:03,319 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:33:03,319 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:33:03,319 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:33:03,319 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:33:03,322 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:33:03,322 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:33:03,322 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:33:03,322 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:33:03,322 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:33:03,322 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:33:03,334 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:33:03,334 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:33:03,334 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:33:03,334 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:33:03,336 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:33:03,336 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:33:03,336 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:33:03,336 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:33:03,338 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:33:03,338 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:33:03,338 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:33:03,338 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:33:03,339 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:33:03,347 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:33:03,348 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:33:03,349 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:33:03,350 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:33:03,350 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:33:03,350 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:33:03,352 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:33:03,352 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:33:03,352 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:33:03,352 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:33:03,352 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:33:03,352 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:33:03,354 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:33:03,365 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 03:33:03,366 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 03:35:27,953 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:35:27,953 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:35:27,953 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:35:27,953 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:35:27,953 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:35:27,953 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:35:27,966 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:35:27,973 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:35:27,974 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:35:27,974 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:35:27,974 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:35:27,974 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:35:27,974 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:35:27,974 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:35:27,976 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:35:27,976 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:35:27,976 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:35:27,976 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:35:27,976 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:35:27,976 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:35:27,985 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:35:27,985 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:35:27,985 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:35:27,987 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:35:27,987 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:35:27,987 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:35:27,987 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:35:27,989 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:35:27,989 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:35:27,989 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:35:27,989 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:35:27,989 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:35:27,989 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:35:27,998 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:35:27,998 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:35:27,998 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:35:27,998 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:35:28,001 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:35:28,001 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:35:28,001 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:35:28,001 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:35:28,002 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:35:28,002 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:35:28,002 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:35:28,003 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:35:28,004 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:35:28,012 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 03:35:28,012 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 03:37:21,148 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: False
+2026-08-05 03:37:21,148 [INFO] pydantic_ai: [VALIDATION PASS] Empty table payload allowed.
+2026-08-05 03:37:21,151 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 03:37:21,151 [INFO] pydantic_ai: ⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...
+2026-08-05 03:37:21,151 [WARNING] pydantic_ai: ❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.
+2026-08-05 03:37:23,572 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:37:23,572 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:37:23,572 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:37:23,572 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:37:23,572 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:37:23,572 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:37:23,572 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:37:23,623 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:37:23,624 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:37:23,624 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_10_Markdown_Sanitizer] Failed: Asset field 'image_path' is present but empty.
+2026-08-05 03:37:23,624 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: EmptyAssetPayloadError: Asset field 'image_path' is present but empty.
+2026-08-05 03:37:24,658 [INFO] httpx: HTTP Request: POST https://cloud.langfuse.com/api/public/ingestion "HTTP/1.1 207 Multi-Status"
+2026-08-05 03:43:59,303 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:43:59,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:43:59,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:43:59,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:43:59,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:43:59,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:43:59,314 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:43:59,320 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:43:59,320 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:43:59,320 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:43:59,322 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:43:59,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:43:59,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:43:59,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:43:59,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:43:59,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:43:59,325 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:43:59,325 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:43:59,325 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:43:59,325 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:43:59,335 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:43:59,335 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:43:59,335 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:43:59,335 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:43:59,335 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:43:59,337 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:43:59,337 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:43:59,337 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:43:59,339 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:43:59,339 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:43:59,339 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:43:59,339 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:43:59,339 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:43:59,349 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:43:59,350 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:43:59,350 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:43:59,350 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:43:59,350 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:43:59,351 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:43:59,351 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:43:59,351 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:43:59,352 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:43:59,352 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:43:59,352 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:43:59,352 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:43:59,352 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:43:59,361 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 03:43:59,362 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 03:45:15,361 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: False
+2026-08-05 03:45:15,363 [INFO] pydantic_ai: [VALIDATION PASS] Empty table payload allowed.
+2026-08-05 03:45:15,363 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 03:45:15,363 [INFO] pydantic_ai: ⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...
+2026-08-05 03:45:15,363 [WARNING] pydantic_ai: ❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.
+2026-08-05 03:45:17,955 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:45:17,955 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:45:17,955 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:45:17,955 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:45:17,955 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:45:17,955 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:45:17,961 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:45:18,004 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:45:18,004 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:45:18,004 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:45:18,004 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:45:18,004 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:45:18,004 [INFO] pydantic_ai: ⚠️ [Guardrail_Layer_13_Faithfulness_Evaluation] Retrieved context is empty (Pandas/CSV query or no Qdrant results). Skipping check.
+2026-08-05 03:45:18,004 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:45:18,024 [WARNING] pydantic_ai: Skipping Langfuse score logging due to error: 'Langfuse' object has no attribute 'create_score'
+2026-08-05 03:47:57,669 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:47:57,669 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:47:57,669 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:47:57,669 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:47:57,669 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:47:57,669 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:47:57,680 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:47:57,685 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:47:57,685 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:47:57,686 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:47:57,686 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:47:57,686 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:47:57,686 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:47:57,686 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:47:57,687 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:47:57,687 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:47:57,687 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:47:57,687 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:47:57,687 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:47:57,687 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:47:57,693 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:47:57,693 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:47:57,693 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:47:57,694 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:47:57,695 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:47:57,696 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:47:57,696 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:47:57,696 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:47:57,696 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:47:57,697 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:47:57,697 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:47:57,697 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:47:57,697 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:47:57,706 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:47:57,707 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:47:57,707 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:47:57,707 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:47:57,708 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:47:57,708 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:47:57,709 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:47:57,709 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:47:57,709 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:47:57,709 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:47:57,710 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:47:57,710 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:47:57,711 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:47:57,719 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 03:47:57,719 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 03:49:13,851 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: False
+2026-08-05 03:49:13,852 [INFO] pydantic_ai: [VALIDATION PASS] Empty table payload allowed.
+2026-08-05 03:49:13,854 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 03:49:13,854 [INFO] pydantic_ai: ⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...
+2026-08-05 03:49:13,854 [WARNING] pydantic_ai: ❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.
+2026-08-05 03:49:16,204 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:49:16,204 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:49:16,212 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:49:16,213 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:49:16,213 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:49:16,213 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:49:16,213 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:49:16,254 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:49:16,260 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:49:16,260 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:49:16,260 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:49:16,260 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:49:16,260 [INFO] pydantic_ai: ⚠️ [Guardrail_Layer_13_Faithfulness_Evaluation] Retrieved context is empty (Pandas/CSV query or no Qdrant results). Skipping check.
+2026-08-05 03:49:16,260 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:49:16,298 [WARNING] pydantic_ai: Skipping Langfuse score logging due to error: 'Langfuse' object has no attribute 'create_score'
+2026-08-05 03:53:25,696 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:53:25,696 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:53:25,696 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:53:25,696 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:53:25,701 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:53:25,701 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:53:25,708 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:53:25,713 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:53:25,714 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:53:25,714 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:53:25,714 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:53:25,714 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:53:25,715 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:53:25,715 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:53:25,715 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:53:25,715 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:53:25,716 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:53:25,716 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:53:25,716 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:53:25,717 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:53:25,723 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:53:25,724 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:53:25,724 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:53:25,725 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:53:25,725 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:53:25,725 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:53:25,726 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:53:25,726 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:53:25,726 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:53:25,726 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:53:25,726 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:53:25,727 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:53:25,727 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:53:25,735 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:53:25,735 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:53:25,736 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:53:25,736 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:53:25,736 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:53:25,737 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:53:25,737 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:53:25,737 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:53:25,737 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:53:25,738 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:53:25,738 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:53:25,738 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:53:25,739 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:53:25,746 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 03:53:25,746 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 03:54:42,660 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: False
+2026-08-05 03:54:42,662 [INFO] pydantic_ai: [VALIDATION PASS] Empty table payload allowed.
+2026-08-05 03:54:42,662 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 03:54:42,662 [INFO] pydantic_ai: ⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...
+2026-08-05 03:54:42,664 [WARNING] pydantic_ai: ❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.
+2026-08-05 03:54:44,752 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:54:44,752 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:54:44,752 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:54:44,752 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:54:44,752 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:54:44,752 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:54:44,752 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:54:44,798 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:54:44,798 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:54:44,798 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:54:44,798 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:54:44,798 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:54:44,798 [INFO] pydantic_ai: ⚠️ [Guardrail_Layer_13_Faithfulness_Evaluation] Retrieved context is empty (Pandas/CSV query or no Qdrant results). Skipping check.
+2026-08-05 03:54:44,802 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:54:44,824 [WARNING] pydantic_ai: Skipping Langfuse score logging due to error: 'Langfuse' object has no attribute 'create_score'
+2026-08-05 03:57:24,939 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:57:24,939 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:57:24,939 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:57:24,939 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:57:24,939 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:57:24,939 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:57:24,955 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:57:24,960 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:57:24,960 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:57:24,960 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:57:24,960 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:57:24,960 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:57:24,960 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:57:24,960 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:57:24,960 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:57:24,960 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:57:24,960 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:57:24,963 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:57:24,963 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:57:24,963 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:57:24,966 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:57:24,969 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:57:24,970 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:57:24,970 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:57:24,970 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:57:24,971 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:57:24,971 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:57:24,972 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:57:24,972 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:57:24,972 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:57:24,972 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:57:24,972 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:57:24,972 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:57:24,981 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:57:24,982 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:57:24,982 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:57:24,982 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:57:24,982 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:57:24,983 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:57:24,983 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:57:24,983 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:57:24,984 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:57:24,984 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:57:24,985 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:57:24,985 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:57:24,985 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:57:24,994 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 03:57:24,996 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 03:58:44,215 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: False
+2026-08-05 03:58:44,219 [INFO] pydantic_ai: [VALIDATION PASS] Empty table payload allowed.
+2026-08-05 03:58:44,219 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 03:58:44,219 [INFO] pydantic_ai: ⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...
+2026-08-05 03:58:44,221 [WARNING] pydantic_ai: ❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.
+2026-08-05 03:58:46,514 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 03:58:46,514 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 03:58:46,514 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 03:58:46,514 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 03:58:46,514 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 03:58:46,514 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 03:58:46,514 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 03:58:46,553 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 03:58:46,553 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 03:58:46,562 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 03:58:46,563 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 03:58:46,563 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 03:58:46,563 [INFO] pydantic_ai: ⚠️ [Guardrail_Layer_13_Faithfulness_Evaluation] Retrieved context is empty (Pandas/CSV query or no Qdrant results). Skipping check.
+2026-08-05 03:58:46,563 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 03:58:46,586 [WARNING] pydantic_ai: Skipping Langfuse score logging due to error: 'Langfuse' object has no attribute 'create_score'
+2026-08-05 04:01:14,015 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 04:01:14,016 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 04:01:14,016 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 04:01:14,016 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 04:01:14,016 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 04:01:14,016 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 04:01:14,024 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 04:01:14,031 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 04:01:14,031 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 04:01:14,031 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 04:01:14,032 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 04:01:14,032 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 04:01:14,032 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 04:01:14,033 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 04:01:14,033 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 04:01:14,033 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 04:01:14,033 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 04:01:14,034 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 04:01:14,034 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 04:01:14,034 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 04:01:14,041 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 04:01:14,042 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 04:01:14,042 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 04:01:14,042 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 04:01:14,043 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 04:01:14,043 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 04:01:14,044 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 04:01:14,044 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 04:01:14,044 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 04:01:14,045 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 04:01:14,045 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 04:01:14,045 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 04:01:14,045 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 04:01:14,053 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 04:01:14,053 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 04:01:14,054 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 04:01:14,054 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 04:01:14,055 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 04:01:14,055 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 04:01:14,055 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 04:01:14,056 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 04:01:14,056 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 04:01:14,056 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 04:01:14,056 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 04:01:14,056 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 04:01:14,056 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 04:01:14,065 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 04:01:14,065 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 04:02:34,001 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: False
+2026-08-05 04:02:34,003 [INFO] pydantic_ai: [VALIDATION PASS] Empty table payload allowed.
+2026-08-05 04:02:34,003 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 04:02:34,003 [INFO] pydantic_ai: ⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...
+2026-08-05 04:02:34,003 [WARNING] pydantic_ai: ❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.
+2026-08-05 04:02:36,338 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 04:02:36,338 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 04:02:36,340 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 04:02:36,340 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 04:02:36,340 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 04:02:36,340 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 04:02:36,340 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 04:02:36,390 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 04:02:36,390 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 04:02:36,390 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 04:02:36,390 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 04:02:36,390 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 04:02:36,394 [INFO] pydantic_ai: ⚠️ [Guardrail_Layer_13_Faithfulness_Evaluation] Retrieved context is empty (Pandas/CSV query or no Qdrant results). Skipping check.
+2026-08-05 04:02:36,394 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 04:02:36,414 [WARNING] pydantic_ai: Skipping Langfuse score logging due to error: 'Langfuse' object has no attribute 'create_score'
+2026-08-05 15:17:34,689 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:17:34,690 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:17:34,690 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:17:34,690 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:17:34,690 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:17:34,690 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:17:34,690 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:17:34,699 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:17:34,699 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:17:34,700 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:17:34,700 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:17:34,700 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:17:34,700 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:17:34,701 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:17:34,701 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:17:34,701 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:17:34,701 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:17:34,701 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:17:34,702 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:17:34,702 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:17:34,710 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:17:34,711 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:17:34,712 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:17:34,712 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:17:34,712 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:17:34,712 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:17:34,713 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:17:34,713 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:17:34,713 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:17:34,713 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:17:34,714 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:17:34,714 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:17:34,715 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:17:34,722 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:17:34,722 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:17:34,723 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:17:34,723 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:17:34,723 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:17:34,723 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:17:34,724 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:17:34,724 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:17:34,725 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:17:34,725 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:17:34,725 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:17:34,725 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:17:34,726 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:17:34,735 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 15:17:34,735 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 15:19:16,923 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: False
+2026-08-05 15:19:16,923 [INFO] pydantic_ai: [VALIDATION PASS] Empty table payload allowed.
+2026-08-05 15:19:16,923 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 15:19:16,923 [INFO] pydantic_ai: ⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...
+2026-08-05 15:19:16,928 [WARNING] pydantic_ai: ❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.
+2026-08-05 15:19:19,996 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:19:19,996 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:19:19,996 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:19:19,996 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:19:19,996 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:19:20,434 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:19:20,484 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:19:20,487 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:19:20,489 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:19:20,489 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:19:20,490 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:19:20,490 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:19:20,490 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_13_Faithfulness_Evaluation] Failed: Faithfulness score below threshold: score=0.25, threshold=0.40.
+2026-08-05 15:19:20,490 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: EvaluationFaithfulnessViolation: Faithfulness score below threshold: score=0.25, threshold=0.40.
+2026-08-05 15:19:22,282 [INFO] httpx: HTTP Request: POST https://cloud.langfuse.com/api/public/ingestion "HTTP/1.1 207 Multi-Status"
+2026-08-05 15:21:15,253 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:21:15,263 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:21:15,263 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:21:15,263 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:21:15,263 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:21:15,263 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:21:15,273 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:21:15,279 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:21:15,279 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:21:15,279 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:21:15,279 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:21:15,280 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:21:15,280 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:21:15,280 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:21:15,280 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:21:15,281 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:21:15,281 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:21:15,281 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:21:15,281 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:21:15,281 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:21:15,289 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:21:15,289 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:21:15,290 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:21:15,290 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:21:15,290 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:21:15,290 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:21:15,291 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:21:15,292 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:21:15,292 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:21:15,292 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:21:15,292 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:21:15,293 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:21:15,293 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:21:15,301 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:21:15,303 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:21:15,303 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:21:15,303 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:21:15,303 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:21:15,303 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:21:15,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:21:15,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:21:15,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:21:15,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:21:15,307 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:21:15,307 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:21:15,307 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:21:15,314 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 15:21:15,315 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 15:22:30,882 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: False
+2026-08-05 15:22:30,882 [INFO] pydantic_ai: [VALIDATION PASS] Empty table payload allowed.
+2026-08-05 15:22:30,884 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 15:22:30,884 [INFO] pydantic_ai: ⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...
+2026-08-05 15:22:30,884 [WARNING] pydantic_ai: ❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.
+2026-08-05 15:22:33,168 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:22:33,171 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:22:33,171 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:22:33,171 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:22:33,171 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:22:33,171 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:22:33,174 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:22:33,219 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:22:33,219 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:22:33,219 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:22:33,219 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:22:33,219 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:22:33,219 [INFO] pydantic_ai: ⚠️ [Guardrail_Layer_13_Faithfulness_Evaluation] Retrieved context is empty (Pandas/CSV query or no Qdrant results). Skipping check.
+2026-08-05 15:22:33,219 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:22:33,241 [WARNING] pydantic_ai: Skipping Langfuse score logging due to error: 'Langfuse' object has no attribute 'create_score'
+2026-08-05 15:27:48,983 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:27:48,984 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:27:48,984 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:27:48,984 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:27:48,984 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:27:48,984 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:27:48,993 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:27:48,999 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:27:48,999 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:27:48,999 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:27:49,000 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:27:49,001 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:27:49,001 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:27:49,001 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:27:49,001 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:27:49,002 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:27:49,002 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:27:49,003 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:27:49,003 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:27:49,003 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:27:49,010 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:27:49,012 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:27:49,012 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:27:49,012 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:27:49,013 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:27:49,013 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:27:49,013 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:27:49,013 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:27:49,015 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:27:49,015 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:27:49,015 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:27:49,015 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:27:49,015 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:27:49,027 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:27:49,028 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:27:49,028 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:27:49,028 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:27:49,028 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:27:49,029 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:27:49,030 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:27:49,030 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:27:49,030 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:27:49,031 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:27:49,031 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:27:49,031 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:27:49,031 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:27:49,039 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 15:27:49,039 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 15:29:23,352 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: False
+2026-08-05 15:29:23,352 [INFO] pydantic_ai: [VALIDATION PASS] Empty table payload allowed.
+2026-08-05 15:29:23,352 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 15:29:23,352 [INFO] pydantic_ai: ⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...
+2026-08-05 15:29:23,352 [WARNING] pydantic_ai: ❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.
+2026-08-05 15:29:25,611 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:29:25,611 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:29:25,611 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:29:25,611 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:29:25,611 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:29:25,611 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:29:25,611 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:29:25,658 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:29:25,658 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:29:25,662 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:29:25,663 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:29:25,663 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:29:25,663 [INFO] pydantic_ai: ⚠️ [Guardrail_Layer_13_Faithfulness_Evaluation] Retrieved context is empty (Pandas/CSV query or no Qdrant results). Skipping check.
+2026-08-05 15:29:25,663 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:29:25,685 [WARNING] pydantic_ai: Skipping Langfuse score logging due to error: 'Langfuse' object has no attribute 'create_score'
+2026-08-05 15:33:34,743 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:33:34,748 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:33:34,748 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:33:34,748 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:33:34,749 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:33:34,749 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:33:34,756 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:33:34,763 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:33:34,763 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:33:34,764 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:33:34,764 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:33:34,764 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:33:34,764 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:33:34,764 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:33:34,765 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:33:34,765 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:33:34,765 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:33:34,765 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:33:34,765 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:33:34,766 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:33:34,773 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:33:34,775 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:33:34,775 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:33:34,775 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:33:34,775 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:33:34,777 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:33:34,777 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:33:34,777 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:33:34,777 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:33:34,779 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:33:34,779 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:33:34,779 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:33:34,779 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:33:34,789 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:33:34,791 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:33:34,791 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:33:34,791 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:33:34,791 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:33:34,791 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:33:34,793 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:33:34,793 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:33:34,794 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:33:34,794 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:33:34,795 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:33:34,795 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:33:34,795 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:33:34,803 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 15:33:34,803 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 15:35:21,287 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:35:21,287 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:35:21,287 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:35:21,288 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:35:21,288 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:35:21,288 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:35:21,297 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:35:21,305 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:35:21,306 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:35:21,306 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:35:21,306 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:35:21,307 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:35:21,307 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:35:21,307 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:35:21,308 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:35:21,308 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:35:21,308 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:35:21,308 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:35:21,309 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:35:21,309 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:35:21,319 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:35:21,320 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:35:21,320 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:35:21,320 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:35:21,321 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:35:21,321 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:35:21,322 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:35:21,322 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:35:21,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:35:21,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:35:21,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:35:21,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:35:21,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:35:21,334 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:35:21,334 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:35:21,335 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:35:21,335 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:35:21,336 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:35:21,336 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:35:21,337 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:35:21,337 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:35:21,338 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:35:21,338 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:35:21,338 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:35:21,338 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:35:21,339 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:35:21,348 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 15:35:21,349 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 15:36:43,688 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: False
+2026-08-05 15:36:43,688 [INFO] pydantic_ai: [VALIDATION PASS] Empty table payload allowed.
+2026-08-05 15:36:43,688 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 15:36:43,688 [INFO] pydantic_ai: ⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...
+2026-08-05 15:36:43,693 [WARNING] pydantic_ai: ❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.
+2026-08-05 15:36:45,996 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:36:45,996 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:36:45,996 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:36:45,998 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:36:45,998 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:36:45,998 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:36:46,000 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:36:46,037 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:36:46,042 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:36:46,042 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:36:46,042 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:36:46,042 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:36:46,042 [INFO] pydantic_ai: ⚠️ [Guardrail_Layer_13_Faithfulness_Evaluation] Retrieved context is empty (Pandas/CSV query or no Qdrant results). Skipping check.
+2026-08-05 15:36:46,042 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:36:46,063 [WARNING] pydantic_ai: Skipping Langfuse score logging due to error: 'Langfuse' object has no attribute 'create_score'
+2026-08-05 15:53:11,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:53:11,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:53:11,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:53:11,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:53:11,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:53:11,323 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:53:11,333 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:53:11,339 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:53:11,339 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:53:11,339 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:53:11,339 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:53:11,339 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:53:11,340 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:53:11,340 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:53:11,340 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:53:11,341 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:53:11,341 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:53:11,341 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:53:11,342 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:53:11,342 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:53:11,350 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:53:11,350 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:53:11,351 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:53:11,351 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:53:11,351 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:53:11,352 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:53:11,352 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:53:11,352 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:53:11,354 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:53:11,354 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:53:11,354 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:53:11,354 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:53:11,355 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:53:11,362 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:53:11,362 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:53:11,362 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:53:11,362 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:53:11,363 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:53:11,364 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:53:11,364 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:53:11,364 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:53:11,364 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:53:11,365 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:53:11,365 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:53:11,365 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:53:11,365 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:53:11,374 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 15:53:11,374 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 15:54:49,900 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: True
+2026-08-05 15:54:49,900 [INFO] pydantic_ai: [VALIDATION START] Inspecting and healing 8 visual/tabular extraction rows...
+2026-08-05 15:54:49,900 [INFO] pydantic_ai: [HEALED ROW 0] Mapped keys -> Series: N/A, Category: N/A, TargetValue: 0
+2026-08-05 15:54:49,900 [INFO] pydantic_ai: [HEALED ROW 1] Mapped keys -> Series: N/A, Category: N/A, TargetValue: 0
+2026-08-05 15:54:49,900 [INFO] pydantic_ai: [HEALED ROW 2] Mapped keys -> Series: N/A, Category: N/A, TargetValue: 0
+2026-08-05 15:54:49,900 [INFO] pydantic_ai: [HEALED ROW 3] Mapped keys -> Series: N/A, Category: N/A, TargetValue: 0
+2026-08-05 15:54:49,900 [INFO] pydantic_ai: [HEALED ROW 4] Mapped keys -> Series: N/A, Category: N/A, TargetValue: 0
+2026-08-05 15:54:49,900 [INFO] pydantic_ai: [HEALED ROW 5] Mapped keys -> Series: N/A, Category: N/A, TargetValue: 0
+2026-08-05 15:54:49,900 [INFO] pydantic_ai: [HEALED ROW 6] Mapped keys -> Series: N/A, Category: N/A, TargetValue: 0
+2026-08-05 15:54:49,900 [INFO] pydantic_ai: [HEALED ROW 7] Mapped keys -> Series: N/A, Category: N/A, TargetValue: 0
+2026-08-05 15:54:49,900 [INFO] pydantic_ai: [VALIDATION SUCCESS] All visual extraction rows validated and healed successfully.
+2026-08-05 15:54:49,900 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 15:54:49,900 [INFO] pydantic_ai: ⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...
+2026-08-05 15:54:49,900 [INFO] pydantic_ai: ✅ [RESULT VALIDATOR] Successfully parsed 8 rows. Forcefully populating extracted_table.
+2026-08-05 15:54:50,364 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 15:54:50,367 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 15:54:50,371 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 15:54:50,373 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 15:54:50,374 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 15:54:50,804 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 15:54:50,806 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 15:54:50,853 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 15:54:50,854 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 15:54:50,854 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 15:54:50,854 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 15:54:50,854 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 15:54:50,854 [INFO] pydantic_ai: ⚠️ [Guardrail_Layer_13_Faithfulness_Evaluation] Retrieved context is empty (Pandas/CSV query or no Qdrant results). Skipping check.
+2026-08-05 15:54:50,854 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 15:54:50,879 [WARNING] pydantic_ai: Skipping Langfuse score logging due to error: 'Langfuse' object has no attribute 'create_score'
+2026-08-05 16:03:12,136 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: False, vision_succeeded: False
+2026-08-05 16:03:12,136 [INFO] pydantic_ai: [VALIDATION PASS] Empty table payload allowed.
+2026-08-05 16:03:12,140 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 16:03:15,348 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 16:03:15,349 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 16:03:15,349 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 16:03:15,349 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 16:03:15,349 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 16:03:15,885 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 16:03:15,944 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 16:03:15,948 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 16:03:15,956 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 16:03:15,958 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 16:03:15,958 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 16:03:15,958 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 16:03:15,961 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 16:03:15,994 [WARNING] pydantic_ai: Skipping Langfuse score logging due to error: 'Langfuse' object has no attribute 'create_score'
+2026-08-05 16:06:09,518 [INFO] httpx: HTTP Request: POST https://cloud.langfuse.com/api/public/ingestion "HTTP/1.1 207 Multi-Status"
+2026-08-05 16:06:10,643 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-05 16:06:13,413 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-05 16:06:26,312 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-05 16:06:36,454 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: True
+2026-08-05 16:06:36,454 [WARNING] pydantic_ai: [VALIDATION WARNING] Empty or dummy table payload detected. Skipping validation failure to allow post-agent interception.
+2026-08-05 16:06:36,454 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 16:06:36,454 [INFO] pydantic_ai: ⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...
+2026-08-05 16:06:36,454 [WARNING] pydantic_ai: ❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.
+2026-08-05 16:06:37,606 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 16:06:37,606 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 16:06:37,606 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 16:06:37,606 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 16:06:37,606 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 16:06:38,109 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 16:06:38,114 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 16:06:38,114 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 16:06:38,118 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 16:06:38,118 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 16:06:38,119 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 16:06:38,120 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 16:06:38,122 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_13_Faithfulness_Evaluation] Failed: Faithfulness score below threshold: score=0.26, threshold=0.40.
+2026-08-05 16:06:38,122 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: EvaluationFaithfulnessViolation: Faithfulness score below threshold: score=0.26, threshold=0.40.
+2026-08-05 16:06:40,781 [INFO] httpx: HTTP Request: POST https://cloud.langfuse.com/api/public/ingestion "HTTP/1.1 207 Multi-Status"
+2026-08-05 16:11:47,585 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: True
+2026-08-05 16:11:47,585 [INFO] pydantic_ai: [VALIDATION PASS] Empty table payload allowed.
+2026-08-05 16:11:47,585 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 16:11:47,585 [INFO] pydantic_ai: ⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...
+2026-08-05 16:11:47,585 [WARNING] pydantic_ai: ❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.
+2026-08-05 16:11:48,161 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 16:11:48,161 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 16:11:48,161 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 16:11:48,163 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 16:11:48,163 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 16:11:48,660 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 16:11:48,660 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 16:11:48,710 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 16:11:48,710 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 16:11:48,715 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 16:11:48,715 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 16:11:48,715 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 16:11:48,715 [INFO] pydantic_ai: ⚠️ [Guardrail_Layer_13_Faithfulness_Evaluation] Retrieved context is empty (Pandas/CSV query or no Qdrant results). Skipping check.
+2026-08-05 16:11:48,715 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 16:11:48,740 [WARNING] pydantic_ai: Skipping Langfuse score logging due to error: 'Langfuse' object has no attribute 'create_score'
+2026-08-05 16:34:44,990 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 16:34:44,990 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 16:34:44,990 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 16:34:44,990 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 16:34:44,990 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 16:34:44,990 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 16:34:44,993 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 16:34:45,000 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 16:34:45,000 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 16:34:45,000 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 16:34:45,000 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 16:34:45,000 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 16:34:45,000 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 16:34:45,000 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 16:34:45,002 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 16:34:45,002 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 16:34:45,002 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 16:34:45,002 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 16:34:45,002 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 16:34:45,002 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 16:34:45,008 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 16:34:45,010 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 16:34:45,010 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 16:34:45,010 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 16:34:45,010 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 16:34:45,010 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 16:34:45,012 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 16:34:45,012 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 16:34:45,012 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 16:34:45,012 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 16:34:45,012 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 16:34:45,012 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 16:34:45,012 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 16:34:45,019 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 16:34:45,019 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 16:34:45,021 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 16:34:45,021 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 16:34:45,021 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 16:34:45,021 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 16:34:45,021 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 16:34:45,021 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 16:34:45,021 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 16:34:45,023 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 16:34:45,023 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 16:34:45,023 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 16:34:45,023 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 16:34:45,036 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 16:34:45,036 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 16:40:01,422 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 16:40:01,422 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 16:40:01,422 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 16:40:01,431 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 16:40:01,431 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 16:40:01,431 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 16:40:01,432 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 16:40:01,441 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 16:40:01,441 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 16:40:01,441 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 16:40:01,442 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 16:40:01,442 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 16:40:01,442 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 16:40:01,442 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 16:40:01,442 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 16:40:01,442 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 16:40:01,444 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 16:40:01,444 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 16:40:01,444 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 16:40:01,444 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 16:40:01,451 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 16:40:01,453 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 16:40:01,453 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 16:40:01,453 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 16:40:01,453 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 16:40:01,453 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 16:40:01,455 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 16:40:01,455 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 16:40:01,455 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 16:40:01,455 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 16:40:01,455 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 16:40:01,455 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 16:40:01,455 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 16:40:01,471 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 16:40:01,471 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 16:40:01,471 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 16:40:01,471 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 16:40:01,471 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 16:40:01,475 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 16:40:01,475 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 16:40:01,475 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 16:40:01,475 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 16:40:01,477 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 16:40:01,477 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 16:40:01,477 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 16:40:01,477 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 16:40:01,485 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_01_Prompt_Injection_Filter] Failed: Insecure or malicious input pattern detected.
+2026-08-05 16:40:01,485 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_14_Deterministic_Fallback_Router] - ACTIVATED due to: PromptInjectionViolation: Insecure or malicious input pattern detected.
+2026-08-05 16:42:18,944 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: True
+2026-08-05 16:42:18,945 [INFO] pydantic_ai: [VALIDATION PASS] Empty table payload allowed.
+2026-08-05 16:42:18,946 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 16:42:18,946 [INFO] pydantic_ai: ⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...
+2026-08-05 16:42:18,946 [WARNING] pydantic_ai: ❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.
+2026-08-05 16:42:18,951 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 16:42:18,951 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 16:42:18,951 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 16:42:18,951 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 16:42:18,951 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 16:42:19,655 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 16:42:19,655 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 16:42:19,732 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_08_Entity_Cross_Checker] Passed successfully.
+2026-08-05 16:42:19,732 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 16:42:19,732 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 16:42:19,735 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 16:42:19,736 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 16:42:19,736 [INFO] pydantic_ai: ⚠️ [Guardrail_Layer_13_Faithfulness_Evaluation] Retrieved context is empty (Pandas/CSV query or no Qdrant results). Skipping check.
+2026-08-05 16:42:19,736 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 16:42:19,763 [WARNING] pydantic_ai: Skipping Langfuse score logging due to error: 'Langfuse' object has no attribute 'create_score'
+2026-08-05 16:42:50,277 [INFO] httpx: HTTP Request: POST https://cloud.langfuse.com/api/public/ingestion "HTTP/1.1 207 Multi-Status"
+2026-08-05 16:42:51,041 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-05 16:42:53,630 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-05 16:43:51,310 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-05 16:46:01,521 [INFO] httpx: HTTP Request: POST https://openrouter.ai/api/v1/chat/completions "HTTP/1.1 200 OK"
+2026-08-05 16:49:12,407 [INFO] pydantic_ai: [VALIDATION DEBUG] vision_processed: True, vision_succeeded: True
+2026-08-05 16:49:12,417 [INFO] pydantic_ai: [VALIDATION SUCCESS] Automatically parsed 756 rows from global vision raw content.
+2026-08-05 16:49:12,423 [INFO] pydantic_ai: [RESULT VALIDATOR] Checking final structured table output and preserving chart metadata...
+2026-08-05 16:49:13,966 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_01_Prompt_Injection_Filter] Passed successfully.
+2026-08-05 16:49:13,966 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_02_PII_Redaction] Passed successfully.
+2026-08-05 16:49:13,966 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_03_Rate_Limit_Token_Budget] Passed successfully.
+2026-08-05 16:49:13,966 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_04_Retrieval_Coverage] Passed successfully.
+2026-08-05 16:49:13,969 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_05_Semantic_Content] Passed successfully.
+2026-08-05 16:49:14,712 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_06_Path_Verification] Passed successfully.
+2026-08-05 16:49:14,712 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_07_Bounding_Box_Validator] Passed successfully.
+2026-08-05 16:49:14,720 [ERROR] pydantic_ai: ❌ [Guardrail_Layer_08_Entity_Cross_Checker] Failed: Numeric value precision mismatch: generated value '14' not found in source context.
+2026-08-05 16:49:14,720 [WARNING] pydantic_ai: ⚠️ [Guardrail_Layer_08_Entity_Cross_Checker] Non-critical failure (logged as warning): Numeric value precision mismatch: generated value '14' not found in source context.
+2026-08-05 16:49:14,721 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_09_Exact_Quote_Anchoring] Passed successfully.
+2026-08-05 16:49:14,721 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_10_Markdown_Sanitizer] Passed successfully.
+2026-08-05 16:49:14,722 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_11_System_Prompt_Leakage_Scanner] Passed successfully.
+2026-08-05 16:49:14,724 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_12_DLP_Blocklist] Passed successfully.
+2026-08-05 16:49:14,724 [INFO] pydantic_ai: 🛡️ [Guardrail_Layer_13_Faithfulness_Evaluation] Passed successfully.
+2026-08-05 16:49:14,757 [WARNING] pydantic_ai: Skipping Langfuse score logging due to error: 'Langfuse' object has no attribute 'create_score'

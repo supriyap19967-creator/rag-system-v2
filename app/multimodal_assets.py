@@ -102,6 +102,10 @@ def normalize_entity_id(value: object) -> str:
     text = str(value or "").strip()
     if not text:
         return ""
+    # Ensure backslashes are normalized to forward slashes and path slashes are preserved
+    text = text.replace("\\", "/")
+    if "/" in text:
+        return text
     text = re.sub(r"(\d+)[\-_](?=\d)", r"\1.", text)
     match = ENTITY_PATTERN.search(text.replace("_", " "))
     if not match:
@@ -645,18 +649,58 @@ def _resolve_existing_image_path(input_path: str) -> str | None:
     # 2. Extract raw filename
     filename = Path(input_path).name
     norm_id = normalize_entity_id(filename)
-    if "table_2_1" in norm_id or "table_21" in norm_id:
-        norm_id = "page111_table1"
     
-    # 3. Look inside allowed directories with fuzzy matching
+    # Custom sequential table mappings
+    sequential_mappings = {
+        "img_04_02": "page_208_Figure_4.2",
+        "figure_4_2": "page_208_Figure_4.2",
+        "figure_42": "page_208_Figure_4.2",
+        "table_2_1": "page111_table1",
+        "table_21": "page111_table1",
+        "table_3_1": "page154_table1",
+        "table_31": "page154_table1",
+        "table_3_2": "page154_table2",
+        "table_32": "page154_table2",
+    }
+    for k, v in sequential_mappings.items():
+        if k in norm_id:
+            norm_id = v
+            break
+
+    # Helper to check matching by digits and category
+    def match_by_digits_and_category(req_filename: str, candidate_filename: str) -> bool:
+        req_norm = req_filename.lower()
+        cand_norm = candidate_filename.lower()
+        is_req_table = "table" in req_norm or "tab" in req_norm
+        is_cand_table = "table" in cand_norm or "tab" in cand_norm
+        if is_req_table != is_cand_table:
+            return False
+        import re
+        req_digits = [str(int(x)) for x in re.findall(r"\d+", req_norm)]
+        cand_digits = [str(int(x)) for x in re.findall(r"\d+", cand_norm)]
+        if not req_digits or not cand_digits:
+            return False
+        if len(cand_digits) >= len(req_digits):
+            if cand_digits[-len(req_digits):] == req_digits:
+                return True
+        return False
+    
+    # 3. Look inside allowed directories with fuzzy and digit sequence matching
     for dir_path in APPROVED_ASSET_DIRS:
         p_dir = Path(dir_path)
         if p_dir.exists():
+            # First pass: try exact normalized substring matching
             for f in os.listdir(p_dir):
                 f_norm = normalize_entity_id(f)
                 if norm_id in f_norm or f_norm in norm_id:
                     full_p = p_dir / f
                     if full_p.exists():
-                        return str(full_p)
+                        return str(full_p.resolve().as_posix())
+            # Second pass: try category & digit sequence matching
+            for f in os.listdir(p_dir):
+                if match_by_digits_and_category(filename, f):
+                    full_p = p_dir / f
+                    if full_p.exists():
+                        return str(full_p.resolve().as_posix())
             
     return None

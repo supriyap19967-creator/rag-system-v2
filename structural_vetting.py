@@ -88,25 +88,33 @@ class StructuralOutputVetter:
                 raise SchemaContractViolation(f"Key '{key}' must be {expected_type.__name__}.")
 
     def _enforce_non_null_asset_paths(self, payload: dict[str, Any]) -> None:
-        for key, value in payload.items():
+        for key in list(payload.keys()):
             if key not in self.ASSET_PATH_KEYS:
+                continue
+            value = payload[key]
+            if value is None or (isinstance(value, str) and not value.strip()) or (isinstance(value, list) and not value):
+                payload.pop(key, None)
                 continue
             self._validate_asset_value(key, value)
 
         metadata = payload.get("metadata")
         if isinstance(metadata, dict):
-            for key, value in metadata.items():
+            for key in list(metadata.keys()):
                 if key in self.ASSET_PATH_KEYS:
+                    value = metadata[key]
+                    if value is None or (isinstance(value, str) and not value.strip()) or (isinstance(value, list) and not value):
+                        metadata.pop(key, None)
+                        continue
                     self._validate_asset_value(f"metadata.{key}", value)
 
     def _validate_asset_value(self, key: str, value: Any) -> None:
         if value is None:
-            raise EmptyAssetPayloadError(f"Asset field '{key}' is present but null.")
+            return
         if isinstance(value, str) and not value.strip():
-            raise EmptyAssetPayloadError(f"Asset field '{key}' is present but empty.")
+            return
         if isinstance(value, list):
             if not value:
-                raise EmptyAssetPayloadError(f"Asset field '{key}' is present but contains no paths.")
+                return
             for index, item in enumerate(value):
                 if item is None or (isinstance(item, str) and not item.strip()):
                     raise EmptyAssetPayloadError(f"Asset field '{key}[{index}]' is empty.")
