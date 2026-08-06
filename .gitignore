@@ -17,3 +17,17 @@ data/
 qdrant_db/ 
 .env 
 .env* 
+.venv/  
+venv/  
+.hf_home/  
+hf_models_v2/  
+docling_models/  
+hf_cache_v2/  
+.hf_cache/ 
+.venv/  
+venv/  
+.hf_home/  
+hf_models_v2/  
+docling_models/  
+hf_cache_v2/  
+.hf_cache/ 
