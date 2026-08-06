@@ -1,3 +1,14 @@
+---
+title: Rag System V2
+emoji: 🚀
+colorFrom: blue
+colorTo: indigo
+sdk: streamlit
+sdk_version: 1.31.0
+app_file: app/main.py
+pinned: false
+---
+
 # Financial Regulatory RAG System
 
 A production-style Retrieval-Augmented Generation (RAG) system for financial regulatory Q&A that reduces hallucination using hybrid retrieval, cross-encoder reranking, and source-grounded responses. Achieved ~0.875 Recall@5 using hybrid retrieval + cross-encoder reranking on RBI regulatory data
@@ -88,14 +99,14 @@ The system is containerized using **Docker** and deployed on **Google Cloud Run*
 
 | Component | Technology |
 |--------|--------|
-Backend API | FastAPI |
-Frontend | Streamlit |
-Vector Database | FAISS |
-Embeddings | sentence-transformers/all-MiniLM-L6-v2 |
-Reranker | cross-encoder/ms-marco-MiniLM-L-6-v2 |
-Retrieval | Hybrid (BM25 + FAISS) |
-LLM | OpenRouter (Llama 3 / Open-source models)
-Deployment | Docker + Google Cloud Run |
+| Backend API | FastAPI |
+| Frontend | Streamlit |
+| Vector Database | FAISS |
+| Embeddings | sentence-transformers/all-MiniLM-L6-v2 |
+| Reranker | cross-encoder/ms-marco-MiniLM-L-6-v2 |
+| Retrieval | Hybrid (BM25 + FAISS) |
+| LLM | OpenRouter (Llama 3 / Open-source models)
+| Deployment | Docker + Google Cloud Run |
 
 ---
 
