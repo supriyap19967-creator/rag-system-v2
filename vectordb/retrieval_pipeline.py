@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import os
 import sys
-from pathlib import Path
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+# Force root directory into sys.path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
 import logging
 from dataclasses import dataclass
