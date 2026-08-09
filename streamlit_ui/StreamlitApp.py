@@ -896,9 +896,14 @@ def process_vision_element(ctx: RunContext[SystemPipelinesDeps], visual_asset_pa
                     
             if matching_record:
                 resolved_path = Path(matching_record.absolute_path)
-                if resolved_path.suffix.lower() == ".csv":
+                if resolved_path.suffix.lower() in [".csv", ".json"]:
                     resolved = False
-                    page_match = re.search(r"page_(\d+)", resolved_path.name, re.IGNORECASE)
+                    page_match = re.search(r"page_?(\d+)", resolved_path.name, re.IGNORECASE)
+                    if not page_match:
+                        page_match = re.search(r"pdf-?(\d+)", resolved_path.name, re.IGNORECASE)
+                    if not page_match:
+                        page_match = re.search(r"-(\d+)(?:\.\d+)?\.[^.]+$", resolved_path.name)
+                        
                     if page_match:
                         page_no = page_match.group(1)
                         for folder in ["assets/extracted_images", "extracted_images"]:
@@ -908,7 +913,7 @@ def process_vision_element(ctx: RunContext[SystemPipelinesDeps], visual_asset_pa
                                     if (file.name.lower().startswith(f"page{page_no}_") or file.name.lower().startswith(f"page_{page_no}_")) and file.suffix.lower() == ".png" and not file.name.lower().endswith(".raw.png"):
                                         img_path = file
                                         resolved = True
-                                        logger.info(f"CSV resolved to image fallback: {img_path}")
+                                        logger.info(f"{resolved_path.suffix.upper()} resolved to image fallback: {img_path}")
                                         break
                                 if resolved:
                                     break
