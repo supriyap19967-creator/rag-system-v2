@@ -646,6 +646,13 @@ def process_vision_element(ctx: RunContext[SystemPipelinesDeps], visual_asset_pa
         except Exception as e:
             logger.warning(f"Registry lookup failed: {e}")
 
+    # Prioritize raw (untrimmed) crop if it exists on disk
+    if img_path.exists():
+        raw_check = img_path.with_name(f"{img_path.stem}.raw{img_path.suffix}")
+        if raw_check.exists():
+            img_path = raw_check
+            logger.info(f"Prioritizing untrimmed raw crop: {img_path}")
+
     if not img_path.exists():
         return f"Error: Target visual asset path '{visual_asset_path}' could not be resolved or does not exist on disk."
 
