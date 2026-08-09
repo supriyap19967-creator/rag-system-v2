@@ -2612,8 +2612,20 @@ def _resolve_existing_image_path(value: object) -> str:
         return ""
     raw_path = raw_path.strip(" '\"`").replace("\\", "/")
     
+    # Convert Windows prefix to Streamlit Cloud / Hugging Face mount points if running on Linux
+    if not os.path.exists(raw_path) and "recovered-rag-project" in raw_path:
+        if os.path.exists("/mount/src/rag-system-v2"):
+            raw_path = raw_path.replace("C:/Users/supri/recovered-rag-project", "/mount/src/rag-system-v2")
+        elif os.path.exists("/app"):
+            raw_path = raw_path.replace("C:/Users/supri/recovered-rag-project", "/app")
+            
     # Check direct path first
-    if os.path.exists(raw_path) and os.path.isfile(raw_path):
+    is_lfs_placeholder = False
+    if "assets/extracted_images" in raw_path.lower():
+        if os.path.exists(raw_path) and os.path.getsize(raw_path) <= 1000:
+            is_lfs_placeholder = True
+            
+    if os.path.exists(raw_path) and os.path.isfile(raw_path) and not is_lfs_placeholder:
         return os.path.abspath(raw_path).replace("\\", "/")
         
     filename = os.path.basename(raw_path)
@@ -2659,17 +2671,31 @@ def _resolve_existing_image_path(value: object) -> str:
             # Check Registry with exact normalized substring match first
             registry = build_asset_registry()
             for record in registry:
+                rec_path = record.absolute_path.replace("\\", "/")
+                if not os.path.exists(rec_path) and "recovered-rag-project" in rec_path:
+                    if os.path.exists("/mount/src/rag-system-v2"):
+                        rec_path = rec_path.replace("C:/Users/supri/recovered-rag-project", "/mount/src/rag-system-v2")
+                    elif os.path.exists("/app"):
+                        rec_path = rec_path.replace("C:/Users/supri/recovered-rag-project", "/app")
+                
                 if norm_id in record.entity_id or record.entity_id in norm_id:
-                    path_suffix = Path(record.absolute_path).suffix.lower()
-                    if path_suffix in [".png", ".jpg", ".jpeg", ".webp", ".gif"] and os.path.exists(record.absolute_path):
-                        return record.absolute_path
+                    path_suffix = Path(rec_path).suffix.lower()
+                    if path_suffix in [".png", ".jpg", ".jpeg", ".webp", ".gif"] and os.path.exists(rec_path) and os.path.getsize(rec_path) > 1000:
+                        return rec_path
                         
             # Check Registry with digit sequence match
             for record in registry:
-                if match_by_digits_and_category(filename, record.source_file):
-                    path_suffix = Path(record.absolute_path).suffix.lower()
-                    if path_suffix in [".png", ".jpg", ".jpeg", ".webp", ".gif"] and os.path.exists(record.absolute_path):
-                        return record.absolute_path
+                rec_path = record.absolute_path.replace("\\", "/")
+                if not os.path.exists(rec_path) and "recovered-rag-project" in rec_path:
+                    if os.path.exists("/mount/src/rag-system-v2"):
+                        rec_path = rec_path.replace("C:/Users/supri/recovered-rag-project", "/mount/src/rag-system-v2")
+                    elif os.path.exists("/app"):
+                        rec_path = rec_path.replace("C:/Users/supri/recovered-rag-project", "/app")
+                        
+                if match_by_digits_and_category(filename, record.entity_id) or match_by_digits_and_category(filename, os.path.basename(rec_path)):
+                    path_suffix = Path(rec_path).suffix.lower()
+                    if path_suffix in [".png", ".jpg", ".jpeg", ".webp", ".gif"] and os.path.exists(rec_path) and os.path.getsize(rec_path) > 1000:
+                        return rec_path
         except Exception:
             pass
 
@@ -6585,6 +6611,10 @@ def resolve_single_figure_path(query_text: str, agent_result: any, source_chunks
     
     if hasattr(agent_result, "data") and agent_result.data:
         direct_path = getattr(agent_result.data, "visual_asset_path", None) or getattr(agent_result.data, "image_path", None)
+        if direct_path:
+            candidate_paths.append(str(direct_path))
+    elif hasattr(agent_result, "output") and agent_result.output:
+        direct_path = getattr(agent_result.output, "visual_asset_path", None) or getattr(agent_result.output, "image_path", None)
         if direct_path:
             candidate_paths.append(str(direct_path))
             
