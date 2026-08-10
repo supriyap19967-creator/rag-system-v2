@@ -5,7 +5,7 @@ import sys
 import io
 import uuid
 import logging
-from typing import Any, List, Dict, Literal, Optional
+from typing import Any, List, Dict, Literal, Optional, Annotated
 from pathlib import Path
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_ai import Agent, ModelSettings, RunContext
@@ -554,7 +554,21 @@ def query_qdrant_vector_search(ctx: RunContext[SystemPipelinesDeps], semantic_qu
 
 
 @multimodal_agent.tool
-def process_vision_element(ctx: RunContext[SystemPipelinesDeps], visual_asset_path: str, extraction_instructions: str) -> str:
+def process_vision_element(
+    ctx: RunContext[SystemPipelinesDeps], 
+    visual_asset_path: str, 
+    extraction_instructions: Annotated[
+        str,
+        Field(
+            description=(
+                "Detailed extraction instructions for the vision model. "
+                "CRITICAL: If the image contains a chart, graph, or visual table, you MUST explicitly instruct "
+                "the vision model to extract every single data point, category, series, and value, and format them "
+                "completely as a clean Markdown table with columns: Category, Series, Value so it can be parsed structurally."
+            )
+        )
+    ]
+) -> str:
     """
     Call this tool when the query refers to an image, graph, chart, diagram, or figure name.
     Instructs the Vision model to extract visual data points into raw text or structural data.
