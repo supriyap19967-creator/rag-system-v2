@@ -1262,7 +1262,7 @@ def _resolve_existing_image_path(value: object) -> str:
                     elif os.path.exists("/app"):
                         rec_path = rec_path.replace("C:/Users/supri/recovered-rag-project", "/app")
                         
-                if norm_id in record.entity_id or record.entity_id in norm_id:
+                if (norm_id in record.entity_id or record.entity_id in norm_id) and match_by_digits_and_category(filename, record.entity_id):
                     path_suffix = Path(rec_path).suffix.lower()
                     if path_suffix in [".png", ".jpg", ".jpeg", ".webp", ".gif"] and os.path.exists(rec_path) and os.path.getsize(rec_path) > 1000:
                         return rec_path
