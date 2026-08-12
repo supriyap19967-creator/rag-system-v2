@@ -9,10 +9,44 @@ app_file: app/main.py
 pinned: false
 ---
 
-# Financial Regulatory RAG System
+# Multimodal Agentic RAG
 
-A production-style Retrieval-Augmented Generation (RAG) system for financial regulatory Q&A that reduces hallucination using hybrid retrieval, cross-encoder reranking, and source-grounded responses. Achieved ~0.875 Recall@5 using hybrid retrieval + cross-encoder reranking on RBI regulatory data
+An agentic, multi-modal RAG architecture built to extract, reason over, and retrieve unstructured document text, tabular CSV data, and visual charts.
 
+### Key Capabilities
+
+- Agentic Routing: Powered by Pydantic-AI to dynamically orchestrate queries across Qdrant vector search, pandas dataframe execution, and OpenRouter Gemini Vision.
+- Visual Grounding: Features a dynamic path-resolution registry to map document figures directly to original raw crop images and bounding boxes.
+- 13-Layer Guardrail Safety: Built-in validation gauntlet covering path safety, quote anchoring, rate limits, and faithfulness with automated Self-RAG loops.
+- Interactive UI: Streamlit interface rendering grounded citations, Markdown tables, and exact visual assets inline.
+
+### Tech Stack & System Architecture
+
+Frontend & Presentation
+- Streamlit : Interactive chat UI, dynamic source citations, extracted Markdown tables, and visual chart rendering
+
+Core Agent Framework
+- Pydantic-AI: Agent reasoning, tool calling, structured BaseModel output validation, and self-correction loops
+
+Models & Orchestration
+- Groq / NVIDIA NIM API: High-speed LLM reasoning engine for text-based synthesis
+- Google Gemini 2.5 Flash (via OpenRouter): Vision-Language Model (VLM) for high-fidelity OCR, table parsing, and visual image analysis
+
+Storage & Retrieval
+- Qdrant: Vector database for document indexing and hybrid semantic/keyword search
+- Pandas: Dynamic query execution engine for structured CSV data, math, and filtering
+
+Embeddings & Reranking
+- Sentence-Transformers: Dense vector embedding generation
+- Cross-Encoder Rerankers: Top-K chunk relevance optimization before LLM generation
+
+Security, Safety & Guardrails
+- Custom RAGMasterSafetyGauntlet: 13-layer safety engine for PII redaction, prompt injection defense, rate limiting, path safety, quote anchoring, and faithfulness evaluation
+
+Observability & Tracing
+- Langfuse: Real-time execution tracing, latency tracking, token usage, and safety scoring
+- OpenTelemetry: Standardized agent execution logging and telemetry
+- 
 ## Why it matters
 - Financial compliance requires accurate, verifiable answers — hallucinated responses can lead to regulatory and financial risk  
 - This system ensures responses are grounded in official RBI regulatory documents  
