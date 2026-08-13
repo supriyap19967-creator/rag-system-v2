@@ -46,68 +46,97 @@ Security, Safety & Guardrails
 Observability & Tracing
 - Langfuse: Real-time execution tracing, latency tracking, token usage, and safety scoring
 - OpenTelemetry: Standardized agent execution logging and telemetry
-- 
-## Why it matters
-- Financial compliance requires accurate, verifiable answers — hallucinated responses can lead to regulatory and financial risk  
-- This system ensures responses are grounded in official RBI regulatory documents  
 
-## What makes it better
-- Hybrid Retrieval (BM25 + FAISS) for keyword + semantic search  
-- Cross-Encoder Reranking improving Recall@5 from ~0.75 → ~0.875  
-- Source-grounded responses to reduce hallucination  
-- Quantitative evaluation using Recall@k and RAGAS metrics  
-- Production-ready deployment using FastAPI + Cloud Run + Streamlit UI  
+# Architecture & Workflow
+
+This document provides a comprehensive breakdown of the system architecture, core components, and step-by-step query execution workflow for the Multimodal Agentic RAG system.
 
 ---
+
+## Overview
+
+The system utilizes a decoupled, high-throughput architecture featuring a **Streamlit** frontend communicating directly with an Agentic Orchestrator built on **Pydantic-AI**. 
+
+```mermaid
+graph TD
+    A["User inputs Query"] --> B["Layer 1-3 Input Security Guardrails<br>• Prompt Injection Filter<br>• PII Redaction<br>• Rate Limiter check: Request Cap 5 per 60s"]
+    
+    B --> C["Pydantic-AI Router<br>Dynamically analyzes query intent to call a tool"]
+    
+    C -->|Pandas Pathway| D1["Query CSVs via Pandas"]
+    C -->|Vector Search| D2["Qdrant Search"] --> D2_R["Transformers Reranker"]
+    C -->|Vision Pathway| D3["OpenRouter Gemini Flash"]
+    
+    D1 --> E["Self-Correction Interceptor<br>Checks if Vision element generated an empty data table<br>• If YES: Regex extracts markdown '|' rows from text<br>• If NO: Preserves table coordinates"]
+    D2_R --> E
+    D3 --> E
+    
+    E --> F["Layer 6-13 Output Safety Gauntlet<br>• Path Verification: LFS filter & windows-to-linux<br>• Bounding Box Validation<br>• Faithfulness Evaluation vs original source chunks<br>• System Prompt Leakage & DLP Scan"]
+    
+    F -->|Passes Checks| G1["Render UI<br>• Text Ans<br>• CSV Table<br>• Image crop"]
+    F -->|Fails Invariant Checks| G2["Render Safe Fallback<br>Refusal response"]
+```
+---
+
+## 2. Key Components
+
+### 🖥️ A. Frontend: Streamlit Application
+* *Primary Role:* Manages UI rendering, voice input processing, active chatbot session management, and chat history persistence.
+* *display_image_robustly Helper:* A specialized utility that handles cross-platform path translation (Windows vs. Linux), filters out broken Git LFS pointer files (<1 KB), and dynamically loads visual assets from either root or mount directories.
+
+### 🧠 B. Brain: Pydantic-AI Orchestrator
+* *Primary Role:* Functions as the central routing and decision engine.
+* *Model Integration Strategy:*
+  * *Groq / NVIDIA APIs:* Utilized for rapid text reasoning, logic evaluation, and route classification.
+  * *OpenRouter (Gemini 2.5 Flash):* Leveraged specifically for multimodal vision processing, diagram understanding, and extracting structured data points from visual figures.
+* *Autonomous Routing:* Uses dynamic tool call schemas to inspect data structures on the fly, avoiding rigid heuristics.
+
+### 📁 C. Indexing & Registries (Craft ID Mapping)
+* *Multimodal Asset Registry & Craft ID Mapping:* A compiled Python catalog linking raw files, figures, tables, page numbers, and unique *Craft IDs / Entity IDs* directly to their absolute disk paths.
+  * *Craft ID Cataloging:* Assigns deterministic entity identifiers (Craft IDs) to every extracted visual element, chart, and structured table during ingestion.
+  * *Deterministic Mapping:* Ensures the orchestrator can perform fast, direct lookups by Craft ID rather than relying solely on fuzzy semantic searches, guaranteeing exact asset retrieval.
+* *Vector Store:* Qdrant indexing standard text pages embedded using sentence-transformers.
+* *Tabular Index:* Pre-loaded Pandas DataFrames representing structured document tables for exact, programmatic data manipulation.
+
+### 🛡️ D. Security: 13-Layer Safety Gauntlet
+An invariant safety pipeline executing strict sequential checks prior to payload dispatch:
+* *Core Layers:* PII Redaction, Prompt Injection Scans, Craft ID / Path Verification, Bounding Box Region Alignment, Exact Quote Anchoring, and Faithfulness Evaluations.
+
+---
+
+## 3. Query Execution Lifecycle
+
+### Step 1: Input Validation & Rate Limiting
+* Scans incoming user queries for active prompt injections and sensitive PII leak vectors.
+* Evaluates sliding-window rate limits (REQUEST_CAP = 5 requests per WINDOW_SECONDS = 60).
+
+### Step 2: Intent Classification & Search Routing
+The agent analyzes query semantics and dispatches execution to one of three optimal pathways:
+* *Pathway A (Tabular):* Routed to Pandas for data aggregations, dynamic mathematical computations, and direct dataframe filtering.
+* *Pathway B (Textual):* Routed to Qdrant vector search for semantic chunk retrieval, followed by a Transformer-based cross-encoder reranking pass.
+* *Pathway C (Visual & Entity Lookups):* Triggered when a query references a figure, image, chart, or explicit Craft ID. Looks up the precise Craft ID in the registry and employs Annotated type definitions to compel the Gemini Vision model to output structured Markdown table representations of visual charts.
+
+### Step 3: Self-Correction & Table Recovery Loop
+* If a visual query fails or yields an empty table payload, the orchestrator intercepts the raw vision output.
+* A programmatic fallback parser extracts Markdown table rows (|) directly from the model's intermediate reasoning string and injects them back into the structured response payload.
+
+### Step 4: Output Guardrails & Safety Vetting
+* *Path & Craft ID Alignment:* Verifies that any referenced visual asset matches its registered Craft ID, exists in the asset registry, and points to a valid binary image (filtering Git LFS pointers).
+* *Bounding Box Matching:* Confirms extracted chart data boundaries map precisely back to source document page coordinates using entity metadata.
+* *Faithfulness Evaluation:* Computes semantic similarity scores against retrieved context chunks to detect and eliminate hallucinations.
+
+### Step 5: Frontend Rendering
+* *Text Synthesis:* Streamlit renders the validated reasoning stream.
+* *Tabular Data:* Reconstructs raw tabular outputs into clean interactive UI tables.
+* *Visual Data:* Displays high-resolution binary image assets mapped directly from the Craft ID registry.
+---
+
 # Live Demo
 
 🔗 **Streamlit App:**  
-https://financial-rag-ui-912628415543.us-central1.run.app/
-
-🔗 **API Docs:**  
-https://financial-rag-api-912628415543.us-central1.run.app/docs
+https:/rag-system-v2.streamlit.app
 
 ---
-# System Architecture
-
-```
-User Query
-   ↓
-Streamlit UI
-   ↓
-FastAPI API (/query endpoint)
-   ↓
-Hybrid Retrieval
-   • BM25 Retriever
-   • FAISS Vector Search
-   ↓
-Cross-Encoder Reranking
-(cross-encoder/ms-marco-MiniLM-L-6-v2)
-   ↓
-Context Construction
-   ↓
-LLM Answer Generation
-   ↓
-Final Response
-```
-
----
-
-# Key Features
-
-## Hybrid Retrieval
-Combines **BM25 lexical search** and **FAISS dense vector search** to improve retrieval accuracy.
-
-## Cross-Encoder Reranking
-Documents are reranked using: cross-encoder/ms-marco-MiniLM-L-6-v2
-This improves answer quality by selecting the most relevant context.
-
-## Source Attribution
-The system returns the **document source and page number** used to generate the answer.  
-This ensures responses are grounded in the original financial regulatory documents and helps reduce hallucinations.
-
-## FastAPI Backend
-Provides a scalable REST API.
 
 Endpoint:
 
@@ -115,185 +144,110 @@ Endpoint:
 POST /query
 ```
 
-Returns:
 
-- Generated answer
-- Response latency
-- Metadata
-
-## Streamlit UI
-Interactive interface to ask compliance-related questions.
-
-## Cloud Deployment
-The system is containerized using **Docker** and deployed on **Google Cloud Run**.
-
----
-
-# Tech Stack
-
-| Component | Technology |
-|--------|--------|
-| Backend API | FastAPI |
-| Frontend | Streamlit |
-| Vector Database | FAISS |
-| Embeddings | sentence-transformers/all-MiniLM-L6-v2 |
-| Reranker | cross-encoder/ms-marco-MiniLM-L-6-v2 |
-| Retrieval | Hybrid (BM25 + FAISS) |
-| LLM | OpenRouter (Llama 3 / Open-source models)
-| Deployment | Docker + Google Cloud Run |
-
----
-
-# Retrieval Evaluation
-
-We evaluated retrieval performance using Recall@5 on a manually labeled dataset derived from RBI KYC guidelines.
-
-| Method              | Recall@5 |
-|---------------------|---------|
-| BM25                | 0.50    |
-| FAISS               | 0.875   |
-| Hybrid              | 0.75    |
-| Hybrid + Reranking  | 0.875   |
-
-- Dense retrieval (FAISS) performed best for semantic regulatory data
-- BM25 underperformed due to lack of strong keyword signals
-- Hybrid improved baseline retrieval
-- Cross-encoder reranking significantly improved result ordering
-
-👉 Reranking improved Hybrid performance from ~0.75 → ~0.875
-
----
-
-## Limitations
-
-While the system performs well on structured regulatory queries, several limitations were observed:
-   1. Sensitivity to Query Quality
-   - The system struggles with vague or poorly phrased queries  
-   - Retrieval performance depends heavily on how clearly the query matches document intent  
-
-   2. Context Window Constraints
-   - Only top-k retrieved chunks are passed to the LLM  
-   - Important information may be missed if not retrieved in top results  
-
-   3. Hallucination Risk
-   - If retrieval fails or returns weak context, the LLM may generate partially incorrect answers  
-   - This was observed in edge cases with ambiguous queries  
-
-   4. Dataset Limitations
-   - Performance is tied to the quality and coverage of the RBI document  
-   - Missing or incomplete sections can lead to incomplete answers  
-
-   5. Retrieval Bias
-   - Dense retrieval (FAISS) dominates performance due to semantic nature of data  
-   - BM25 contributes less in this domain, reducing hybrid effectiveness  
-
-   6. Computational Overhead
-   - Cross-encoder reranking improves accuracy but increases latency  
-   - Not optimal for real-time high-throughput systems without optimization  
-
----
-
-# Retrieval Pipeline
-
-1. User submits a question
-2. Hybrid retriever fetches candidate documents
-3. BM25 search retrieves keyword matches
-4. FAISS performs dense vector similarity search
-5. Cross-Encoder reranks retrieved documents
-6. Top documents are selected as context
-7. LLM generates the final answer
-8. API returns the response with latency metadata
-9.  Response includes source citation for transparency
-
----
-
-# API Usage
-
-## Query Endpoint
-
-```
-POST /query
-```
-
-### Example Request
-
-```json
-{
- "question": "Under which Rule should suspicious transactions be reported to FIU-IND?"
-}
-```
-
-### Example Response
-
-```json
-{
- "question": "...",
- "answer": "...",
- "sources": ["Finance_RBI.pdf (Page 14)"],
- "latency_seconds": 1.42
-}
-```
-
----
 
 # Project Structure
 
 ```
-rag-system-v2
-│
-├── app
-│   ├── ingestion.py
-│   ├── vector.py
-│   ├── retriever.py
-│   ├── llm.py
-│   └── main.py
-│
-├── Data
-│   └── Vector
-│
-├── streamlit_ui
-│   └── StreamlitApp.py
-│
-├── evaluate.py
-├── Dockerfile
-├── Dockerfile.streamlit
-├── requirements.txt
-└── README.md
+
+    recovered-rag-project/
+    │
+    ├── .agents/                          # Customization configurations (hooks, config configs)
+    │
+    ├── app/                              # Core application backend
+    │   ├── __init__.py
+    │   ├── conversation_manager.py       # Manages session history and chat message memory
+    │   ├── embeddings.py                 # Generates dense text vector embeddings
+    │   ├── main.py                       # FastAPI server setup and core business logic
+    │   ├── multimodal_assets.py          # Multimodal asset registry scanner and mapping logic
+    │   └── reranker.py                   # Reranking layer utilizing transformers models
+    │
+    ├── assets/                           # Source document extract folders
+    │   ├── extracted_images/             # Page images and visual charts (including LFS files)
+    │   └── extracted_tables/             # Extracted tables formatted as raw CSV files
+    │
+    ├── extracted_images/                 # Real binary visual images folder (targets for resolution)
+    │
+    ├── multimodal-rag-system/            # Helper modules
+    │   └── schemas_and_agent.py          # Pydantic schema configurations and tool schemas
+    │
+    ├── streamlit_ui/                     # Streamlit frontend app
+    │   └── StreamlitApp.py               # Main UI rendering engine and validation controller
+    │
+    ├── tests/                            # Validation tests
+    │   ├── __init__.py
+    │   └── test_guardrail_eval.py        # System testing suite for gauntlet evaluations
+    │
+    ├── compliance_safety.py              # Decoupled 13-Layer safety gauntlet validation pipeline
+    ├── gateway_guardrails.py             # Wallet protection, rate limiting, and PII gateway logic
+    ├── pytest.ini                        # Pytest config options
+    ├── requirements.txt                  # Python dependency list
+    └── .env                              # Environment api keys (Groq, OpenRouter, Langfuse)
 ```
 
 ---
 
-# Installation
+## 🛠️ Local Setup & Installation
 
-### Clone Repository
-git clone https://github.com/supriyap19967-creator/rag-systm-v2
-cd rag-systm-v2
-
-### Install Dependencies
-pip install -r requirements.txt
-
+### 1. Repository & Git LFS Setup
+```bash
+git clone [https://github.com/your-username/rag-system-v2.git](https://github.com/your-username/rag-system-v2.git)
+cd rag-system-v2
+git lfs install && git lfs pull
 ### Run FastAPI Server
 uvicorn app.main:app --reload
+```
+### 2. Virtual Environment & Dependencies
+python -m venv venv
+.\venv\Scripts\activate  # Windows (or: source venv/bin/activate on Mac/Linux)
+pip install --upgrade pip && pip install -r requirements.txt
 
-### Run Streamlit UI
+### 3. Environment Variables (⁠.env⁠)
+GROQ_API_KEY=your_groq_api_key
+OPENROUTER_API_KEY=your_openrouter_api_key
+- Optional Logging
+LANGFUSE_PUBLIC_KEY=your_langfuse_public_key
+LANGFUSE_SECRET_KEY=your_langfuse_secret_key
+LANGFUSE_HOST=[https://cloud.langfuse.com](https://cloud.langfuse.com)
+
+### 4. Run Services & Launch App
+- Start Qdrant Vector Store (Docker)
+docker run -d -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant
+- Run Gauntlet Tests
+pytest -v
+- Launch Streamlit Interface
 streamlit run streamlit_ui/StreamlitApp.py
+
 
 ---
 
 # Deployment
+Deploy to Streamlit Cloud
 
-### Build Docker Image
-docker build -t financial-rag-api .
-
-### Deploy to Google Cloud Run
-gcloud run deploy financial-rag-api
 
 # Future Improvements
 
-- Query rewriting for handling vague user inputs  
-- Lightweight reranking models to reduce latency  
-- Multi-document reasoning for complex queries  
-- Evaluation on larger and more diverse datasets  
+  ### 1. Vector Database Hybrid Search Upgrade
+  Implement Sparse-Dense Hybrid Search in Qdrant (combining BM25 keyword matching with dense vectors) to improve document search precision,
+  especially for specific section codes and numeric figures.
+
+  ### 2. LLM Reranking Optimization
+  Migrate to a hosted cloud reranking endpoint (like Cohere Rerank API or BGE-Reranker-Large). This will significantly reduce local latency
+  and improve the accuracy of top retrieval contexts.
+
+  ### 3. Dynamic Bounding Box Layout Parsing
+  Integrate a layout-aware PDF parser like PyMuPDF / LayoutParser or Gemini Document Parsing to detect chart coordinates dynamically on-
+  the-fly, allowing the system to handle any raw PDF without pre-cropped coordinates.
+
+  ### 4. Semantic Caching Layer
+  Introduce a semantic cache (e.g., using GPTCache or a Qdrant semantic matching index) to capture repeated or highly similar user queries,
+  returning the cached response in milliseconds without hit costs.
+
+  ### 5. Multi-Agent Collaboration Topology
+   Upgrade to a hierarchical team of agents:
+      • Research Agent: Specializes in retrieving text and cross-referencing.
+      • Vision Agent: Specialized in reading complex chart layouts.
+      • Validator Agent: Operates as a compiler to cross-check outputs before UI delivery.
 
 # Example Questions
 
