@@ -62,9 +62,6 @@ graph TD
   The system is split into two primary pipelines:
 1. **Ingestion Pipeline**: Processes raw PDFs, CSVs, and documents, chunks them, computes embeddings, and stores them in **Qdrant**.
 2. **Query & Inference Pipeline**: Takes a user query, applies guardrails, retrieves candidate documents via hybrid search, reranks, synthesizes the answer, verifies safety/fidelity, and serves it back to the client.
-
-```mermaid
-graph TD
     User([User]) <--> UI[Streamlit UI]
     UI <--> Backend[FastAPI Server]
     
