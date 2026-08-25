@@ -59,22 +59,112 @@ The system utilizes a decoupled, high-throughput architecture featuring a **Stre
 
 ```mermaid
 graph TD
-    A["User inputs Query"] --> B["Layer 1-3 Input Security Guardrails<br>• Prompt Injection Filter<br>• PII Redaction<br>• Rate Limiter check: Request Cap 5 per 60s"]
+  The system is split into two primary pipelines:
+1. **Ingestion Pipeline**: Processes raw PDFs, CSVs, and documents, chunks them, computes embeddings, and stores them in **Qdrant**.
+2. **Query & Inference Pipeline**: Takes a user query, applies guardrails, retrieves candidate documents via hybrid search, reranks, synthesizes the answer, verifies safety/fidelity, and serves it back to the client.
+
+```mermaid
+graph TD
+    User([User]) <--> UI[Streamlit UI]
+    UI <--> Backend[FastAPI Server]
     
-    B --> C["Pydantic-AI Router<br>Dynamically analyzes query intent to call a tool"]
+    subgraph Ingestion [Ingestion Pipeline]
+        RawData[(Raw Financial PDFs/CSVs)] --> DocParser[Document Parser / PDF Visual Extractor]
+        DocParser --> Chunker[Semantic & Layout-aware Chunker]
+        Chunker --> Embedder[Embedding Generator: BGE-M3 & BM25]
+        Embedder --> VectorDB[(Qdrant Vector DB)]
+    end
     
-    C -->|Pandas Pathway| D1["Query CSVs via Pandas"]
-    C -->|Vector Search| D2["Qdrant Search"] --> D2_R["Transformers Reranker"]
-    C -->|Vision Pathway| D3["OpenRouter Gemini Flash"]
+    subgraph QueryFlow [Retrieval & Generation Pipeline]
+        Backend --> Router[Query Intent Router / Guardrails]
+        Router --> HybridSearch[Hybrid Search: Sparse + Dense]
+        VectorDB <--> HybridSearch
+        HybridSearch --> Reranker[Cross-Encoder Reranker]
+        Reranker --> LLM[LLM Synthesizer & Fact Verifier]
+        LLM --> Backend
+    end
+```
+
+---
+
+## 2. Deep Dive: Ingestion Pipeline
+
+The ingestion pipeline is designed to handle multimodal and structured documents (PDFs, CSVs) to extract textual and visual elements (tables, charts, figures) accurately.
+
+```mermaid
+flowchart TD
+    Start([Start Ingestion]) --> CheckType{Document Type}
     
-    D1 --> E["Self-Correction Interceptor<br>Checks if Vision element generated an empty data table<br>• If YES: Regex extracts markdown '|' rows from text<br>• If NO: Preserves table coordinates"]
-    D2_R --> E
-    D3 --> E
+    %% CSV processing
+    CheckType -- CSV File --> CSVProc[Parse rows & Metadata]
+    CSVProc --> CSVChunk[Token-bounded Row Chunking]
     
-    E --> F["Layer 6-13 Output Safety Gauntlet<br>• Path Verification: LFS filter & windows-to-linux<br>• Bounding Box Validation<br>• Faithfulness Evaluation vs original source chunks<br>• System Prompt Leakage & DLP Scan"]
+    %% PDF processing
+    CheckType -- PDF File --> PDFProc[PDF Visual & Text Extraction]
+    PDFProc --> Docling[Docling Layout Analysis]
+    PDFProc --> LayoutExtract[Extract Images, Charts & Tables]
+    LayoutExtract --> Cropper[Generate High-Quality Visual Crops]
     
-    F -->|Passes Checks| G1["Render UI<br>• Text Ans<br>• CSV Table<br>• Image crop"]
-    F -->|Fails Invariant Checks| G2["Render Safe Fallback<br>Refusal response"]
+    %% Chunking
+    CSVChunk --> ChunkCombine[Unify Textual & Multimodal Chunks]
+    Docling --> ChunkCombine
+    Cropper --> ChunkCombine
+    
+    %% Enrichment and Invariants
+    ChunkCombine --> MetadataGen[Generate Page, Chapter & Source Metadata]
+    MetadataGen --> SafetyVetting[Compliance Vetting & Structural Safety Verification]
+    
+    %% Vectorizing & Storage
+    SafetyVetting --> DenseVector[Dense Embeddings: BGE-M3]
+    SafetyVetting --> SparseVector[Sparse Embeddings: BM25 Tokenizer]
+    
+    DenseVector & SparseVector --> UploadQdrant[(Upsert to Qdrant Collection)]
+    UploadQdrant --> EndIngest([Ingestion Complete])
+```
+
+- **Visual Extraction**: Uses [pdf_visual_extraction.py](file:///C:/Users/supri/recovered-rag-project/app/pdf_visual_extraction.py) to isolate visual elements and crops.
+- **Data Ingestion Script**: Managed by [ingest_data.py](file:///C:/Users/supri/recovered-rag-project/ingest_data.py) and deployment scripts like [deploy_to_qdrant.py](file:///C:/Users/supri/recovered-rag-project/deploy_to_qdrant.py).
+
+---
+
+## 3. Deep Dive: Query & Retrieval Pipeline
+
+When a user submits a query through [StreamlitApp.py](file:///C:/Users/supri/recovered-rag-project/streamlit_ui/StreamlitApp.py), it is sent to the FastAPI backend [main.py](file:///C:/Users/supri/recovered-rag-project/app/main.py) and executed via [query_rag.py](file:///C:/Users/supri/recovered-rag-project/query_rag.py).
+
+```mermaid
+flowchart TD
+    UserQuery([User Input Query]) --> InputGuard[Gateway Guardrails: Toxicity, Prompt Injection]
+    InputGuard --> PIIRedact[PII History Redaction]
+    
+    PIIRedact --> IntentRoute{Intent Routing & Query Type}
+    
+    %% Branch 1: Global Analytics
+    IntentRoute -- Global Analytics Query --> GlobalQuery[Enrich Query with Dataset-Wide Retrieval Anchors]
+    %% Branch 2: Standard Factual
+    IntentRoute -- Standard Q&A --> StandardQuery[Generate Search Query]
+    
+    GlobalQuery & StandardQuery --> DenseSearch[Qdrant Dense Vector Search]
+    GlobalQuery & StandardQuery --> SparseSearch[Qdrant Sparse BM25 Matcher]
+    
+    DenseSearch & SparseSearch --> RRF[Hybrid Fusion Retrieval]
+    
+    RRF --> Rerank[Cross-Encoder Reranker]
+    Rerank --> ContextBuild[Construct Context Payload with Citations]
+    
+    ContextBuild --> LLMGen[LLM Generation: Llama 3 / Gemini]
+    LLMGen --> OutputVerify{Response Verification}
+    
+    OutputVerify -- Hallucinated / Banned Phrase --> Fallback[Refine Context / Fallback Response]
+    OutputVerify -- Safe & Faithful --> SendUI[Return Answer + Sources + Latency]
+    
+    Fallback --> SendUI
+    SendUI --> EndQuery([Display to User])
+```
+
+- **Guardrails**: Input and gateway guardrails are processed via [gateway_guardrails.py](file:///C:/Users/supri/recovered-rag-project/gateway_guardrails.py) and safety filters in [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py).
+- **Retrieval & Reranking**: Conducted by [retriever.py](file:///C:/Users/supri/recovered-rag-project/app/retriever.py) and [reranker.py](file:///C:/Users/supri/recovered-rag-project/app/reranker.py).
+- **Generation & Fallbacks**: Synthesized in [query_rag.py](file:///C:/Users/supri/recovered-rag-project/query_rag.py) with [llamaindex_brain.py](file:///C:/Users/supri/recovered-rag-project/app/llamaindex_brain.py).
+
 ```
 ---
 
