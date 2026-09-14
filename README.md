@@ -218,48 +218,57 @@ flowchart TD
 ## 3. Deep Dive: Multi-Turn Execution Sequence & Follow-up Resolution
 
 ```mermaid
-sequenceDiagram
-    autonumber
-    actor User
-    participant UI as Streamlit UI
-    participant CM as Multimodal Conversation Manager
-    participant IR as Intent Router
-    participant TP as Parallel Thread Pool (Executor)
-    participant QD as Qdrant Vector DB
-    participant RAM as In-Memory RAM Store
-    participant GA as Compliance Safety Gauntlet
-    
-    User->>UI: "in above figure what are the values of low income?"
-    UI->>CM: contextualize_user_query(user_query, session_id)
-    CM->>CM: Inspect past 4 turns & LAST_ACTIVE_TARGET_ID ("Figure 4.2")
-    CM-->>UI: Rewritten Standalone Query: "in Figure 4.2 what are the values of low income?"
-    
-    UI->>IR: classify_query_intent("in Figure 4.2...")
-    IR-->>UI: Intent: VISUAL_SPECIFIC (allow_pandas: False, allow_vision: True)
-    
-    rect rgb(240, 248, 255)
-        note over UI, RAM: Parallel Concurrency Block (ThreadPoolExecutor max_workers=3)
-        par Worker 1: Qdrant Text Search
-            UI->>QD: Scroll points for metadata.asset_id="4.2" & asset_type="figure"
-            QD-->>UI: Return Figure 4.2 context chunks
-        and Worker 2: RAM Transcription Lookup
-            UI->>RAM: Query _IN_MEMORY_TRANSCRIPTION_CACHE["figure_4_2"]
-            RAM-->>UI: Instant return of Figure 4.2 table markdown (<10ms)
-        end
+flowchart TD
+    subgraph Step1 ["Step 1: User Follow-up Input"]
+        Input["👤 User Query: 'in above figure what are the values of low income?'"]
     end
-    
-    UI->>UI: Synthesize answer: "Low-income economies are defined as $1,135 or less..."
-    
-    rect rgb(240, 255, 240)
-        note over UI, GA: Asynchronous Non-Blocking Validation
-        UI->>GA: evaluate_faithfulness(answer, source_chunks, payload)
-        GA->>GA: Compute line-level semantic similarity & comma-normalized token overlap
-        GA-->>UI: Faithfulness Score: 0.95 (Cleared)
+
+    subgraph Step2 ["Step 2: Contextual Query Rewriting [conversation_manager.py]"]
+        Input --> ContextManager["Multimodal Conversation Manager"]
+        SessionStore[("Active Session Store<br/>LAST_ACTIVE_TARGET_ID = 'Figure 4.2'<br/>LAST_ACTIVE_IMAGE_PATH = 'assets/figure_4_2.png'")] <--> ContextManager
+        ContextManager --> Rewritten["Rewritten Standalone Query:<br/>'in Figure 4.2 what are the values of low income?'"]
     end
-    
-    UI-->>User: Render Answer + Figure 4.2 Crop + Sources Card
+
+    subgraph Step3 ["Step 3: Intent Classification [intent_router.py]"]
+        Rewritten --> Router["Deterministic Intent Router"]
+        Router --> IntentResult["Classified Intent: VISUAL_SPECIFIC<br/>(allow_pandas: False, allow_vision: True)"]
+    end
+
+    subgraph Step4 ["Step 4: Parallel Multi-Threaded Retrieval Engine [ThreadPoolExecutor max_workers=3]"]
+        IntentResult --> WorkerPool["Parallel Worker Dispatcher"]
+        
+        WorkerPool -->|"Worker 1"| QdrantWorker["Qdrant Vector DB Search<br/>• Metadata Filter: asset_id='4.2'<br/>• Returns text chunks & caption context"]
+        
+        WorkerPool -->|"Worker 2"| RAMWorker["In-Memory RAM Store Lookup<br/>• Key: _IN_MEMORY_TRANSCRIPTION_CACHE['figure_4_2']<br/>• Instant Markdown Table Retrieval (<10ms)"]
+    end
+
+    subgraph Step5 ["Step 5: Answer Synthesis [query_rag.py / llm.py]"]
+        QdrantWorker & RAMWorker --> Synthesizer["LLM Synthesizer Engine"]
+        Synthesizer --> DraftAnswer["Draft Answer:<br/>'Low-income economies are defined as $1,135 or less.'"]
+    end
+
+    subgraph Step6 ["Step 6: Compliance Safety Gauntlet [compliance_safety.py]"]
+        DraftAnswer --> SafetyGauntlet["14-Layer Compliance Safety Evaluator"]
+        SafetyGauntlet --> FaithfulnessCheck["Line-Level Faithfulness Evaluator<br/>• Sentence-level semantic similarity check<br/>• Comma-normalized token overlap check"]
+        FaithfulnessCheck --> ClearedScore["Validation Passed: Faithfulness Score = 0.95 (Cleared)"]
+    end
+
+    subgraph Step7 ["Step 7: Rendered UI Response [StreamlitApp.py]"]
+        ClearedScore --> UIResponse["Streamlit UI Card<br/>• Markdown Answer Narrative<br/>• High-Res Figure 4.2 Image Crop<br/>• Citation Source Card"]
+    end
 ```
 
+### Multi-Turn Execution Step Walkthrough
+
+| Step | Subsystem | Code Location | Input Action / Data | Output Result | Key Engineering Advantage |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1** | User Input | UI Prompt | `"in above figure what are the values of low income?"` | Raw User String | Captures implicit relative reference (`"above figure"`). |
+| **2** | Memory Engine | [conversation_manager.py](file:///C:/Users/supri/recovered-rag-project/app/conversation_manager.py) | Inspects active session (`LAST_ACTIVE_IMAGE_PATH`) | Rewritten: `"in Figure 4.2 what are the values of low income?"` | Resolves anaphora references into standalone queries before vector search. |
+| **3** | Intent Router | [intent_router.py](file:///C:/Users/supri/recovered-rag-project/app/intent_router.py) | Standalone Query | Intent: `VISUAL_SPECIFIC` (`allow_pandas: False`) | Sub-millisecond (<1ms) routing; prevents misrouting figure questions to CSV dataframes. |
+| **4** | Parallel Pool | `ThreadPoolExecutor` | Concurrent Dispatch | Worker 1: Qdrant Chunks<br/>Worker 2: RAM Table (`<10ms`) | Runs vector search and pre-computed RAM lookup concurrently in parallel. |
+| **5** | Synthesizer | [query_rag.py](file:///C:/Users/supri/recovered-rag-project/query_rag.py) | RAM Markdown Table + Context | `"Low-income economies are defined as $1,135 or less."` | Grounded synthesis directly using extracted tabular metrics. |
+| **6** | Safety Gauntlet | [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) | Draft Answer + Source Chunks | Faithfulness Score = 0.95 (Cleared) | Sentence-level max similarity and comma-normalized token overlap check. |
+| **7** | Streamlit UI | [StreamlitApp.py](file:///C:/Users/supri/recovered-rag-project/streamlit_ui/StreamlitApp.py) | Cleared Payload | Rendered Markdown + Crop + Sources | Unconditional session state saving of active visual asset path. |
 
 - **Guardrails**: Input and gateway guardrails are processed via [gateway_guardrails.py](file:///C:/Users/supri/recovered-rag-project/gateway_guardrails.py) and safety filters in [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py).
 - **Retrieval & Reranking**: Conducted by [retriever.py](file:///C:/Users/supri/recovered-rag-project/app/retriever.py) and [reranker.py](file:///C:/Users/supri/recovered-rag-project/app/reranker.py).
