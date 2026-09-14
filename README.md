@@ -49,7 +49,7 @@ Observability & Tracing
 
 # Enterprise Multimodal Conversational RAG System: Flowcharts & Architecture
 
-This document provides an end-to-end, interview-grade architectural specification and system flowcharts for our **Enterprise Multimodal Conversational RAG System**. It covers the complete lifecycle of data ingestion, contextual query rewriting, deterministic intent routing, multi-agent collaboration, parallel multi-threaded retrieval, and 15-layer compliance gauntlet validation.
+This document provides an end-to-end, interview-grade architectural specification and system flowcharts for our **Enterprise Multimodal Conversational RAG System**. It covers the complete lifecycle of data ingestion, contextual query rewriting, deterministic intent routing, multi-agent collaboration, parallel multi-threaded retrieval, and 14-layer compliance gauntlet validation.
 
 ---
 
@@ -99,23 +99,22 @@ flowchart TD
         ParallelPool -->|"Worker 3: Pandas Sandbox"| PandasEngine["Pandas Sandbox Execution<br/>(gdp_df / co2_df DataFrames)<br/>[structured_query.py]"]
     end
 
-    subgraph SynthesisValidation ["Layer 6: Answer Synthesis & 15-Layer Compliance Gauntlet"]
+    subgraph SynthesisValidation ["Layer 6: Answer Synthesis & 14-Phase Compliance Gauntlet"]
         Reranker & VisionStore & PandasEngine & FastCSVPath & DirectLLM -->|"Top-3 Chunks + Vision Table + CSV Data"| Synthesizer["LLM Synthesizer Engine<br/>[llm.py / query_rag.py]"]
         Synthesizer -->|"Draft Payload"| ValidatorAgent["Validator Agent & Gauntlet Gatekeeper<br/>[agents/validation.py]"]
         
-        ValidatorAgent -->|"Payload + Context Chunks"| Gauntlet["15-Layer Compliance Safety Gauntlet<br/>[compliance_safety.py]"]
+        ValidatorAgent -->|"Payload + Context Chunks"| GauntletPhases["14-Layer Safety Gauntlet Evaluator<br/>[compliance_safety.py]"]
         
-        subgraph GauntletLayers ["Safety Gauntlet Layers"]
-            Gauntlet --> G1["1. Prompt Injection Filter"]
-            Gauntlet --> G2["2. PII Redaction Scanner"]
-            Gauntlet --> G3["3. Path Verification & Asset Check"]
-            Gauntlet --> G4["4. System Prompt Leak Scanner"]
-            Gauntlet --> G5["5. Category & Legend Disambiguator"]
-            Gauntlet --> G6["6. Line-Level Faithfulness Evaluator"]
+        subgraph GauntletPhases ["3-Phase Compliance Guardrail Pipeline"]
+            Phase1["Phase 1: Input Security & Pre-Sanitization<br/>• Prompt Injection Filter<br/>• PII Redaction & Masking<br/>• Toxicity & System Leak Scanner"]
+            Phase2["Phase 2: Contextual & Structural Alignment<br/>• Asset Path & File Check<br/>• Category & Legend Disambiguator<br/>• Structural JSON Schema Validation"]
+            Phase3["Phase 3: Fidelity & Hallucination Defense<br/>• Line-Level Faithfulness Evaluator<br/>• Comma & Numeric Whitelist Normalizer<br/>• Safe Fallback Interceptor"]
+            
+            Phase1 --> Phase2 --> Phase3
         end
         
-        GauntletLayers -->|"Validation Status"| CheckGauntlet{"Gauntlet Cleared?"}
-        CheckGauntlet -- "Passed (Status: Cleared)" --> FinalPayload["Cleared Payload + Score (>=0.90)"]
+        Phase3 -->|"Validation Status"| CheckGauntlet{"Gauntlet Cleared?"}
+        CheckGauntlet -- "Passed (Score >=0.90)" --> FinalPayload["Cleared Payload + Citation Card"]
         CheckGauntlet -- "Failed / Violation" --> FallbackHandler["Deterministic Safe Fallback Handler"]
     end
 
@@ -130,6 +129,8 @@ flowchart TD
 
 ## Technical Legend & Component Responsibilities
 
+### Subsystem Component Matrix
+
 | Subsystem / Node | Code File Location | Input Payload | Output Payload | Key Technical Responsibilities |
 | :--- | :--- | :--- | :--- | :--- |
 | **Streamlit UI** | [StreamlitApp.py](file:///C:/Users/supri/recovered-rag-project/streamlit_ui/StreamlitApp.py) | User prompt / Voice WAV | Rendered Markdown + Images | Main user interaction interface, session state maintenance (`LAST_ACTIVE_IMAGE_PATH`), voice transcription trigger, and response streaming. |
@@ -143,7 +144,34 @@ flowchart TD
 | **Qdrant Hybrid Retriever** | [retriever.py](file:///C:/Users/supri/recovered-rag-project/app/retriever.py) | Query string + Filters | Raw matching points | Performs dense vector search (BGE-M3, 1024-dim) combined with sparse token search (BM25) inside local Qdrant collections. |
 | **Cross-Encoder Reranker** | [reranker.py](file:///C:/Users/supri/recovered-rag-project/app/reranker.py) | Query + Top-N candidates | Top-3 reranked documents | Uses `BAAI/bge-reranker-v2-m3` to compute deep cross-attention similarity scores between query and retrieved document text. |
 | **In-Memory RAM Transcription Store** | [schemas_and_agent.py](file:///C:/Users/supri/recovered-rag-project/multimodal-rag-system/schemas_and_agent.py) | Figure / Table ID | Markdown table string | Eagerly pre-loads 215+ pre-computed visual table markdowns into RAM (`_IN_MEMORY_TRANSCRIPTION_CACHE`) on startup, serving extractions in **<10ms**. |
-| **Validator Agent & Safety Gauntlet** | [validation.py](file:///C:/Users/supri/recovered-rag-project/app/agents/validation.py) & [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) | Draft response + Source context | Cleared payload + Faithfulness score | 15-Layer gatekeeper running prompt injection filters, PII checks, system prompt scanners, exact quote anchoring, and line-level faithfulness evaluation. |
+| **Validator Agent & Safety Gauntlet** | [validation.py](file:///C:/Users/supri/recovered-rag-project/app/agents/validation.py) & [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) | Draft response + Source context | Cleared payload + Faithfulness score | 14-Layer gatekeeper running prompt injection filters, PII checks, system prompt scanners, exact quote anchoring, and line-level faithfulness evaluation. |
+
+---
+
+### Detailed 14-Layer Compliance Safety Gauntlet Breakdown
+
+To ensure zero visual clutter in the high-level architecture diagram while providing full technical depth for technical interviews, the complete 14-layer compliance gauntlet implemented in [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) is categorized below:
+
+#### **Phase 1: Input Security & Pre-Sanitization (Layers 1–4)**
+1. **Layer 1: Prompt Injection & Jailbreak Scanner**: Scans user input for adversarial instructions (e.g. `ignore previous rules`, `DAN mode`).
+2. **Layer 2: PII Redaction & Masking Filter**: Masks sensitive personal data (emails, phone numbers, API keys) before query processing.
+3. **Layer 3: Toxicity & Financial Tone Compliance**: Verifies queries adhere to regulatory communication standards.
+4. **Layer 4: System Prompt Leak Interceptor**: Detects and blocks attempts to extract internal system prompt instructions.
+
+#### **Phase 2: Contextual & Structural Alignment (Layers 5–9)**
+5. **Layer 5: Asset Path & Image File Existence Check**: Verifies that referenced visual crops (`figure_4_2.png`) exist on disk before VLM calls.
+6. **Layer 6: Bounding Box & Layout Anchor Resolver**: Ensures visual coordinates match original PDF page bounding boxes.
+7. **Layer 7: Category & Legend Disambiguator**: Prevents conflating single categories with aggregate brackets (e.g., *Low Income* $\le \$1,135$ vs *Low & Middle Income* $< \$13,935$).
+8. **Layer 8: Structural Pydantic Schema Validator**: Guarantees output payloads conform strictly to required JSON key types.
+9. **Layer 9: Exact Quote & Context Anchoring**: Cross-checks verbatim text claims against retrieved vector context chunks.
+
+#### **Phase 3: Fidelity & Hallucination Defense (Layers 10–14)**
+10. **Layer 10: Comma & Numeric Token Whitelist Normalizer**: Normalizes numeric formatting (e.g., `$1,135` vs `1135`) for exact token comparison.
+11. **Layer 11: In-Memory RAM Transcription Matcher**: Falls back to `_IN_MEMORY_TRANSCRIPTION_CACHE` tables when vector context lacks explicit numbers.
+12. **Layer 12: Line-Level Faithfulness Evaluator**: Computes sentence-level maximum semantic similarity, enforcing a strict passing threshold ($\ge 0.90$).
+13. **Layer 13: Hallucination Interceptor & Refinement**: Flags ungrounded quantitative claims and triggers self-correction loops.
+14. **Layer 14: Deterministic Safe Fallback Interceptor**: Emits a clean, non-crashing fallback explanation when confidence thresholds fail.
+
 
 ---
 
@@ -231,7 +259,6 @@ sequenceDiagram
     
     UI-->>User: Render Answer + Figure 4.2 Crop + Sources Card
 ```
-
 
 
 - **Guardrails**: Input and gateway guardrails are processed via [gateway_guardrails.py](file:///C:/Users/supri/recovered-rag-project/gateway_guardrails.py) and safety filters in [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py).
