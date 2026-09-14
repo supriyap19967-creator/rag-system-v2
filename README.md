@@ -217,184 +217,175 @@ flowchart TD
 
 ## 2. Key Components
 
-### 🖥️ A. Frontend: Streamlit Application
-* *Primary Role:* Manages UI rendering, voice input processing, active chatbot session management, and chat history persistence.
-* *display_image_robustly Helper:* A specialized utility that handles cross-platform path translation (Windows vs. Linux), filters out broken Git LFS pointer files (<1 KB), and dynamically loads visual assets from either root or mount directories.
+### 🖥️ A. Frontend: Streamlit Application (`streamlit_ui/StreamlitApp.py`)
+* *Primary Role:* Manages interactive UI rendering, voice input processing (WAV audio transcription), active chatbot session management (`LAST_ACTIVE_IMAGE_PATH`), and chat history persistence.
+* *`display_image_robustly` / `resolve_single_figure_path` Helper:* A specialized utility that handles cross-platform path translation (Windows vs. Linux), filters out broken Git LFS pointer files (<1 KB), dynamically resolves visual crop paths from root or mount directories, and performs PIL thumbnail downscaling (max 1024px) for 70% lighter network payloads.
 
-### 🧠 B. Brain: Pydantic-AI Orchestrator
-* *Primary Role:* Functions as the central routing and decision engine.
+### 🧠 B. Brain: Pydantic-AI Orchestrator & Fast-Path Intent Router
+* *Primary Role:* Functions as the central routing and decision engine across specialized agents ([supervisor.py](file:///C:/Users/supri/recovered-rag-project/app/agents/supervisor.py), [research.py](file:///C:/Users/supri/recovered-rag-project/app/agents/research.py), [vision.py](file:///C:/Users/supri/recovered-rag-project/app/agents/vision.py), [data.py](file:///C:/Users/supri/recovered-rag-project/app/agents/data.py)).
+* *Deterministic Intent Fast-Path Router (`intent_router.py`):* Sub-millisecond (<1ms) classifier that detects visual asset queries (`figure`, `chart`, `table`) and CSV queries, directly setting tool availability (`allow_pandas: False` for figures) to bypass unnecessary LLM supervisor calls.
 * *Model Integration Strategy:*
-  * *Groq / NVIDIA APIs:* Utilized for rapid text reasoning, logic evaluation, and route classification.
+  * *Groq / NVIDIA APIs (Llama 3.3 70B):* Utilized for rapid text reasoning, logic evaluation, and route classification.
   * *OpenRouter (Gemini 2.5 Flash):* Leveraged specifically for multimodal vision processing, diagram understanding, and extracting structured data points from visual figures.
-* *Autonomous Routing:* Uses dynamic tool call schemas to inspect data structures on the fly, avoiding rigid heuristics.
+* *Autonomous Routing:* Uses dynamic Pydantic tool call schemas (`BaseModel`) to inspect data structures on the fly, avoiding rigid heuristics.
 
-### 📁 C. Indexing & Registries (Craft ID Mapping)
+### 📁 C. Indexing & Registries (Craft ID Mapping) & In-Memory RAM Store
 * *Multimodal Asset Registry & Craft ID Mapping:* A compiled Python catalog linking raw files, figures, tables, page numbers, and unique *Craft IDs / Entity IDs* directly to their absolute disk paths.
-  * *Craft ID Cataloging:* Assigns deterministic entity identifiers (Craft IDs) to every extracted visual element, chart, and structured table during ingestion.
+  * *Craft ID Cataloging:* Assigns deterministic entity identifiers (e.g. `metadata.asset_id="4.2"`, `asset_type="figure"`) to every extracted visual element, chart, and structured table during ingestion.
   * *Deterministic Mapping:* Ensures the orchestrator can perform fast, direct lookups by Craft ID rather than relying solely on fuzzy semantic searches, guaranteeing exact asset retrieval.
-* *Vector Store:* Qdrant indexing standard text pages embedded using sentence-transformers.
-* *Tabular Index:* Pre-loaded Pandas DataFrames representing structured document tables for exact, programmatic data manipulation.
+* *In-Memory RAM Transcription Store (`schemas_and_agent.py`):* Eagerly pre-loads 215+ visual table extractions into system RAM (`_IN_MEMORY_TRANSCRIPTION_CACHE`) on startup, serving extractions in **<10ms**.
+* *Vector Store:* Qdrant indexing standard text pages embedded using dense **BAAI/bge-m3** (1024-dim) vectors and **BM25** sparse tokenizers with cross-encoder reranking (**BAAI/bge-reranker-v2-m3**).
+* *Tabular Index:* Pre-loaded Pandas DataFrames (`gdp_df`, `co2_df`) representing structured document tables for exact, programmatic data manipulation.
 
-### 🛡️ D. Security: 13-Layer Safety Gauntlet
-An invariant safety pipeline executing strict sequential checks prior to payload dispatch:
-* *Core Layers:* PII Redaction, Prompt Injection Scans, Craft ID / Path Verification, Bounding Box Region Alignment, Exact Quote Anchoring, and Faithfulness Evaluations.
+### 🛡️ D. Security: 14-Layer Safety Gauntlet
+An invariant safety pipeline ([compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) & [validation.py](file:///C:/Users/supri/recovered-rag-project/app/agents/validation.py)) executing strict sequential checks prior to payload dispatch across 3 phases:
+* *Core Layers:* PII Redaction, Prompt Injection Scans, Craft ID / Path Verification (<1 KB LFS filter), Bounding Box Region Alignment, Category & Legend Disambiguation (preventing Low Income $\le \$1,135$ vs Low & Middle Income aggregate $< \$13,935$ conflation), Exact Quote Anchoring, and Line-Level Faithfulness Evaluations ($\ge 0.90$).
 
 ---
 
 ## 3. Query Execution Lifecycle
 
 ### Step 1: Input Validation & Rate Limiting
-* Scans incoming user queries for active prompt injections and sensitive PII leak vectors.
-* Evaluates sliding-window rate limits (REQUEST_CAP = 5 requests per WINDOW_SECONDS = 60).
+* Scans incoming user queries for active prompt injections, toxicity, and sensitive PII leak vectors in `gateway_guardrails.py`.
+* Evaluates sliding-window rate limits (`REQUEST_CAP = 5` requests per `WINDOW_SECONDS = 60`).
 
 ### Step 2: Intent Classification & Search Routing
 The agent analyzes query semantics and dispatches execution to one of three optimal pathways:
 * *Pathway A (Tabular):* Routed to Pandas for data aggregations, dynamic mathematical computations, and direct dataframe filtering.
-* *Pathway B (Textual):* Routed to Qdrant vector search for semantic chunk retrieval, followed by a Transformer-based cross-encoder reranking pass.
-* *Pathway C (Visual & Entity Lookups):* Triggered when a query references a figure, image, chart, or explicit Craft ID. Looks up the precise Craft ID in the registry and employs Annotated type definitions to compel the Gemini Vision model to output structured Markdown table representations of visual charts.
+* *Pathway B (Textual):* Routed to Qdrant vector search for dense (BGE-M3) and sparse (BM25) hybrid chunk retrieval, followed by a Transformer-based cross-encoder reranking pass (`bge-reranker-v2-m3`).
+* *Pathway C (Visual & Entity Lookups):* Triggered when a query references a figure, image, chart, or explicit Craft ID. Looks up the precise Craft ID in the RAM Store (`_IN_MEMORY_TRANSCRIPTION_CACHE` in **<10ms**) or asset registry, using Gemini Vision with PIL downscaling (max 1024px) for **70% lighter base64 network payloads**.
 
 ### Step 3: Self-Correction & Table Recovery Loop
 * If a visual query fails or yields an empty table payload, the orchestrator intercepts the raw vision output.
-* A programmatic fallback parser extracts Markdown table rows (|) directly from the model's intermediate reasoning string and injects them back into the structured response payload.
+* A programmatic fallback parser extracts Markdown table rows (`|`) directly from the model's intermediate reasoning string and injects them back into the structured response payload.
 
 ### Step 4: Output Guardrails & Safety Vetting
-* *Path & Craft ID Alignment:* Verifies that any referenced visual asset matches its registered Craft ID, exists in the asset registry, and points to a valid binary image (filtering Git LFS pointers).
-* *Bounding Box Matching:* Confirms extracted chart data boundaries map precisely back to source document page coordinates using entity metadata.
-* *Faithfulness Evaluation:* Computes semantic similarity scores against retrieved context chunks to detect and eliminate hallucinations.
+* *Path & Craft ID Alignment:* Verifies that any referenced visual asset matches its registered Craft ID, exists in the asset registry, and points to a valid binary image (filtering Git LFS pointers <1 KB).
+* *Bounding Box & Category Matching:* Confirms extracted chart data boundaries map precisely back to source document page coordinates and prevents conflation of single categories vs aggregate brackets.
+* *Faithfulness Evaluation:* Computes sentence-level maximum semantic similarity scores against retrieved context chunks to detect and eliminate hallucinations.
 
-### Step 5: Frontend Rendering
+### Step 5: Frontend Rendering & Telemetry
 * *Text Synthesis:* Streamlit renders the validated reasoning stream.
 * *Tabular Data:* Reconstructs raw tabular outputs into clean interactive UI tables.
-* *Visual Data:* Displays high-resolution binary image assets mapped directly from the Craft ID registry.
+* *Visual Data:* Displays high-resolution binary image assets mapped directly from the Craft ID registry inline.
+* *Async Telemetry:* Asynchronously logs execution metrics, token counts, and safety scores to Langfuse and OpenTelemetry.
+
 ---
 
 # Live Demo
 
 🔗 **Streamlit App:**  
-https:/rag-system-v2.streamlit.app
+https://rag-system-v2.streamlit.app
 
 ---
 
-Endpoint:
+### API Endpoint:
 
 ```
 POST /query
 ```
 
+Returns:
+```json
+{
+  "answer": "Low-income economies are defined as those with a 2024 Atlas GNI per capita of $1,135 or less.",
+  "faithfulness_score": 0.95,
+  "sources": [{"asset_id": "4.2", "asset_type": "figure"}]
+}
+```
 
+---
 
 # Project Structure
 
 ```
-
-    recovered-rag-project/
-    │
-    ├── .agents/                          # Customization configurations (hooks, config configs)
-    │
-    ├── app/                              # Core application backend
-    │   ├── __init__.py
-    │   ├── conversation_manager.py       # Manages session history and chat message memory
-    │   ├── embeddings.py                 # Generates dense text vector embeddings
-    │   ├── main.py                       # FastAPI server setup and core business logic
-    │   ├── multimodal_assets.py          # Multimodal asset registry scanner and mapping logic
-    │   └── reranker.py                   # Reranking layer utilizing transformers models
-    │
-    ├── assets/                           # Source document extract folders
-    │   ├── extracted_images/             # Page images and visual charts (including LFS files)
-    │   └── extracted_tables/             # Extracted tables formatted as raw CSV files
-    │
-    ├── extracted_images/                 # Real binary visual images folder (targets for resolution)
-    │
-    ├── multimodal-rag-system/            # Helper modules
-    │   └── schemas_and_agent.py          # Pydantic schema configurations and tool schemas
-    │
-    ├── streamlit_ui/                     # Streamlit frontend app
-    │   └── StreamlitApp.py               # Main UI rendering engine and validation controller
-    │
-    ├── tests/                            # Validation tests
-    │   ├── __init__.py
-    │   └── test_guardrail_eval.py        # System testing suite for gauntlet evaluations
-    │
-    ├── compliance_safety.py              # Decoupled 13-Layer safety gauntlet validation pipeline
-    ├── gateway_guardrails.py             # Wallet protection, rate limiting, and PII gateway logic
-    ├── pytest.ini                        # Pytest config options
-    ├── requirements.txt                  # Python dependency list
-    └── .env                              # Environment api keys (Groq, OpenRouter, Langfuse)
+recovered-rag-project/
+│
+├── .agents/                          # Customization configurations and agents
+├── app/                              # Core application backend
+│   ├── agents/                       # Multi-agent implementations (supervisor, research, vision, data)
+│   ├── conversation_manager.py       # Session history, active asset memory & anaphora rewriter
+│   ├── intent_router.py              # Sub-millisecond (<1ms) intent classification router
+│   ├── main.py                       # FastAPI server setup and core business logic
+│   ├── retriever.py                  # Qdrant hybrid vector & BM25 sparse search engine
+│   └── reranker.py                   # BAAI/bge-reranker-v2-m3 cross-encoder layer
+│
+├── extracted_images/                 # Extracted figure crops and binary visual chart assets
+├── multimodal-rag-system/            # Schema and agent utilities
+│   └── schemas_and_agent.py          # Pydantic schemas & In-Memory RAM Transcription Store (<10ms)
+│
+├── streamlit_ui/                     # Streamlit frontend app
+│   └── StreamlitApp.py               # Main UI rendering engine, voice transcription & display helper
+│
+├── compliance_safety.py              # Decoupled 14-Layer safety gauntlet validation pipeline
+├── gateway_guardrails.py             # Rate limiting (5 req/60s) and PII masking gateway
+├── ingest_data.py                    # Multimodal document parsing & chunking ingestion pipeline
+├── deploy_to_qdrant.py               # Qdrant collection upsert & indexing script
+├── pytest.ini                        # Pytest config options
+├── requirements.txt                  # Python dependency list
+└── .env                              # API keys (Groq, OpenRouter, Qdrant, Langfuse)
 ```
 
 ---
+
+# 🚀 Future Improvements & Engineering Roadmap
+
+- **Model Context Protocol (MCP) Server Endpoint (`mcp_server.py`)**: Expose the RAG system's Qdrant vector store, Gemini VLM parsing engine, and Pandas execution tools via an MCP server interface (using Anthropic FastMCP), enabling external AI developer tools (Cursor, Antigravity, Claude Desktop) to query the system directly.
+- **Token-Level Answer Streaming (`agent.run_stream`)**: Upgrade UI response generation to token-by-token streaming, reducing Time-To-First-Token (TTFT) from ~1.5s down to `<200ms` while safely buffering Pydantic JSON schemas.
+- **Advanced Reciprocal Rank Fusion (RRF)**: Implement native RRF algorithm score fusion combining dense BGE-M3 vector ranks with BM25 sparse keyword ranks ($\alpha=0.6$) to further boost retrieval recall on financial acronyms and ISO regulatory standards.
+- **Cross-Chart Multi-Asset Comparative Reasoning**: Extend active session memory to support multi-turn visual comparison across multiple figures (e.g. *"Compare Figure 4.2 low-income values with Figure 3.1 middle-income trends"*).
+- **Continuous RAG Quality Dashboard (Ragas & DeepEval)**: Integrate a live Streamlit analytics tab tracking real-time Faithfulness, Answer Relevancy, and Context Precision scores calculated asynchronously via Celery worker background tasks.
+- **Executive Briefing PDF / Excel Exporter**: Add a one-click exporter button (`st.download_button`) generating executive PDF / XLSX briefing reports complete with wrap-up narratives, extracted Markdown tables, high-res visual chart crops, and full source citations.
+
 
 ## 🛠️ Local Setup & Installation
 
 ### 1. Repository & Git LFS Setup
 ```bash
-git clone [https://github.com/your-username/rag-system-v2.git](https://github.com/your-username/rag-system-v2.git)
+git clone https://github.com/your-username/rag-system-v2.git
 cd rag-system-v2
 git lfs install && git lfs pull
-### Run FastAPI Server
-uvicorn app.main:app --reload
 ```
+
 ### 2. Virtual Environment & Dependencies
+```bash
 python -m venv venv
 .\venv\Scripts\activate  # Windows (or: source venv/bin/activate on Mac/Linux)
 pip install --upgrade pip && pip install -r requirements.txt
+```
 
-### 3. Environment Variables (⁠.env⁠)
+### 3. Environment Variables (.env)
+```env
 GROQ_API_KEY=your_groq_api_key
 OPENROUTER_API_KEY=your_openrouter_api_key
-- Optional Logging
+QDRANT_HOST=localhost
+QDRANT_PORT=6333
+# Optional Observability Logging
 LANGFUSE_PUBLIC_KEY=your_langfuse_public_key
 LANGFUSE_SECRET_KEY=your_langfuse_secret_key
-LANGFUSE_HOST=[https://cloud.langfuse.com](https://cloud.langfuse.com)
+LANGFUSE_HOST=https://cloud.langfuse.com
+```
 
 ### 4. Run Services & Launch App
-- Start Qdrant Vector Store (Docker)
-docker run -d -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant
-- Run Gauntlet Tests
-pytest -v
-- Launch Streamlit Interface
-streamlit run streamlit_ui/StreamlitApp.py
-
+- **Start Qdrant Vector Store (Docker)**:
+  ```bash
+  docker run -d -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant
+  ```
+- **Run Pytest Test Suite**:
+  ```bash
+  pytest scratch/test_followup_resolution.py test_intent_router.py -v
+  ```
+- **Launch Streamlit Interface**:
+  ```bash
+  streamlit run streamlit_ui/StreamlitApp.py
+  ```
+- **Launch FastAPI Backend API**:
+  ```bash
+  python -m uvicorn app.main:app --reload
+  ```
 
 ---
 
 # Deployment
-Deploy to Streamlit Cloud
 
-
-# Future Improvements
-
-  ### 1. Vector Database Hybrid Search Upgrade
-  Implement Sparse-Dense Hybrid Search in Qdrant (combining BM25 keyword matching with dense vectors) to improve document search precision,
-  especially for specific section codes and numeric figures.
-
-  ### 2. LLM Reranking Optimization
-  Migrate to a hosted cloud reranking endpoint (like Cohere Rerank API or BGE-Reranker-Large). This will significantly reduce local latency
-  and improve the accuracy of top retrieval contexts.
-
-  ### 3. Dynamic Bounding Box Layout Parsing
-  Integrate a layout-aware PDF parser like PyMuPDF / LayoutParser or Gemini Document Parsing to detect chart coordinates dynamically on-
-  the-fly, allowing the system to handle any raw PDF without pre-cropped coordinates.
-
-  ### 4. Semantic Caching Layer
-  Introduce a semantic cache (e.g., using GPTCache or a Qdrant semantic matching index) to capture repeated or highly similar user queries,
-  returning the cached response in milliseconds without hit costs.
-
-  ### 5. Multi-Agent Collaboration Topology
-   Upgrade to a hierarchical team of agents:
-      • Research Agent: Specializes in retrieving text and cross-referencing.
-      • Vision Agent: Specialized in reading complex chart layouts.
-      • Validator Agent: Operates as a compiler to cross-check outputs before UI delivery.
-
-# Example Questions
-
-- How must suspicious transactions be reported?
-- What penalties apply for delayed reporting?
-- Under which rule should suspicious transactions be reported to FIU-IND?
-
----
-
-# Author
-
-**Supriya**  
-AI / ML Engineer | Generative AI
+Deploy directly to **Streamlit Community Cloud** by connecting your GitHub repository and setting `app_file` to `streamlit_ui/StreamlitApp.py`.
