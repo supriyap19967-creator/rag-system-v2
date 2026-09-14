@@ -52,77 +52,49 @@ Observability & Tracing
 This document provides an end-to-end, interview-grade architectural specification and system flowcharts for our **Enterprise Multimodal Conversational RAG System**. It covers the complete lifecycle of data ingestion, contextual query rewriting, deterministic intent routing, multi-agent collaboration, parallel multi-threaded retrieval, and 14-layer compliance gauntlet validation.
 
 ---
+# Enterprise Multimodal Conversational RAG System: Flowcharts & Architecture
+
+This document provides an end-to-end, interview-grade architectural specification and system flowcharts for our **Enterprise Multimodal Conversational RAG System**. It covers the complete lifecycle of data ingestion, contextual query rewriting, deterministic intent routing, multi-agent collaboration, parallel multi-threaded retrieval, and 14-layer compliance gauntlet validation.
+
+---
 
 ## 1. High-Level Architecture Overview (7-Layer Multimodal Pipeline)
 
 ```mermaid
-flowchart TD
-    subgraph ClientGateway ["Layer 1: Client Interface & Gateway Control"]
-        User(["👤 User Input Question"]) -->|"HTTP POST /query or WS"| StreamlitUI["Streamlit UI Container<br/>[StreamlitApp.py]"]
-        StreamlitUI -->|"Raw Question + Session ID"| Gateway["Gateway Guardrails<br/>[gateway_guardrails.py]"]
-        Gateway -->|"Layer 1-3 Pre-validation"| PIIRedact["PII Masking & History Redaction<br/>[gateway_guardrails.py]"]
+flowchart LR
+    subgraph Stage1 ["Stage 1: Client Gateway & Memory Context"]
+        direction TB
+        User(["👤 User Input Question"]) --> StreamlitUI["Streamlit UI Container<br/>[StreamlitApp.py]"]
+        StreamlitUI --> Gateway["Gateway Guardrails<br/>[gateway_guardrails.py]"]
+        Gateway --> MemoryManager["Multimodal Conversation Manager<br/>[conversation_manager.py]"]
+        MemoryManager <--> SessionStore[("Session Memory & Asset Registry<br/>LAST_ACTIVE_IMAGE_PATH")]
     end
 
-    subgraph MemoryContext ["Layer 2: Memory & Contextual Query Engine"]
-        PIIRedact -->|"Sanitized Query"| MemoryManager["Multimodal Conversation Manager<br/>[conversation_manager.py]"]
-        MemoryManager <-->|"Fetch Past 4 Turns & Active Assets"| SessionStore[("Session Memory & Active Asset Registry<br/>LAST_ACTIVE_IMAGE_PATH")]
-        MemoryManager -->|"Anaphora Rewritten Standalone Query"| ContextualizedQuery["Contextualized Query<br/>(e.g., 'above figure' -> 'Figure 4.2')"]
+    subgraph Stage2 ["Stage 2: Intent Routing & Multi-Agent Concurrency"]
+        direction TB
+        MemoryManager --> IntentRouter["Deterministic Intent Router<br/>[intent_router.py]"]
+        IntentRouter --> AgentOrchestrator["Supervisor Orchestrator Agent<br/>[agents/supervisor.py]"]
+        AgentOrchestrator --> ParallelPool["Parallel Thread Pool<br/>(ThreadPoolExecutor max_workers=3)"]
+        
+        ParallelPool --> QdrantHybrid["Worker 1: Qdrant Hybrid Search<br/>[retriever.py]"]
+        ParallelPool --> VisionStore["Worker 2: RAM Lookup & PIL<br/>[schemas_and_agent.py]"]
+        ParallelPool --> PandasEngine["Worker 3: Pandas Sandbox<br/>[structured_query.py]"]
     end
 
-    subgraph IntentRouting ["Layer 3: Intent Classification & Fast-Path Dispatcher"]
-        ContextualizedQuery -->|"Query String"| LRUCacheCheck{"LRU Semantic Cache Hit?<br/>[cache.py]"}
-        LRUCacheCheck -- "Yes (<10ms Hit)" --> StreamlitUI
-        LRUCacheCheck -- "No Cache Hit" --> IntentRouter["Deterministic Intent Router<br/>[intent_router.py]"]
+    subgraph Stage3 ["Stage 3: Answer Synthesis, Safety & Presentation"]
+        direction TB
+        QdrantHybrid & VisionStore & PandasEngine --> Synthesizer["LLM Synthesizer Engine<br/>[query_rag.py]"]
+        Synthesizer --> GauntletPhases["14-Layer Safety Gauntlet<br/>[compliance_safety.py]"]
         
-        IntentRouter -->|"Intent Decision + Allowed Tools"| IntentBranch{"Classified Intent"}
-        IntentBranch -- "VISUAL_SPECIFIC" --> VisionPath["Visual Specific Dispatcher<br/>(allow_pandas: False)"]
-        IntentBranch -- "CSV_ONLY" --> FastCSVPath["Direct Parametric CSV Fast-Path<br/>(<5ms Lookup)"]
-        IntentBranch -- "HYBRID / RESEARCH" --> AgentOrchestrator["Supervisor Orchestrator Agent<br/>[agents/supervisor.py]"]
-    end
-
-    subgraph MultiAgentCore ["Layer 4: Multi-Agent Collaboration Core"]
-        AgentOrchestrator -->|"Task Plan & Sub-queries"| AgentTarget{"Target Agent Routing"}
-        AgentTarget -- "RESEARCH_AGENT" --> ResearchAgent["Research Agent<br/>[agents/research.py]"]
-        AgentTarget -- "VISION_AGENT" --> VisionAgent["Vision Agent<br/>[agents/vision.py]"]
-        AgentTarget -- "DATA_AGENT" --> DataAgent["Data Agent<br/>[agents/data.py]"]
-        AgentTarget -- "DIRECT_LLM" --> DirectLLM["Direct LLM Generator<br/>[Llama-3.3-70B / Gemini]"]
-    end
-
-    subgraph ParallelEngine ["Layer 5: Parallel Multi-Threaded Data Retrieval & Engine"]
-        VisionPath & ResearchAgent & DataAgent & VisionAgent -->|"Concurrent Tasks"| ParallelPool["Parallel Worker Pool (ThreadPoolExecutor / asyncio)<br/>max_workers=3"]
-        
-        ParallelPool -->|"Worker 1: Dense + Sparse Query"| QdrantHybrid["Qdrant Hybrid Vector Search<br/>(BGE-M3 Dense + BM25 Sparse)<br/>[retriever.py]"]
-        QdrantHybrid --> Reranker["Cross-Encoder Reranker<br/>(BGE-Reranker-v2-m3)<br/>[reranker.py]"]
-        
-        ParallelPool -->|"Worker 2: RAM Lookup / PIL Downscale"| VisionStore["In-Memory RAM Transcription Store & VLM<br/>(_IN_MEMORY_TRANSCRIPTION_CACHE)<br/>[schemas_and_agent.py]"]
-        
-        ParallelPool -->|"Worker 3: Pandas Sandbox"| PandasEngine["Pandas Sandbox Execution<br/>(gdp_df / co2_df DataFrames)<br/>[structured_query.py]"]
-    end
-
-    subgraph SynthesisValidation ["Layer 6: Answer Synthesis & 14-Phase Compliance Gauntlet"]
-        Reranker & VisionStore & PandasEngine & FastCSVPath & DirectLLM -->|"Top-3 Chunks + Vision Table + CSV Data"| Synthesizer["LLM Synthesizer Engine<br/>[llm.py / query_rag.py]"]
-        Synthesizer -->|"Draft Payload"| ValidatorAgent["Validator Agent & Gauntlet Gatekeeper<br/>[agents/validation.py]"]
-        
-        ValidatorAgent -->|"Payload + Context Chunks"| GauntletPhases["14-Layer Safety Gauntlet Evaluator<br/>[compliance_safety.py]"]
-        
-        subgraph GauntletPhases ["3-Phase Compliance Guardrail Pipeline"]
-            Phase1["Phase 1: Input Security & Pre-Sanitization<br/>• Prompt Injection Filter<br/>• PII Redaction & Masking<br/>• Toxicity & System Leak Scanner"]
-            Phase2["Phase 2: Contextual & Structural Alignment<br/>• Asset Path & File Check<br/>• Category & Legend Disambiguator<br/>• Structural JSON Schema Validation"]
-            Phase3["Phase 3: Fidelity & Hallucination Defense<br/>• Line-Level Faithfulness Evaluator<br/>• Comma & Numeric Whitelist Normalizer<br/>• Safe Fallback Interceptor"]
-            
-            Phase1 --> Phase2 --> Phase3
+        subgraph GauntletPhases ["3 Compliance Guardrail Phases"]
+            Phase1["Phase 1: Input Security"] --> Phase2["Phase 2: Alignment"] --> Phase3["Phase 3: Fidelity"]
         end
         
-        Phase3 -->|"Validation Status"| CheckGauntlet{"Gauntlet Cleared?"}
-        CheckGauntlet -- "Passed (Score >=0.90)" --> FinalPayload["Cleared Payload + Citation Card"]
-        CheckGauntlet -- "Failed / Violation" --> FallbackHandler["Deterministic Safe Fallback Handler"]
+        GauntletPhases --> Formatter["UI Formatter & Telemetry<br/>[StreamlitApp.py]"]
+        Formatter --> StreamlitUI
     end
 
-    subgraph Presentation ["Layer 7: UI Presentation & Telemetry"]
-        FinalPayload & FallbackHandler -->|"Markdown Narrative + Table Cards"| Formatter["Collapsible Table & UI Formatter<br/>[StreamlitApp.py]"]
-        Formatter -->|"Rendered HTML/Markdown + Asset Image"| StreamlitUI
-        Formatter -->|"Async Background Log (Fire & Forget)"| Telemetry["Langfuse & OTEL Tracing Telemetry<br/>[StreamlitApp.py]"]
-    end
+    Stage1 --> Stage2 --> Stage3
 ```
 
 ---
@@ -172,41 +144,26 @@ To ensure zero visual clutter in the high-level architecture diagram while provi
 13. **Layer 13: Hallucination Interceptor & Refinement**: Flags ungrounded quantitative claims and triggers self-correction loops.
 14. **Layer 14: Deterministic Safe Fallback Interceptor**: Emits a clean, non-crashing fallback explanation when confidence thresholds fail.
 
-
 ---
 
 ## 2. Deep Dive: Ingestion Pipeline
 
-The ingestion pipeline is designed to handle multimodal and structured documents (PDFs, CSVs) to extract textual and visual elements (tables, charts, figures) accurately.
-
 ```mermaid
-flowchart TD
+flowchart LR
     Start([Start Ingestion]) --> CheckType{Document Type}
     
-    %% CSV processing
-    CheckType -- CSV File --> CSVProc[Parse rows & Metadata]
-    CSVProc --> CSVChunk[Token-bounded Row Chunking]
+    CheckType -- CSV File --> CSVProc["Parse CSV Rows & Token Chunking"]
+    CheckType -- PDF File --> PDFProc["PDF Layout & Visual Extraction<br/>[Docling Parser]"]
     
-    %% PDF processing
-    CheckType -- PDF File --> PDFProc[PDF Visual & Text Extraction]
-    PDFProc --> Docling[Docling Layout Analysis]
-    PDFProc --> LayoutExtract[Extract Images, Charts & Tables]
-    LayoutExtract --> Cropper[Generate High-Quality Visual Crops]
+    PDFProc --> Cropper["Generate High-Res Visual Crops<br/>[pdf_visual_extraction.py]"]
     
-    %% Chunking
-    CSVChunk --> ChunkCombine[Unify Textual & Multimodal Chunks]
-    Docling --> ChunkCombine
-    Cropper --> ChunkCombine
+    CSVProc & PDFProc & Cropper --> ChunkCombine["Unify Chunks & Generate Metadata"]
+    ChunkCombine --> SafetyVetting["Compliance Vetting & Structural Safety"]
     
-    %% Enrichment and Invariants
-    ChunkCombine --> MetadataGen[Generate Page, Chapter & Source Metadata]
-    MetadataGen --> SafetyVetting[Compliance Vetting & Structural Safety Verification]
+    SafetyVetting --> DenseVector["Dense Embeddings (BGE-M3)"]
+    SafetyVetting --> SparseVector["Sparse Tokenizer (BM25)"]
     
-    %% Vectorizing & Storage
-    SafetyVetting --> DenseVector[Dense Embeddings: BGE-M3]
-    SafetyVetting --> SparseVector[Sparse Embeddings: BM25 Tokenizer]
-    
-    DenseVector & SparseVector --> UploadQdrant[(Upsert to Qdrant Collection)]
+    DenseVector & SparseVector --> UploadQdrant[("Upsert to Qdrant Collection<br/>[deploy_to_qdrant.py]")]
     UploadQdrant --> EndIngest([Ingestion Complete])
 ```
 
@@ -218,44 +175,36 @@ flowchart TD
 ## 3. Deep Dive: Multi-Turn Execution Sequence & Follow-up Resolution
 
 ```mermaid
-flowchart TD
-    subgraph Step1 ["Step 1: User Follow-up Input"]
-        Input["👤 User Query: 'in above figure what are the values of low income?'"]
+flowchart LR
+    subgraph Col1 ["Phase 1: Ingress & Rewriting"]
+        direction TB
+        Input["👤 User Follow-up Query<br/>'in above figure what are values of low income?'"]
+        Input --> ContextManager["Multimodal Conversation Manager<br/>[conversation_manager.py]"]
+        SessionStore[("Active Session Memory<br/>LAST_ACTIVE_TARGET_ID = 'Figure 4.2'")] <--> ContextManager
+        ContextManager --> Rewritten["Rewritten Standalone Query:<br/>'in Figure 4.2 what are values of low income?'"]
     end
 
-    subgraph Step2 ["Step 2: Contextual Query Rewriting [conversation_manager.py]"]
-        Input --> ContextManager["Multimodal Conversation Manager"]
-        SessionStore[("Active Session Store<br/>LAST_ACTIVE_TARGET_ID = 'Figure 4.2'<br/>LAST_ACTIVE_IMAGE_PATH = 'assets/figure_4_2.png'")] <--> ContextManager
-        ContextManager --> Rewritten["Rewritten Standalone Query:<br/>'in Figure 4.2 what are the values of low income?'"]
+    subgraph Col2 ["Phase 2: Intent & Parallel Retrieval"]
+        direction TB
+        Rewritten --> Router["Intent Router: VISUAL_SPECIFIC<br/>[intent_router.py]"]
+        Router --> WorkerPool["Parallel Thread Pool Executor (max_workers=3)"]
+        WorkerPool --> QdrantWorker["Worker 1: Qdrant Vector Search"]
+        WorkerPool --> RAMWorker["Worker 2: RAM Table Lookup (<10ms)"]
     end
 
-    subgraph Step3 ["Step 3: Intent Classification [intent_router.py]"]
-        Rewritten --> Router["Deterministic Intent Router"]
-        Router --> IntentResult["Classified Intent: VISUAL_SPECIFIC<br/>(allow_pandas: False, allow_vision: True)"]
+    subgraph Col3 ["Phase 3: Synthesis & Compliance Gauntlet"]
+        direction TB
+        QdrantWorker & RAMWorker --> Synthesizer["LLM Synthesizer Engine<br/>[query_rag.py]"]
+        Synthesizer --> DraftAnswer["Draft Answer:<br/>'Low-income economies: $1,135 or less'"]
+        DraftAnswer --> SafetyGauntlet["14-Layer Compliance Safety Evaluator<br/>Score = 0.95 (Cleared)"]
     end
 
-    subgraph Step4 ["Step 4: Parallel Multi-Threaded Retrieval Engine [ThreadPoolExecutor max_workers=3]"]
-        IntentResult --> WorkerPool["Parallel Worker Dispatcher"]
-        
-        WorkerPool -->|"Worker 1"| QdrantWorker["Qdrant Vector DB Search<br/>• Metadata Filter: asset_id='4.2'<br/>• Returns text chunks & caption context"]
-        
-        WorkerPool -->|"Worker 2"| RAMWorker["In-Memory RAM Store Lookup<br/>• Key: _IN_MEMORY_TRANSCRIPTION_CACHE['figure_4_2']<br/>• Instant Markdown Table Retrieval (<10ms)"]
+    subgraph Col4 ["Phase 4: Rendered UI Response"]
+        direction TB
+        SafetyGauntlet --> UIResponse["Streamlit UI Card<br/>• Markdown Answer<br/>• Figure 4.2 Crop<br/>• Citations Card"]
     end
 
-    subgraph Step5 ["Step 5: Answer Synthesis [query_rag.py / llm.py]"]
-        QdrantWorker & RAMWorker --> Synthesizer["LLM Synthesizer Engine"]
-        Synthesizer --> DraftAnswer["Draft Answer:<br/>'Low-income economies are defined as $1,135 or less.'"]
-    end
-
-    subgraph Step6 ["Step 6: Compliance Safety Gauntlet [compliance_safety.py]"]
-        DraftAnswer --> SafetyGauntlet["14-Layer Compliance Safety Evaluator"]
-        SafetyGauntlet --> FaithfulnessCheck["Line-Level Faithfulness Evaluator<br/>• Sentence-level semantic similarity check<br/>• Comma-normalized token overlap check"]
-        FaithfulnessCheck --> ClearedScore["Validation Passed: Faithfulness Score = 0.95 (Cleared)"]
-    end
-
-    subgraph Step7 ["Step 7: Rendered UI Response [StreamlitApp.py]"]
-        ClearedScore --> UIResponse["Streamlit UI Card<br/>• Markdown Answer Narrative<br/>• High-Res Figure 4.2 Image Crop<br/>• Citation Source Card"]
-    end
+    Col1 --> Col2 --> Col3 --> Col4
 ```
 
 ### Multi-Turn Execution Step Walkthrough
@@ -270,11 +219,6 @@ flowchart TD
 | **6** | Safety Gauntlet | [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) | Draft Answer + Source Chunks | Faithfulness Score = 0.95 (Cleared) | Sentence-level max similarity and comma-normalized token overlap check. |
 | **7** | Streamlit UI | [StreamlitApp.py](file:///C:/Users/supri/recovered-rag-project/streamlit_ui/StreamlitApp.py) | Cleared Payload | Rendered Markdown + Crop + Sources | Unconditional session state saving of active visual asset path. |
 
-- **Guardrails**: Input and gateway guardrails are processed via [gateway_guardrails.py](file:///C:/Users/supri/recovered-rag-project/gateway_guardrails.py) and safety filters in [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py).
-- **Retrieval & Reranking**: Conducted by [retriever.py](file:///C:/Users/supri/recovered-rag-project/app/retriever.py) and [reranker.py](file:///C:/Users/supri/recovered-rag-project/app/reranker.py).
-- **Generation & Fallbacks**: Synthesized in [query_rag.py](file:///C:/Users/supri/recovered-rag-project/query_rag.py) with [llamaindex_brain.py](file:///C:/Users/supri/recovered-rag-project/app/llamaindex_brain.py).
-
-```
 ---
 
 ## 2. Key Components
