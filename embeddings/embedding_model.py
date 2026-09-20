@@ -43,10 +43,16 @@ load_dotenv()
 
 logger = logging.getLogger(__name__)
 
-# Initialize local SentenceTransformer model
-logger.info("Initializing local SentenceTransformer('all-MiniLM-L6-v2') inside embeddings/embedding_model.py...")
-_local_model = SentenceTransformer('all-MiniLM-L6-v2')
-logger.info("Local SentenceTransformer model loaded successfully.")
+# Lazy-loaded local SentenceTransformer model
+_local_model = None
+
+def get_local_model():
+    global _local_model
+    if _local_model is None:
+        logger.info("Initializing local SentenceTransformer('all-MiniLM-L6-v2') inside embeddings/embedding_model.py...")
+        _local_model = SentenceTransformer('all-MiniLM-L6-v2')
+        logger.info("Local SentenceTransformer model loaded successfully.")
+    return _local_model
 
 
 @dataclass(frozen=True, slots=True)
@@ -83,12 +89,14 @@ class BgeM3EmbeddingModel:
             return []
         
         # Encode texts
-        embeddings = _local_model.encode(clean_texts)
+        model = get_local_model()
+        embeddings = model.encode(clean_texts)
         return [[float(x) for x in emb.tolist()] for emb in embeddings]
 
     def embed_query(self, query: str) -> list[float]:
         """Embed a conversational retrieval query into the same space."""
-        vector = _local_model.encode(query).tolist()
+        model = get_local_model()
+        vector = model.encode(query).tolist()
         return [float(x) for x in vector]
 
     async def aembed_documents(self, texts: Sequence[str], batch_size: int | None = None) -> list[list[float]]:
