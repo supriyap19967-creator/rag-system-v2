@@ -405,24 +405,38 @@ def main():
         # Get precomputed snapped bbox
         x0, y0, x1, y1 = cand["snapped_bbox"]
 
+        # Apply a universal +15% horizontal and +20% vertical padding margin around bounding box
+        w = float(x1 - x0)
+        h = float(y1 - y0)
+        pad_x = w * 0.15
+        pad_y = h * 0.20
+        
+        x0 = x0 - pad_x
+        y0 = y0 - pad_y
+        x1 = x1 + pad_x
+        y1 = y1 + pad_y
+
         # Enforce page rect limits
         page_rect = page.rect
-        x0 = max(0, min(x0, page_rect.width))
-        y0 = max(0, min(y0, page_rect.height))
-        x1 = max(0, min(x1, page_rect.width))
-        y1 = max(0, min(y1, page_rect.height))
+        x0 = max(0.0, min(x0, float(page_rect.width)))
+        y0 = max(0.0, min(y0, float(page_rect.height)))
+        x1 = max(0.0, min(x1, float(page_rect.width)))
+        y1 = max(0.0, min(y1, float(page_rect.height)))
 
         # Extract proximity context
         nearby_context = extract_proximity_context(page, (x0, y0, x1, y1), max_words=300)
 
+        # Scale factor for 300 DPI
+        scale_factor = 300.0 / 72.0
+
         if x1 > x0 + 5 and y1 > y0 + 5:
             rect = fitz.Rect(x0, y0, x1, y1)
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=rect, alpha=False)
+            pix = page.get_pixmap(matrix=fitz.Matrix(scale_factor, scale_factor), clip=rect, alpha=False)
             pix.save(str(image_path))
         else:
             # Fallback
             rect = page.rect
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=rect, alpha=False)
+            pix = page.get_pixmap(matrix=fitz.Matrix(scale_factor, scale_factor), clip=rect, alpha=False)
             pix.save(str(image_path))
 
         # Determine anchor_text
@@ -455,10 +469,11 @@ def main():
             prompt_vision = (
                 "You are a precise technical document parser. Your task is to extract ALL information from the provided image and explain it entirely in clean, well-formed paragraphs and comprehensive sentences. You must NOT output lazy labels, raw numbers, dry axis lists, or markdown grid tables.\n\n"
                 "Follow these strict formatting rules:\n"
-                "1. FOR CHARTS AND VISUALS: Synthesize the data into a narrative explanation. Explain what the visual represents, the relationship between the trends, what the X and Y axes signify contextually, and provide a thorough, written breakdown of key findings, conclusions, and data points shown in clean paragraph form.\n"
+                "1. FOR CHARTS AND VISUALS: Synthesize the data into a narrative explanation. Explain what the visual represents, the relationship between the trends, what the X and Y axes signify contextually, and provide a thorough, written breakdown of key findings, conclusions, and data points shown in clean paragraph form. STRICT AXIS ROLE DEFINITIONS: X-axis ALWAYS represents domain categories, years, time periods, or entity names. Y-axis ALWAYS represents measured metric values, percentages, ratios, or adoption scores. NEVER blend X-axis and Y-axis ranges into a single phrase (e.g. NEVER write 'from 0.6 to 2014'). State X-axis domain ranges strictly in domain units (e.g., 'Years 2000 to 2014') and Y-axis metric ranges strictly in metric units (e.g., 'Adoption score 0.6 to 1.2').\n"
                 "2. FOR TABLES: Do NOT output a markdown grid or structured table. Instead, translate the tabular data into a highly detailed textual narrative, explaining the rows, column relationships, and values in structured paragraph form.\n"
                 "3. Exhaustively transcribe all titles, subtitles, headers, data labels, and footnotes verbatim, but present them in clean, well-formed paragraphs and complete sentences."
             )
+
 
             gemini_success = False
             for attempt in range(1, 10):
@@ -558,11 +573,16 @@ def main():
     # Generate Embeddings & Construct Qdrant points
     points = []
     logger.info("Generating embeddings and constructing Qdrant payload points...")
+    import numpy as np
     for idx, item in enumerate(processed_points):
         text_payload = f"Caption: {item['caption_text']}\n\nAnchor Data:\n{item['anchor_text']}"
         if item.get("nearby_context"):
             text_payload += f"\n\nNearby Context:\n{item['nearby_context']}"
-        dense_vector = embed_model.encode(text_payload, convert_to_numpy=True).tolist()
+        dense_arr = embed_model.encode(text_payload, convert_to_numpy=True)
+        if np.isnan(dense_arr).any():
+            logger.warning(f"Vector contains NaN for item {item.get('asset_id')}. Sanitizing.")
+            dense_arr = np.nan_to_num(dense_arr, nan=0.0)
+        dense_vector = dense_arr.tolist()
 
         # METADATA DICTIONARY SCHEMA STRUCTURE
         payload = {
@@ -579,6 +599,9 @@ def main():
             "metadata": {
                 "asset_type": item["asset_type"],
                 "asset_id": item["asset_id"],
+                "figure_id": item["asset_id"],
+                "entity_id": f"{'Figure' if item['asset_type'] == 'figure' else 'Table'}_{item['asset_id'].replace('.', '_')}",
+                "entity_ids": [f"{'Figure' if item['asset_type'] == 'figure' else 'Table'}_{item['asset_id'].replace('.', '_')}"],
                 "caption_text": item["caption_text"],
                 "anchor_text": item["anchor_text"],
                 "image_path": item["image_path"],

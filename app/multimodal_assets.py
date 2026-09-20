@@ -14,11 +14,11 @@ logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 APPROVED_ASSET_DIRS = (
+    PROJECT_ROOT / "extracted_charts",
     PROJECT_ROOT / "assets" / "extracted_tables",
     PROJECT_ROOT / "assets" / "extracted_images",
     PROJECT_ROOT / "Data" / "Pdf",
     PROJECT_ROOT / "Data" / "csv",
-    PROJECT_ROOT / "extracted_charts",
     PROJECT_ROOT / "extracted_images",
 )
 TABLE_EXTENSIONS = {".csv", ".xlsx"}
@@ -180,8 +180,9 @@ def _asset_type_for_path(path: Path) -> str:
     return "unknown"
 
 
-def build_asset_registry(root: Path | None = None) -> list[AssetRecord]:
-    root = (root or PROJECT_ROOT).resolve()
+@lru_cache(maxsize=16)
+def _build_asset_registry_cached(root_str: str) -> tuple[AssetRecord, ...]:
+    root = Path(root_str).resolve()
     records: list[AssetRecord] = []
     for asset_dir in APPROVED_ASSET_DIRS:
         directory = asset_dir if asset_dir.is_absolute() else root / asset_dir
@@ -212,7 +213,46 @@ def build_asset_registry(root: Path | None = None) -> list[AssetRecord]:
                     file_extension=suffix,
                 )
             )
+    return tuple(records)
+
+
+def build_asset_registry(root: Path | None = None) -> list[AssetRecord]:
+    r = (root or PROJECT_ROOT).resolve()
+    records = list(_build_asset_registry_cached(str(r)))
+    # Warm up global fast registry lookup map
+    for rec in records:
+        if rec.entity_id:
+            _GLOBAL_ASSET_REGISTRY_MAP[rec.entity_id.lower()] = rec
+            _GLOBAL_ASSET_REGISTRY_MAP[rec.source_file.lower()] = rec
     return records
+
+
+_GLOBAL_ASSET_REGISTRY_MAP: dict[str, AssetRecord] = {}
+
+
+def get_asset_record_fast(entity_id: str) -> AssetRecord | None:
+    """Instant <0.01ms lookup for AssetRecord by entity_id or filename without disk traversal."""
+    if not _GLOBAL_ASSET_REGISTRY_MAP:
+        build_asset_registry()
+    norm_id = normalize_entity_id(entity_id).lower()
+    if norm_id in _GLOBAL_ASSET_REGISTRY_MAP:
+        return _GLOBAL_ASSET_REGISTRY_MAP[norm_id]
+    
+    clean_key = entity_id.strip().lower()
+    if clean_key in _GLOBAL_ASSET_REGISTRY_MAP:
+        return _GLOBAL_ASSET_REGISTRY_MAP[clean_key]
+        
+    for key, rec in _GLOBAL_ASSET_REGISTRY_MAP.items():
+        if norm_id in key or clean_key in key:
+            return rec
+    return None
+
+
+def register_asset_record_fast(asset_record: AssetRecord) -> None:
+    """Dynamically register a newly created asset into the in-memory map without cache wipe."""
+    if asset_record and asset_record.entity_id:
+        _GLOBAL_ASSET_REGISTRY_MAP[asset_record.entity_id.lower()] = asset_record
+        _GLOBAL_ASSET_REGISTRY_MAP[asset_record.source_file.lower()] = asset_record
 
 
 @lru_cache(maxsize=4)
@@ -643,13 +683,31 @@ from pathlib import Path
 
 def _resolve_existing_image_path(input_path: str) -> str | None:
     # 1. Direct path check
-    if os.path.exists(input_path):
+    if os.path.exists(input_path) and not input_path.endswith(".raw.png"):
         return input_path
+
         
     # 2. Extract raw filename
     filename = Path(input_path).name
     norm_id = normalize_entity_id(filename)
-    
+
+    # 2b. Direct check in APPROVED_ASSET_DIRS for exact filename or variant matches
+    fn_candidates = [
+        filename,
+        f"{filename}.png" if not filename.endswith((".png", ".jpg", ".jpeg")) else filename,
+        filename.replace('.', '_'),
+        filename.replace('_', '.'),
+        f"{filename.replace('.', '_')}.png",
+        f"{filename.replace('_', '.')}.png",
+    ]
+    for dir_path in APPROVED_ASSET_DIRS:
+        p_dir = Path(dir_path)
+        if p_dir.exists():
+            for fn in fn_candidates:
+                candidate_path = p_dir / fn
+                if candidate_path.exists() and not fn.endswith(".raw.png"):
+                    return str(candidate_path.resolve().as_posix())
+
     # Custom sequential table mappings
     sequential_mappings = {
         "img_04_02": "page_208_Figure_4.2",
@@ -663,44 +721,59 @@ def _resolve_existing_image_path(input_path: str) -> str | None:
         "table_32": "page154_table2",
     }
     for k, v in sequential_mappings.items():
-        if k in norm_id:
+        if k in norm_id.lower().replace(".", "_"):
             norm_id = v
             break
 
-    # Helper to check matching by digits and category
-    def match_by_digits_and_category(req_filename: str, candidate_filename: str) -> bool:
-        req_norm = req_filename.lower()
-        cand_norm = candidate_filename.lower()
-        is_req_table = "table" in req_norm or "tab" in req_norm
-        is_cand_table = "table" in cand_norm or "tab" in cand_norm
-        if is_req_table != is_cand_table:
-            return False
-        import re
-        req_digits = [str(int(x)) for x in re.findall(r"\d+", req_norm)]
-        cand_digits = [str(int(x)) for x in re.findall(r"\d+", cand_norm)]
-        if not req_digits or not cand_digits:
-            return False
-        if len(cand_digits) >= len(req_digits):
-            if cand_digits[-len(req_digits):] == req_digits:
-                return True
-        return False
-    
-    # 3. Look inside allowed directories with fuzzy and digit sequence matching
+    # 3. Look inside allowed directories using candidate scoring
+    best_match = None
+    best_score = -100
+    import re
+    input_lower = input_path.lower()
+    input_digits = re.findall(r"\d+", input_lower)
+    input_is_table = "table" in input_lower or "tab" in input_lower
+    input_is_fig = "figure" in input_lower or "fig" in input_lower
+
     for dir_path in APPROVED_ASSET_DIRS:
         p_dir = Path(dir_path)
         if p_dir.exists():
-            # First pass: try exact normalized substring matching
             for f in os.listdir(p_dir):
-                f_norm = normalize_entity_id(f)
-                if norm_id in f_norm or f_norm in norm_id:
-                    full_p = p_dir / f
-                    if full_p.exists():
-                        return str(full_p.resolve().as_posix())
-            # Second pass: try category & digit sequence matching
-            for f in os.listdir(p_dir):
-                if match_by_digits_and_category(filename, f):
-                    full_p = p_dir / f
-                    if full_p.exists():
-                        return str(full_p.resolve().as_posix())
-            
+                if f.endswith(".pdf"):
+                    continue
+                cand_lower = f.lower()
+                cand_digits = re.findall(r"\d+", cand_lower)
+                cand_is_table = "table" in cand_lower or "tab" in cand_lower
+                cand_is_fig = "figure" in cand_lower or "fig" in cand_lower
+
+                score = 0
+                if f.endswith(".raw.png"):
+                    score -= 200  # Penalize raw uncropped files
+
+                if input_is_fig and cand_is_fig:
+                    score += 50
+                elif input_is_table and cand_is_table:
+                    score += 50
+                elif input_is_fig and cand_is_table:
+                    score -= 50
+                elif input_is_table and cand_is_fig:
+                    score -= 50
+
+                if input_digits:
+                    if len(input_digits) >= 2 and len(cand_digits) >= 2:
+                        if input_digits[-2:] == cand_digits[-2:]:
+                            score += 50
+                    elif len(input_digits) == 1 and cand_digits and input_digits[0] == cand_digits[-1]:
+                        score += 30
+
+                if norm_id in normalize_entity_id(f):
+                    score += 40
+
+                if score > best_score:
+                    best_score = score
+                    best_match = str((p_dir / f).resolve().as_posix())
+
+    if best_match and best_score > 0:
+        return best_match
+
     return None
+

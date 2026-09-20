@@ -39,3 +39,6 @@ transformers
 unstructured[pdf]
 unstructured[csv]
 uvicorn
+celery
+redis
+ragas==0.4.3

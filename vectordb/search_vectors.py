@@ -94,6 +94,13 @@ class QdrantSearcher:
             query_kwargs["using"] = "dense"
         response = self.client.query_points(**query_kwargs)
         points = response.points or []
+        
+        logger.info("QdrantSearcher retrieved %s points", len(points))
+        print(f"DEBUG: QdrantSearcher retrieved {len(points)} points.")
+        for idx, pt in enumerate(points, start=1):
+            logger.info("  [%s] Point ID: %s, Score: %s", idx, pt.id, pt.score)
+            print(f"  [{idx}] Point ID: {pt.id}, Score: {pt.score}")
+            
         return [self._to_result(point) for point in points]
 
     def _has_named_vector(self, vector_name: str) -> bool:

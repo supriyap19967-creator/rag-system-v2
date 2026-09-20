@@ -14,6 +14,16 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+os.environ.setdefault("HF_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("FASTEMBED_LOCAL_FILES_ONLY", "true")
+
+try:
+    import fastembed.common.model_management as _fe_mm
+    _fe_mm.download_files_from_huggingface = lambda *args, **kwargs: []
+except Exception:
+    pass
+
 logger = logging.getLogger(__name__)
 
 DEFAULT_BM25_MODEL_NAME = os.getenv("FASTEMBED_BM25_MODEL", "Qdrant/bm25")
@@ -171,6 +181,17 @@ class SafeSparseEncoder:
     def using_fallback(self) -> bool:
         return self._fallback
 
+    def embed(self, texts: Sequence[str] | str) -> list[Any]:
+        if isinstance(texts, str):
+            texts = [texts]
+        if self._fallback or self._model is None:
+            return [local_sparse_vector(text) for text in texts]
+        if hasattr(self._model, "embed"):
+            return list(self._model.embed(list(texts)))
+        if hasattr(self._model, "passage_embed"):
+            return list(self._model.passage_embed(list(texts)))
+        return [self.encode_query(text) for text in texts]
+
     def encode_query(self, text: str) -> Any:
         if self._fallback:
             return local_sparse_vector(text)
@@ -196,3 +217,4 @@ class SafeSparseEncoder:
                 )
             )
         return vectors
+

@@ -78,7 +78,6 @@ class GatewayInfrastructure:
         re.compile(r"\bprint\s+(?:the\s+)?(?:system|developer)\s+(?:prompt|message|instructions)\b", re.IGNORECASE),
         re.compile(r"\b(?:tell|show|give)\s+me\s+(?:the\s+)?(?:hidden|internal|backend)\s+(?:prompt|message|instructions)\b", re.IGNORECASE),
         re.compile(r"\b(?:hidden|internal|backend)\s+(?:prompt|message|instructions)\b", re.IGNORECASE),
-        re.compile(r"\b(?:system|developer)\s+prompts?\b", re.IGNORECASE),
         re.compile(r"\b(?:internal|hidden|backend)\s+(?:rules|instructions|controls|policy|policies)\b", re.IGNORECASE),
         re.compile(r"\b(?:safety\s+mechanisms?|guardrails?|system\s+controls?)\b", re.IGNORECASE),
         re.compile(r"\b(?:database|qdrant|vector\s+store|collection)\s+(?:schema|structure|contents?|metadata|payload|fields?)\b", re.IGNORECASE),

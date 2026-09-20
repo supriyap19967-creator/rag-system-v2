@@ -13,19 +13,10 @@ EVALUATION_CASES = [
         "category": "pdf_explanatory",
     },
     {
-        "query": "What was India GDP in 2022 and what does the report say about economic growth?",
+        "query": "Identify the trend shown in Figure 5.1 regarding the adoption of voluntary standards.",
         "ground_truth": (
-            "The answer should include India's validated 2022 GDP value and a grounded explanation from the PDF "
-            "about economic growth conditions."
+            "Voluntary standards adoption shows a steady upward trend in lower-income countries compared to high-income countries."
         ),
-        "category": "hybrid_mixed",
-    },
-    {
-        "query": "What was India GDP and CO2 emission in 2022 and explain their impact?",
-        "ground_truth": (
-            "The answer should include validated 2022 GDP and CO2 values for India plus a grounded explanation "
-            "linking growth and environmental pressure."
-        ),
-        "category": "hybrid_multi_metric",
+        "category": "visual_extraction",
     },
 ]

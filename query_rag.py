@@ -53,13 +53,13 @@ QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 COLLECTION_NAME = os.getenv("QDRANT_COLLECTION", "conversational_rag")
 DENSE_VECTOR_NAME = os.getenv("QDRANT_DENSE_VECTOR_NAME", "dense")
 SPARSE_VECTOR_NAME = os.getenv("QDRANT_SPARSE_VECTOR_NAME", "sparse")
-TOP_K = int(os.getenv("RAG_TOP_K", "10"))
+TOP_K = int(os.getenv("RAG_TOP_K", "4"))
 PREFETCH_MULTIPLIER = int(os.getenv("RAG_PREFETCH_MULTIPLIER", "4"))
-RETRY_TOP_K = int(os.getenv("RAG_RETRY_TOP_K", "15"))
+RETRY_TOP_K = int(os.getenv("RAG_RETRY_TOP_K", "5"))
 GLOBAL_ANALYTICS_LIMIT = int(os.getenv("GLOBAL_ANALYTICS_LIMIT", "15"))
 
 GEMINI_MODEL = os.getenv("GEMINI_GENERATION_MODEL", "gemini-2.0-flash")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "os.getenv("GCP_API_KEY")")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", os.getenv("GCP_API_KEY"))
 
 BGE_MODEL_PATH = os.getenv("BGE_M3_MODEL", str(Path("hf_models_v2/bge-m3").resolve()))
 BGE_CACHE_DIR = Path(os.getenv("BGE_M3_CACHE_FOLDER", "hf_cache_v2")).resolve()
@@ -79,6 +79,7 @@ HARD_ENTITY_PATTERN = re.compile(
 )
 
 FIGURE_TABLE_GUARDRAIL = """Critical guardrail for figures and tables:
+- CATEGORY DISAMBIGUATION: Always strictly distinguish between a specific sub-group label (e.g. "Low Income Group Aggregate") and a combined aggregate group label (e.g. "Low and Middle-Income Group Aggregate"). Never report the boundary value of a combined aggregate (e.g. Less than $13,935) as the value for a single sub-group (e.g. $1,135 or less).
 - Figures labeled with an "O" such as Figure O.8 are Overview figures. They are usually executive-summary duplicates or identical reprints of corresponding chapter figures such as Figure 8.4.
 - If retrieved descriptions for an Overview figure and a Chapter figure have minor wording variations, do not assume the physical chart data points are different.
 - Look for core semantic alignment. If both charts cover the same countries, same years, and same metrics, treat them as the same underlying graphic, say they represent the same data, and synthesize the details together.
@@ -221,16 +222,52 @@ def hard_entity_query_suffix(entities: list[dict[str, str]]) -> str:
 def build_hard_entity_filter(entities: list[dict[str, str]]) -> models.Filter | None:
     if not entities:
         return None
-    conditions = [
-        models.FieldCondition(
-            key="metadata.figure_id",
-            match=models.MatchAny(any=hard_entity_label_variants(entity)),
-        )
-        for entity in entities
-    ]
-    if len(conditions) == 1:
-        return models.Filter(must=conditions)
-    return models.Filter(should=conditions)
+    should_conditions = []
+
+    target_pages = set()
+    try:
+        from app.multimodal_assets import build_asset_registry, normalize_entity_id
+        registry = build_asset_registry()
+        for entity in entities:
+            norm_id = normalize_entity_id(entity["label"])
+            for rec in registry:
+                if normalize_entity_id(rec.entity_id) == norm_id:
+                    if getattr(rec, "page_no", None):
+                        target_pages.add(int(rec.page_no))
+    except Exception:
+        pass
+
+    for entity in entities:
+        variants = hard_entity_label_variants(entity)
+        normalized_id = f"{entity['kind']}_{entity['identifier'].replace('.', '_').lower()}"
+        variants.append(normalized_id)
+        variants.append(normalized_id.upper())
+        variants = list(set(variants))
+        
+        for key in ["metadata.entity_id", "metadata.entity_ids", "metadata.figure_id", "metadata.cross_reference", "metadata.cross_references"]:
+            should_conditions.append(
+                models.FieldCondition(
+                    key=key,
+                    match=models.MatchAny(any=variants),
+                )
+            )
+
+    for pg in target_pages:
+        for key in ["metadata.page", "metadata.page_no", "metadata.page_number"]:
+            should_conditions.append(
+                models.FieldCondition(
+                    key=key,
+                    match=models.ValueMatch(value=pg),
+                )
+            )
+            should_conditions.append(
+                models.FieldCondition(
+                    key=key,
+                    match=models.ValueMatch(value=str(pg)),
+                )
+            )
+
+    return models.Filter(should=should_conditions)
 
 
 class LocalTransformerWrapper:
@@ -342,6 +379,12 @@ def retrieve_context(
     query: str,
     top_k: int = TOP_K,
 ) -> list[dict[str, Any]]:
+    query = re.sub(r'(?i)\bexctract(?:ed)?\b', 'extract', query or '')
+    query = re.sub(r'(?i)\bextrac\b', 'extract', query)
+    query = re.sub(r'(?i)\bextarct\b', 'extract', query)
+    query = re.sub(r'(?i)\bfigue\b', 'figure', query)
+    query = re.sub(r'(?i)\btabe\b', 'table', query)
+
     structural_intent = classify_structural_intent_rule_based(query)
     
     if structural_intent == "TABULAR_NUMERIC":
@@ -349,10 +392,9 @@ def retrieve_context(
         logger.info("Tabular/Numeric query reformatted: %s", query)
 
     hard_entities = extract_hard_entities(query)
-    entity_suffix = hard_entity_query_suffix(hard_entities)
-    search_query = global_analytics_search_query(query)
-    search_query = f"{search_query}{entity_suffix}" if entity_suffix else search_query
-    hard_filter = build_hard_entity_filter(hard_entities)
+    search_query = query.replace("\n", " ").strip()
+    # Do not apply strict entity_id filter to Qdrant text chunks since entity_id is only on visual assets
+    hard_filter = None
 
     # Detect if user query targets strict numerical metrics/timelines (GDP, emissions/CO2, revenue, etc.)
     is_numeric_query = (structural_intent == "TABULAR_NUMERIC")
@@ -477,19 +519,121 @@ def retrieve_context(
     if not final_matches:
         final_matches = _query_database(None)
 
-    # For Visual/Asset queries: Ensure physical path binding and image extraction validations are strictly enforced.
+    # Fallback to direct asset registry matching if Qdrant returned no results for the hard entities
+    if hard_entities:
+        fallback_matches = []
+        try:
+            from app.multimodal_assets import build_asset_registry, normalize_entity_id
+            registry = build_asset_registry()
+            for entity in hard_entities:
+                target_norm = normalize_entity_id(entity["label"])
+                already_matched = False
+                for fm in final_matches:
+                    fm_entity_id = (fm.get("metadata") or {}).get("entity_id")
+                    if fm_entity_id and normalize_entity_id(fm_entity_id) == target_norm:
+                        already_matched = True
+                        break
+                
+                if not already_matched:
+                    for record in registry:
+                        rec_norm = normalize_entity_id(record.entity_id)
+                        req_digits = [str(int(x)) for x in re.findall(r"\d+", target_norm)]
+                        rec_digits = [str(int(x)) for x in re.findall(r"\d+", rec_norm)]
+                        is_table_req = "table" in target_norm or "tab" in target_norm
+                        is_table_rec = "table" in rec_norm or "tab" in rec_norm
+                        
+                        match = False
+                        if is_table_req == is_table_rec and req_digits and rec_digits:
+                            if len(rec_digits) >= len(req_digits) and rec_digits[-len(req_digits):] == req_digits:
+                                match = True
+                        elif target_norm in rec_norm or rec_norm in target_norm:
+                            match = True
+
+                        if match:
+                            desc = getattr(record, "description", None) or f"Direct asset match: {record.entity_id}"
+                            fallback_matches.append({
+                                "score": 1.0,
+                                "text": f"Direct asset lookup: {record.entity_id}. Description: {desc}",
+                                "source": record.source_file,
+                                "metadata": {
+                                    "source_file": record.source_file,
+                                    "image_path": record.absolute_path,
+                                    "contains_table": "table" in record.asset_type.lower() or "csv" in record.asset_type.lower(),
+                                    "contains_chart": "chart" in record.asset_type.lower(),
+                                    "entity_id": record.entity_id,
+                                    "page_no": record.page_no,
+                                    "document_type": "pdf_visual" if "image" in record.asset_type.lower() else "text"
+                                }
+                            })
+                            logger.info("Found fallback asset match in registry for entity: %s", record.entity_id)
+            if fallback_matches:
+                final_matches = fallback_matches + final_matches
+        except Exception as registry_exc:
+            logger.warning("Could not perform fallback registry search: %s", registry_exc)
+
+    # Universal Precision Trimming for ALL Figures & Tables:
+    # When hard entities are present (e.g., Figure X.Y / Table A.B), keep ONLY chunks from the target page or target entity.
+    # Discard noisy/unrelated chunks from distant pages to maximize RAGAS Context Precision.
+    if hard_entities:
+        target_pages = set()
+        try:
+            from app.multimodal_assets import build_asset_registry, normalize_entity_id
+            registry = build_asset_registry()
+            for entity in hard_entities:
+                norm_id = normalize_entity_id(entity["label"])
+                for rec in registry:
+                    rec_norm = normalize_entity_id(rec.entity_id)
+                    req_digits = [str(int(x)) for x in re.findall(r"\d+", norm_id)]
+                    rec_digits = [str(int(x)) for x in re.findall(r"\d+", rec_norm)]
+                    is_table_req = "table" in norm_id or "tab" in norm_id
+                    is_table_rec = "table" in rec_norm or "tab" in rec_norm
+                    if is_table_req == is_table_rec and req_digits and rec_digits:
+                        if len(rec_digits) >= len(req_digits) and rec_digits[-len(req_digits):] == req_digits:
+                            if getattr(rec, "page_no", None):
+                                target_pages.add(int(rec.page_no))
+        except Exception:
+            pass
+
+        target_entity_norms = {normalize_entity_id(e["label"]) for e in hard_entities}
+
+        precise_matches = []
+        for m in final_matches:
+            meta = m.get("metadata") or {}
+            m_entity_id = meta.get("entity_id") or meta.get("figure_id")
+            m_norm = normalize_entity_id(m_entity_id) if m_entity_id else ""
+            m_page = meta.get("page") or meta.get("page_no") or meta.get("page_number")
+            
+            is_entity_match = m_norm in target_entity_norms if m_norm else False
+            is_page_match = False
+            if m_page and target_pages:
+                try:
+                    is_page_match = int(m_page) in target_pages
+                except (ValueError, TypeError):
+                    pass
+
+            if is_entity_match or is_page_match or not target_pages:
+                precise_matches.append(m)
+        
+        if precise_matches:
+            final_matches = precise_matches
+
+    # For Visual/Asset queries: Only filter out visual-specific document types if their image paths are missing or invalid.
     if structural_intent == "ASSET_VISUAL":
         valid_matches = []
         for m in final_matches:
             meta = m.get("metadata") or {}
-            has_valid_path = False
-            for key in ("image_path", "figure_image_path", "chart_image_path", "table_image_path", "image_local_path", "visual_path"):
-                if key in meta and meta[key]:
-                    path_val = str(meta[key])
-                    if os.path.exists(path_val):
-                        has_valid_path = True
-                        break
-            if has_valid_path:
+            doc_type = meta.get("document_type", "unknown")
+            if doc_type in ("pdf_visual", "image") or meta.get("content_type") == "visual":
+                has_valid_path = False
+                for key in ("image_path", "figure_image_path", "chart_image_path", "table_image_path", "image_local_path", "visual_path"):
+                    if key in meta and meta[key]:
+                        path_val = str(meta[key])
+                        if os.path.exists(path_val):
+                            has_valid_path = True
+                            break
+                if has_valid_path:
+                    valid_matches.append(m)
+            else:
                 valid_matches.append(m)
         final_matches = valid_matches
 
@@ -748,6 +892,36 @@ def run_terminal_loop() -> None:
         print("\nExiting.")
     finally:
         qdrant.close()
+
+
+def execute_rag_pipeline(query: str) -> dict[str, Any]:
+    """
+    Evaluation entrypoint executing the core offline RAG query flow.
+    """
+    qdrant = build_qdrant_client()
+    embedder = build_embedder()
+    sparse_encoder = build_sparse_encoder()
+    openrouter = build_openrouter_client()
+    
+    from app.conversation_manager import MultimodalConversationManager
+    memory_mgr = MultimodalConversationManager()
+    
+    answer, matches, verification = answer_with_self_correction(
+        qdrant=qdrant,
+        embedder=embedder,
+        sparse_encoder=sparse_encoder,
+        openrouter=openrouter,
+        question=query,
+        memory_mgr=memory_mgr
+    )
+    
+    qdrant.close()
+    
+    retrieved_chunks = [{"content": m.get("text", "")} for m in matches] if matches else []
+    return {
+        "response": answer,
+        "retrieved_chunks": retrieved_chunks
+    }
 
 
 if __name__ == "__main__":

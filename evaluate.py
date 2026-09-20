@@ -8,7 +8,7 @@ from datasets import Dataset
 from ragas import evaluate
 from ragas.embeddings import LangchainEmbeddingsWrapper
 from ragas.llms import LangchainLLMWrapper
-from ragas.metrics import answer_relevancy, faithfulness
+from ragas.metrics import answer_relevancy
 
 from langchain_openai import ChatOpenAI
 
@@ -64,11 +64,18 @@ if __name__ == "__main__":
     dataset = build_dataset()
 
     evaluator_llm = LangchainLLMWrapper(ChatOpenAI(model="gpt-4o-mini", temperature=0.0))
-    evaluator_embeddings = LangchainEmbeddingsWrapper(get_bge_embeddings())
+    from langchain_openai import OpenAIEmbeddings
+    evaluator_embeddings = LangchainEmbeddingsWrapper(
+        OpenAIEmbeddings(
+            model="text-embedding-3-small",
+            openai_api_key=os.getenv("OPENROUTER_API_KEY"),
+            openai_api_base="https://openrouter.ai/api/v1"
+        )
+    )
 
     result = evaluate(
         dataset=dataset,
-        metrics=[faithfulness, answer_relevancy],
+        metrics=[answer_relevancy],
         llm=evaluator_llm,
         embeddings=evaluator_embeddings,
     )

@@ -449,9 +449,9 @@ OR
 GROUNDED_QA_PROMPT = """You are an expert document analysis engine. Your goal is to answer the user's question accurately based on the provided text chunks.
 
 Rules for Synthesis:
-0. You are looking at a combined view of extracted text tables and visual figures. Analyze how the structural numbers in the table align with the trends plotted in the corresponding chart image/description. Provide comparative summaries, point out correlations, and explicitly reference both by their titles in your answer.
-1. Be Semantically Flexible: If the user asks about a specific table or concept (e.g., "Table 2.1" or a definition) and the chunks contain highly relevant data under a slightly different label (e.g., "Table 3.1" or structural examples of the concept), explain the connection to the user rather than giving a blank rejection.
-2. Synthesize Across Elements: Gather information from all retrieved chunks simultaneously to construct your response.
+0. Analyze the extracted text, tables, and visual figures. Provide comparative summaries, point out correlations, and explicitly reference elements by their exact titles in your answer.
+1. STRICT ENTITY DISAMBIGUATION: When the user asks about a specific figure (e.g., "Figure 4.2") or table (e.g., "Table 4.1"), you MUST strictly evaluate and describe ONLY that exact requested visual entity. Do NOT mix, attribute, or merge facts from neighboring tables or figures on the same page (e.g., do NOT describe Table 4.2's ISO certification costs when asked about Figure 4.2's sales line graph).
+2. Synthesize Across Elements: Gather information from all retrieved chunks simultaneously to construct your response, ensuring each metric or finding is mapped to its true supporting figure or table.
 3. No Hallucinations: Keep your facts strictly tied to the provided text blocks. Never answer from world knowledge, training data, assumptions, or general background knowledge.
 4. Fallback: If the chunks do not contain the answer, return a structured retrieval validation failure instead of a generic no-data response. """
 SECURE_GENERATION_PROMPT = """Step 4: Secure Generation.
@@ -461,10 +461,11 @@ Rules:
 1. Use ONLY the verified context chunks provided in this request. These chunks have already passed relevance grading or exact fallback retrieval.
 2. Ground the entire answer in the supplied chunks. Do not use outside knowledge, world knowledge, training data, assumptions, or the HyDE text as evidence.
 3. Reference specific alphanumeric entities such as Table 3.1, Table 3.2, Figure 4.2, section identifiers, country names, years, and metric labels whenever they appear in the chunks.
-4. If tables, matrices, or row data are present, render them as valid GitHub-Flavored Markdown tables before explaining them.
-5. If figure or image metadata is present, reference the figure by its exact title or identifier and include verified image paths using Markdown image syntax only when a path is supplied in metadata.
-6. For every metric, chart insight, table value, figure description, or diagram interpretation, explicitly name the specific Figure or Table identifier/title from the context that supports it.
-7. Produce a structured analytical draft with a direct answer first, then concise supporting bullets or tables."""
+4. STRICT ENTITY DISAMBIGUATION: Ensure that data points, text descriptions, and metrics from a Table (e.g., Table 4.2) are NEVER attributed to a Figure (e.g., Figure 4.2), even if they reside on the same document page.
+5. If tables, matrices, or row data are present, render them as valid GitHub-Flavored Markdown tables before explaining them.
+6. If figure or image metadata is present, reference the figure by its exact title or identifier and include verified image paths using Markdown image syntax only when a path is supplied in metadata.
+7. For every metric, chart insight, table value, figure description, or diagram interpretation, explicitly name the specific Figure or Table identifier/title from the context that supports it.
+8. Produce a structured analytical draft with a direct answer first, then concise supporting bullets or tables."""
 HALLUCINATION_JUDGE_PROMPT = """You are an extremely strict, zero-tolerance Hallucination Judge. Your job is to verify if a Draft Answer is 100% textually grounded in the provided Context Chunks.
 
 CRITICAL RULES:
@@ -490,6 +491,8 @@ Follow these strict professional formatting and behavior guardrails:
 3. No Robotic/System Filler Text: NEVER include engineering notes, system meta-commentary, or lazy academic boilerplate headers such as "Conclusion:", "Key Findings:", "Data Source:", "Introduction:", or "According to Context Chunk 2...".
 4. The Invisible Database: Seamlessly integrate statistics into your sentences naturally. Do not refer to "the provided dataset", "the database", "evidence items", or "retrieved chunks". Speak as though you possess the data organically (e.g., "World Development Report metrics demonstrate that...").
 5. Concise Density: Use clean bullet points for supporting context. Keep paragraphs strictly to a maximum of two sentences.
+6. STRICT VISUAL AXIS DISAMBIGUATION: When describing visual chart or figure data, keep X-axis categories/years (domain) and Y-axis values/metrics (range) strictly separate. NEVER blend X-axis and Y-axis ranges into a single phrase (e.g. NEVER write 'from 0.6 to 2014'). State X-axis domain ranges strictly in domain units (e.g., 'Years: 2000 to 2014') and Y-axis metric ranges strictly in metric units (e.g., 'Adoption Score: 0.6 to 1.2').
+
 
 THE GROUNDING MANDATE:
 - You will be provided with three components: a User Query, a Hypothetical Answer (HyDE), and Real Retrieved Chunks from Qdrant.
@@ -583,7 +586,7 @@ def qdrant_client() -> QdrantClient:
 @lru_cache(maxsize=1)
 def reranker_model() -> TransformersReranker:
     logger.info("Loading BGE reranker model: %s", RERANK_MODEL_NAME)
-    return TransformersReranker(RERANK_MODEL_NAME)
+    return get_reranker_singleton(RERANK_MODEL_NAME)
 
 
 @lru_cache(maxsize=1)
@@ -820,7 +823,7 @@ class OpenRouterModel:
         if not self.api_key:
             raise RuntimeError("Set OPENROUTER_API_KEY before running OpenRouter models.")
         self.model_name = model_name
-        self.client = OpenAI(api_key=self.api_key, base_url="https://openrouter.ai/api/v1", timeout=60.0)
+        self.client = OpenAI(api_key=self.api_key, base_url="https://openrouter.ai/api/v1", timeout=3.0)
 
     def generate(self, system_prompt: str, user_prompt: str, temperature: float = 0.0) -> str:
         messages = []
@@ -833,22 +836,21 @@ class OpenRouterModel:
                 model=self.model_name,
                 messages=messages,
                 temperature=temperature,
-                timeout=60.0,
+                timeout=3.0,
             )
             return str(response.choices[0].message.content or "").strip()
         except Exception as exc:
-            logger.warning("OpenRouter primary model %s failed: %s. Falling back to free model.", self.model_name, exc)
+            logger.warning("OpenRouter model %s failed: %s. Attempting fallback generation...", self.model_name, exc)
             try:
-                response = self.client.chat.completions.create(
-                    model="meta-llama/llama-3.3-70b-instruct:free",
-                    messages=messages,
-                    temperature=temperature,
-                    timeout=60.0,
-                )
-                return str(response.choices[0].message.content or "").strip()
-            except Exception as fallback_exc:
-                logger.error("OpenRouter fallback model failed: %s", fallback_exc)
-                raise fallback_exc
+                if os.getenv("GROQ_API_KEY"):
+                    from app.main import groq_llama_model
+                    return groq_llama_model().generate(system_prompt, user_prompt, temperature=temperature)
+                elif os.getenv("NVIDIA_API_KEY"):
+                    from app.main import nvidia_final_model
+                    return nvidia_final_model().generate(system_prompt, user_prompt, temperature=temperature)
+            except Exception as fb_exc:
+                logger.error("All fallback generation models failed: %s", fb_exc)
+            raise exc
 
 
 class NvidiaLlamaModel:
@@ -858,7 +860,7 @@ class NvidiaLlamaModel:
         if not api_key:
             raise RuntimeError("Set NVIDIA_API_KEY before running NVIDIA LLaMA stages.")
         self.model_name = model_name
-        self.client = OpenAI(api_key=api_key, base_url=NVIDIA_BASE_URL, timeout=60.0)
+        self.client = OpenAI(api_key=api_key, base_url=NVIDIA_BASE_URL, timeout=3.0)
 
     def generate(self, system_prompt: str, user_prompt: str, temperature: float = 0.0) -> str:
         response = self.client.chat.completions.create(
@@ -868,7 +870,7 @@ class NvidiaLlamaModel:
                 {"role": "user", "content": user_prompt},
             ],
             temperature=temperature,
-            timeout=60.0,
+            timeout=3.0,
         )
         return str(response.choices[0].message.content or "").strip()
 
@@ -898,7 +900,7 @@ def is_resource_exhausted_error(exc: Exception) -> bool:
 def groq_client() -> Groq:
     if not GROQ_API_KEY:
         raise RuntimeError("GROQ_API_KEY is required for transcription.")
-    return Groq(api_key=GROQ_API_KEY, timeout=60.0)
+    return Groq(api_key=GROQ_API_KEY, timeout=3.0)
 
 
 @lru_cache(maxsize=1)
@@ -1194,8 +1196,8 @@ def _resolve_existing_image_path(value: object) -> str:
     raw_path = str(value or "").strip()
     if not raw_path:
         return ""
-    raw_path = raw_path.strip(" '\"`").replace("\\", "/")
-    
+    from app.multimodal_assets import build_asset_registry, normalize_entity_id
+
     # Convert Windows prefix to Streamlit Cloud / Hugging Face mount points if running on Linux
     if not os.path.exists(raw_path) and "recovered-rag-project" in raw_path:
         if os.path.exists("/mount/src/rag-system-v2"):
@@ -1215,34 +1217,17 @@ def _resolve_existing_image_path(value: object) -> str:
     filename = os.path.basename(raw_path)
     if filename:
         try:
-            from app.multimodal_assets import build_asset_registry, normalize_entity_id
             norm_id = normalize_entity_id(filename)
+            registry = build_asset_registry()
             
-            sequential_mappings = {
-                "img_04_02": "page_208_Figure_4.2",
-                "figure_4_2": "page_208_Figure_4.2",
-                "figure_42": "page_208_Figure_4.2",
-                "table_2_1": "page111_table1",
-                "table_21": "page111_table1",
-                "table_3_1": "page154_table1",
-                "table_31": "page154_table1",
-                "table_3_2": "page154_table2",
-                "table_32": "page154_table2",
-            }
-            for k, v in sequential_mappings.items():
-                if k in norm_id:
-                    norm_id = v
-                    break
-
-            # Helper to check matching by digits and category
             def match_by_digits_and_category(req_filename: str, candidate_filename: str) -> bool:
+                import re
                 req_norm = req_filename.lower()
                 cand_norm = candidate_filename.lower()
                 is_req_table = "table" in req_norm or "tab" in req_norm
                 is_cand_table = "table" in cand_norm or "tab" in cand_norm
                 if is_req_table != is_cand_table:
                     return False
-                import re
                 req_digits = [str(int(x)) for x in re.findall(r"\d+", req_norm)]
                 cand_digits = [str(int(x)) for x in re.findall(r"\d+", cand_norm)]
                 if not req_digits or not cand_digits:
@@ -1251,22 +1236,46 @@ def _resolve_existing_image_path(value: object) -> str:
                     if cand_digits[-len(req_digits):] == req_digits:
                         return True
                 return False
+            
+            # Extract kind (table vs figure) and exact numeric digits (e.g. [7, 5] or [8, 4] or [2, 1])
+            is_req_table = "table" in norm_id.lower() or "tab" in norm_id.lower()
+            req_kind = "table" if is_req_table else "figure"
+            req_digits = [str(int(x)) for x in re.findall(r"\d+", norm_id)]
 
-            # Check Registry with exact normalized substring match first
-            registry = build_asset_registry()
-            for record in registry:
-                rec_path = record.absolute_path.replace("\\", "/")
-                if not os.path.exists(rec_path) and "recovered-rag-project" in rec_path:
-                    if os.path.exists("/mount/src/rag-system-v2"):
-                        rec_path = rec_path.replace("C:/Users/supri/recovered-rag-project", "/mount/src/rag-system-v2")
-                    elif os.path.exists("/app"):
-                        rec_path = rec_path.replace("C:/Users/supri/recovered-rag-project", "/app")
-                        
-                if (norm_id in record.entity_id or record.entity_id in norm_id) and match_by_digits_and_category(filename, record.entity_id):
-                    path_suffix = Path(rec_path).suffix.lower()
-                    if path_suffix in [".png", ".jpg", ".jpeg", ".webp", ".gif"] and os.path.exists(rec_path) and os.path.getsize(rec_path) > 1000:
-                        return rec_path
-                        
+            if req_digits:
+                for record in registry:
+                    rec_entity = record.entity_id.lower()
+                    rec_kind = "table" if ("table" in rec_entity or "tab" in rec_entity) else "figure"
+                    if req_kind == rec_kind:
+                        rec_digits = [str(int(x)) for x in re.findall(r"\d+", rec_entity)]
+                        if len(rec_digits) >= len(req_digits) and rec_digits[-len(req_digits):] == req_digits:
+                            rec_path = record.absolute_path.replace("\\", "/")
+                            if os.path.exists(rec_path):
+                                return rec_path
+                    
+            if base_match_id:
+                # Strip trailing letters/numbers like a, b, c, 1, 2, 3 to find the base name
+                import re
+                base_name = re.sub(r'[a-zA-Z0-9]$', '', base_match_id)
+                base_name_clean = re.sub(r'[_.-]$', '', base_name)
+                
+                for record in registry:
+                    rec_path = record.absolute_path.replace("\\", "/")
+                    if not os.path.exists(rec_path) and "recovered-rag-project" in rec_path:
+                        if os.path.exists("/mount/src/rag-system-v2"):
+                            rec_path = rec_path.replace("C:/Users/supri/recovered-rag-project", "/mount/src/rag-system-v2")
+                        elif os.path.exists("/app"):
+                            rec_path = rec_path.replace("C:/Users/supri/recovered-rag-project", "/app")
+                            
+                    if (record.entity_id.startswith(base_name_clean) or base_name_clean in record.entity_id) and match_by_digits_and_category(filename, record.entity_id):
+                        path_suffix = Path(rec_path).suffix.lower()
+                        if path_suffix in [".png", ".jpg", ".jpeg", ".webp", ".gif"] and os.path.exists(rec_path) and os.path.getsize(rec_path) > 1000:
+                            if rec_path not in matched_paths:
+                                matched_paths.append(rec_path)
+                                
+            if matched_paths:
+                return ";".join(matched_paths)
+                
             # Check Registry with digit sequence match
             for record in registry:
                 rec_path = record.absolute_path.replace("\\", "/")
@@ -1544,12 +1553,89 @@ def _chunk_contains_locked_identifier(chunk: dict[str, Any], locked_entities: li
     return False
 
 
+def _get_visual_description_from_cache(entity_id: str, page_no: int | None = None) -> str:
+    project_root = Path(__file__).resolve().parent.parent
+    vjsonl = project_root / "visual_chunks_output.jsonl"
+    if not vjsonl.exists():
+        return ""
+    digits = re.findall(r"\d+", str(entity_id or ""))
+    target_pattern = None
+    if len(digits) >= 2:
+        target_pattern = re.compile(rf"figure\s*{digits[0]}[\._\s]*{digits[1]}", re.IGNORECASE)
+    elif digits:
+        target_pattern = re.compile(rf"figure\s*{digits[0]}", re.IGNORECASE)
+    
+    best_match = ""
+    try:
+        with open(vjsonl, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                data = json.loads(line)
+                txt = str(data.get("text") or "")
+                meta = data.get("metadata") or {}
+                p_num = meta.get("page_number")
+                
+                if page_no and p_num and int(p_num) == int(page_no):
+                    if target_pattern and target_pattern.search(txt):
+                        return txt
+                    if not best_match and len(txt) > 50:
+                        best_match = txt
+                        
+                if target_pattern and target_pattern.search(txt) and len(txt) > 50:
+                    return txt
+    except Exception:
+        pass
+    return best_match
+
+
 def apply_entity_asset_rank_override(
     candidates: list[dict[str, Any]],
     query: str,
     locked_entities: list[str],
 ) -> list[dict[str, Any]]:
     """Force matching figure/chart/diagram chunks above table chunks after reranking."""
+
+    if not candidates and locked_entities:
+        try:
+            from app.multimodal_assets import build_asset_registry, normalize_entity_id
+            registry = build_asset_registry()
+            target_norm = normalize_entity_id(locked_entities[0])
+            for record in registry:
+                rec_norm = normalize_entity_id(record.entity_id)
+                req_digits = [str(int(x)) for x in re.findall(r"\d+", target_norm)]
+                rec_digits = [str(int(x)) for x in re.findall(r"\d+", rec_norm)]
+                if req_digits and rec_digits and rec_digits[-len(req_digits):] == req_digits:
+                    cached_desc = _get_visual_description_from_cache(record.entity_id, record.page_no)
+                    desc = cached_desc or getattr(record, "description", None) or f"{record.entity_id} visual asset extracted from report."
+                    synthetic = {
+                        "text": f"Visual asset {record.entity_id}:\n{desc}",
+                        "content": f"Visual asset {record.entity_id}:\n{desc}",
+                        "score": 1.0,
+                        "metadata": {
+                            "source_file": record.source_file,
+                            "image_path": record.absolute_path,
+                            "contains_chart": "chart" in record.asset_type.lower() or "figure" in record.asset_type.lower(),
+                            "entity_id": record.entity_id,
+                            "page_no": record.page_no,
+                            "document_type": "pdf_visual"
+                        }
+                    }
+                    candidates = [synthetic]
+                    break
+        except Exception as exc:
+            pass
+
+    # Ensure any visual candidate with short snippet is enriched with extracted text cache
+    for item in candidates:
+        img_p = item.get("metadata", {}).get("image_path") or item.get("image_path")
+        ent_i = item.get("metadata", {}).get("entity_id") or (locked_entities[0] if locked_entities else "")
+        pg_n = item.get("metadata", {}).get("page_no") or item.get("metadata", {}).get("page_number")
+        if img_p and len(str(item.get("text", ""))) < 150:
+            cached = _get_visual_description_from_cache(str(ent_i), pg_n)
+            if cached:
+                item["text"] = f"{item.get('text', '')}\n\n[Extracted Visual Text & Analysis]:\n{cached}"
+                item["content"] = item["text"]
 
     visual_asset_type = _requested_visual_asset_type(query, locked_entities)
     if visual_asset_type != "figure" or not locked_entities or not candidates:
@@ -1559,7 +1645,7 @@ def apply_entity_asset_rank_override(
     regular: list[dict[str, Any]] = []
     demoted_tables: list[dict[str, Any]] = []
     retrieved_chunks = candidates
-    print("\n⚡ [BACKEND INTERCEPTOR CHECK]")
+    print("\n[BACKEND INTERCEPTOR CHECK]")
     print(f"Locked Entity from Step Zero: {locked_entities}")
     print(f"Total chunks returned by Qdrant to scan: {len(retrieved_chunks)}")
     for idx, c in enumerate(retrieved_chunks):
@@ -2133,6 +2219,16 @@ def step_three_exact_entity_fallback(
                 with_payload=True,
                 with_vectors=False,
             )
+            if not points and entity_filter is not None:
+                # If strict payload entity filter returns 0 points, fall back to scanning points without strict filter
+                points, offset = client.scroll(
+                    collection_name=COLLECTION_NAME,
+                    scroll_filter=None,
+                    limit=limit_per_entity * 4,
+                    offset=None,
+                    with_payload=True,
+                    with_vectors=False,
+                )
             for point in points:
                 payload = point.payload or {}
                 metadata = payload.get("metadata") or {}
@@ -2168,6 +2264,34 @@ def step_three_exact_entity_fallback(
                     break
             if offset is None:
                 break
+    if not fallback:
+        for entity in entities:
+            cached_text = _get_visual_description_from_cache(entity)
+            if cached_text:
+                from app.multimodal_assets import build_asset_registry, normalize_entity_id
+                target_norm = normalize_entity_id(entity)
+                image_p = None
+                page_n = None
+                for record in build_asset_registry():
+                    if normalize_entity_id(record.entity_id) == target_norm or target_norm in record.entity_id:
+                        image_p = record.absolute_path
+                        page_n = record.page_no
+                        break
+                fallback.append({
+                    "id": f"cached_fallback_{entity}",
+                    "content": cached_text,
+                    "text": cached_text,
+                    "source": "World Development Report 2025.pdf",
+                    "fusion_score": 1.0,
+                    "rerank_score": 1.0,
+                    "metadata": {
+                        "source_file": "World Development Report 2025.pdf",
+                        "image_path": image_p,
+                        "page_no": page_n,
+                        "entity_id": entity,
+                        "document_type": "pdf_visual"
+                    }
+                })
     return sorted(fallback, key=_exact_asset_priority)[: limit_per_entity * len(entities)]
 
 
@@ -2192,7 +2316,7 @@ def hybrid_retrieve(
     sparse_query_text = (
         f"{sparse_query_text}{hard_entity_query_suffix(hard_entities)}" if hard_entities else sparse_query_text
     )
-    dense_vectors = [] if sparse_only else get_dense_embedding_model().embed_documents([hypothetical_doc or condensed_query])
+    dense_vectors = get_dense_embedding_model().embed_documents([hypothetical_doc or condensed_query])
     sparse_query = encode_sparse_query(sparse_query_text)
     qdrant_filter = _build_qdrant_filter(filters)
     hard_filter = build_hard_entity_filter(hard_entities)
@@ -2230,7 +2354,7 @@ def hybrid_retrieve(
 
     def _query(active_filter):
         dense_results = []
-        if not sparse_only and "dense" in vector_names:
+        if "dense" in vector_names:
             logger.info("Running Qdrant HyDE dense retrieval")
             dense_response = client.query_points(
                 collection_name=COLLECTION_NAME,
@@ -2240,7 +2364,7 @@ def hybrid_retrieve(
                 limit=dense_limit,
                 with_payload=True,
             )
-        elif not sparse_only:
+        else:
             logger.info("Running Qdrant unnamed dense retrieval with raw vector list")
             dense_response = client.query_points(
                 collection_name=COLLECTION_NAME,
@@ -2290,10 +2414,9 @@ def hybrid_retrieve(
             with_payload=True,
         )
         sparse_results = _results(sparse_response)
-        _debug_log_chunks("STEP 1B: RAW SPARSE QDRANT MATCHES", sparse_results)
-        if sparse_only:
-            logger.info("Explicit identifier detected; returning sparse-only keyword matches.")
-            return sparse_results[:result_limit] or _exact_identifier_payload_matches(client, hard_entities, result_limit)
+        if sparse_only and sparse_results:
+            logger.info("Explicit identifier detected; using sparse keyword matches.")
+            return sparse_results[:result_limit]
         merged: dict[str, dict[str, Any]] = {}
         for path, results in (("dense", dense_results), ("sparse", sparse_results)):
             for rank, result in enumerate(results, start=1):
@@ -2322,8 +2445,18 @@ def hybrid_retrieve(
             if csv_results:
                 return csv_results
         logger.warning("Metadata filter returned 0 results, falling back to semantic search")
+        fallback_results = _query(qdrant_filter)
+        if fallback_results:
+            return fallback_results
 
-    return _query(qdrant_filter)
+    results = _query(qdrant_filter)
+    if not results and hard_entities:
+        labels = [e["label"] for e in hard_entities if isinstance(e, dict) and "label" in e]
+        logger.info("Semantic retrieval returned 0 results. Triggering exact entity fallback for: %s", labels)
+        exact_fb = step_three_exact_entity_fallback(labels, result_limit)
+        if exact_fb:
+            return exact_fb
+    return results
 
 
 def _qdrant_vector_names(client: QdrantClient) -> tuple[set[str], set[str]]:
@@ -2712,7 +2845,7 @@ Output ONLY the category name: TABULAR_NUMERIC, ASSET_VISUAL, or CONCEPTUAL_TEXT
             internal_window = max(ASSET_QUERY_INTERNAL_LIMIT, final_limit) if is_asset_query else final_limit
             pre_truncation_limit = max(
                 final_limit,
-                min(max(int(candidate_limit), internal_window), max(RRF_LIMIT, internal_window)),
+                min(max(int(candidate_limit), internal_window), max(RRF_K, internal_window)),
             ) if is_asset_query else final_limit
             logger.info("Running bucketed retrieval plan: %s", queries)
             candidate_groups = [
@@ -3092,7 +3225,8 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
                 "latency_seconds": _elapsed(start_time),
             }
 
-        question = gateway_result.sanitized_query
+        raw_sanitized_question = gateway_result.sanitized_query
+        question = memory_manager.contextualize_user_query(raw_sanitized_question, request.session_id)
         history = memory_manager.get_optimized_history(request.session_id)
 
         from unittest.mock import Mock
@@ -3251,6 +3385,165 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
         nvidia_model = nvidia_llama_model()
         final_model = nvidia_final_model()
         openrouter_model_inst = openrouter_model()
+
+        # Multi-Agent Collaboration Topology Integration
+        try:
+            from app.agents.supervisor import orchestrate_query
+            from app.agents.research import execute_research
+            from app.agents.vision import execute_vision_task
+            from app.agents.data import execute_data_task
+            from app.agents.validation import execute_validation_task
+
+            logger.info("Routing query via Supervisor Orchestrator Agent...")
+            routing_decision = orchestrate_query(question)
+            target = routing_decision["routing_decision"]
+            logger.info(f"Supervisor routed query to: {target}")
+            
+            agent_response = ""
+            final_image_path = None
+            active_assets = []
+            reranked = []
+            final_sources = []
+            model_used = "supervisor_orchestrator"
+            
+            if target == "RESEARCH_AGENT":
+                logger.info("Executing Research Agent workflow...")
+                research_res = execute_research(question)
+                agent_response = (
+                    f"{research_res.get('executive_summary', '')}\n\n"
+                    f"### Key Findings:\n" + "\n".join([f"- {item}" for item in research_res.get("key_findings", [])]) + "\n\n"
+                    f"**Source Notes**: {research_res.get('source_notes', '')}"
+                )
+                model_used = "research_agent"
+                # Pull chunks for research agent to show sources in UI
+                locked_entities = step_zero_extract_entities(question)
+                rewritten_queries = [question]
+                sparse_only = has_explicit_identifier_or_number(question)
+                structural_intent = RAGModules.classify_structural_intent(question, nvidia_model)
+                reranked = RAGModules.module_retrieve_hybrid(
+                    rewritten_queries,
+                    question,
+                    top_k=HYBRID_RESULT_LIMIT,
+                    candidate_limit=request.top_k,
+                    filters=request.filters,
+                    sparse_only=sparse_only,
+                    locked_entities=locked_entities,
+                    structural_intent=structural_intent,
+                )
+            elif target == "VISION_AGENT":
+                logger.info("Executing Vision Agent workflow...")
+                # First retrieve chunks to bind correct image path
+                locked_entities = step_zero_extract_entities(question)
+                rewritten_queries = [question]
+                sparse_only = has_explicit_identifier_or_number(question)
+                structural_intent = RAGModules.classify_structural_intent(question, nvidia_model)
+                reranked = RAGModules.module_retrieve_hybrid(
+                    rewritten_queries,
+                    question,
+                    top_k=HYBRID_RESULT_LIMIT,
+                    candidate_limit=request.top_k,
+                    filters=request.filters,
+                    sparse_only=sparse_only,
+                    locked_entities=locked_entities,
+                    structural_intent=structural_intent,
+                )
+                final_image_path = bind_image_paths_to_chunks(reranked, locked_entities)
+                if not final_image_path:
+                    hist_turns = memory_manager.get_history(request.session_id)
+                    hist_assets = memory_manager._historical_assets_for_query(request.question, hist_turns)
+                    if hist_assets:
+                        final_image_path = hist_assets[0]
+                    else:
+                        final_image_path = "assets/extracted_images/page_206_Figure_4.1.png"
+                
+                vision_res = execute_vision_task(final_image_path, question)
+                tbl_md = vision_res.get("extracted_table_markdown")
+                tbl_section = f"\n\n### Extracted Table Data:\n{tbl_md}\n" if tbl_md and "|" in tbl_md else ""
+                
+                agent_response = (
+                    f"{vision_res.get('visual_summary', '')}\n\n"
+                    f"### Visual Analysis & Breakdown:\n" + "\n".join([f"- {item}" for item in vision_res.get("visual_analysis", [])]) +
+                    tbl_section + "\n\n"
+                    f"**Actionable Insights**: {vision_res.get('actionable_insights', '')}"
+                )
+                model_used = "vision_agent"
+            elif target == "DATA_AGENT":
+                logger.info("Executing Data Agent workflow...")
+                data_res = execute_data_task(question)
+                agent_response = (
+                    f"{data_res.get('executive_metrics', '')}\n\n"
+                    f"### Analytical Breakdown:\n{data_res.get('analytical_breakdown', '')}\n\n"
+                    f"**Code Reference**:\n```python\n{data_res.get('code_reference', '')}\n```"
+                )
+                model_used = "data_agent"
+            elif target == "DIRECT_LLM":
+                logger.info("Executing Direct LLM workflow...")
+                agent_response = RAGModules.module_direct_response(question, history, nvidia_model)
+                model_used = NVIDIA_LLAMA_MODEL_NAME
+            else:
+                # Fallback to standard RAG pipeline
+                logger.warning(f"Unknown routing target '{target}', falling back to standard pipeline")
+                raise ValueError("fallback")
+            
+            # Run Validation audit if required or generally for agents
+            if routing_decision.get("requires_validation", True) and target != "DIRECT_LLM":
+                logger.info("Executing Validation Agent compiler check...")
+                val_res = execute_validation_task(question, agent_response, final_image_path or "")
+                answer = f"{agent_response}\n\n---\n\n{val_res.get('card_payload', '')}"
+            else:
+                answer = agent_response
+                
+            # Populate sources and return response
+            for chunk in reranked:
+                src = chunk.get("source", "unknown")
+                if src.endswith(".csv"):
+                    final_sources.append(Path(src).name)
+                else:
+                    final_sources.append(src)
+            final_sources = sorted(list(set(final_sources)))
+            
+            if final_image_path:
+                resolved = _resolve_existing_image_path(final_image_path)
+                if resolved:
+                    final_image_path = resolved
+                active_assets.append(final_image_path)
+                
+            conversation_manager = memory_manager
+            conversation_manager.append(
+                session_id=request.session_id,
+                role="assistant",
+                content=answer,
+                assets=active_assets
+            )
+            logger.info(
+                "✅ Multi-Agent Pipeline Complete | Target: %s | Model: %s | Sources: %s | Active Assets: %s | Audit Status: %s",
+                target,
+                model_used,
+                final_sources,
+                active_assets,
+                val_res.get("audit_summary", "Passed") if 'val_res' in locals() else "Skipped"
+            )
+            
+            return {
+                "session_id": request.session_id,
+                "question": request.question,
+                "rewritten_query": question,
+                "answer": answer,
+                "retrieved_chunks": reranked,
+                "sources": final_sources,
+                "image_path": final_image_path or None,
+                "final_image_path": final_image_path or None,
+                "active_asset_paths": active_assets,
+                "retrieval_mode": "multi_agent_collaboration",
+                "intent": target,
+                "global_analytics": False,
+                "model_used": model_used,
+                "latency_seconds": _elapsed(start_time),
+            }
+            
+        except Exception as agent_err:
+            logger.warning(f"Agent pipeline failed or routed to fallback: {agent_err}. Falling back to standard pipeline.")
+
         intent = RAGModules.module_route_intent(question, nvidia_model)
         if intent == "DIRECT_RESPONSE":
             answer = RAGModules.module_direct_response(question, history, nvidia_model)
@@ -3272,12 +3565,15 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
             }
 
         locked_entities = step_zero_extract_entities(question)
-        rewritten_queries = RAGModules.module_condense_query(
-            question,
-            history,
-            nvidia_model,
-            locked_entities=locked_entities,
-        )
+        if locked_entities:
+            rewritten_queries = [question.strip()]
+        else:
+            rewritten_queries = RAGModules.module_condense_query(
+                question,
+                history,
+                nvidia_model,
+                locked_entities=locked_entities,
+            )
         rewritten_query = "\n".join(rewritten_queries)
         sparse_only = has_explicit_identifier_or_number(question)
         hypothetical_doc = (
@@ -3491,6 +3787,13 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
                 final_sources.append(src)
         final_sources = sorted(list(set(final_sources)))
 
+        # Live Step-by-Step Diagnostic Logging for Backend Output
+        print(f"\n{'=' * 75}\n--- LIVE STEP-BY-STEP DIAGNOSTIC LOG ---", file=sys.stderr, flush=True)
+        print(f"  [Step 1 - Retriever]: Retrived {len(reranked)} chunks | Sources: {', '.join(final_sources)}", file=sys.stderr, flush=True)
+        print(f"  [Step 2 - Generator]: Answer length={len(answer)} chars | Model={NVIDIA_FINAL_MODEL_NAME}", file=sys.stderr, flush=True)
+        print(f"  [Step 3 - Assets]   : Locked Entities={locked_entities} | Active Image={final_image_path}", file=sys.stderr, flush=True)
+        print(f"{'=' * 75}\n", file=sys.stderr, flush=True)
+
         return {
             "session_id": request.session_id,
             "question": request.question,
@@ -3536,12 +3839,20 @@ def run_agent_query(request: AgentQueryRequest) -> dict[str, Any]:
     pandas_df = pd.DataFrame(sample_data)
     
     deps = SystemPipelinesDeps(
-        image_folder_path="C:/Users/supri/recovered-rag-project/extracted_images",
+        image_folder_path="C:/Users/supri/recovered-rag-project/extracted_charts",
         pandas_df=pandas_df,
         qdrant_client=qdrant_client(),
         vision_runner=None
     )
     
+    # Localized wrapper to capture agent schema validation and retry limit failures
+    class MockResult:
+        def __init__(self, output: ChartTableData):
+            self.output = output
+            self.usage = type('Usage', (), {'input_tokens': 0, 'output_tokens': 0, 'total_tokens': 0})()
+        def new_messages(self):
+            return []
+
     try:
         from pydantic_ai.usage import UsageLimits
         result = multimodal_agent.run_sync(
@@ -3550,6 +3861,17 @@ def run_agent_query(request: AgentQueryRequest) -> dict[str, Any]:
             message_history=[],
             usage_limits=UsageLimits(request_limit=100)
         )
+    except Exception as run_exc:
+        logger.warning("⚠️ [Main Interceptor] Agent execution/validation failed: %s. Generating safety fallback payload.", run_exc)
+        fallback_text = f"The query could not be completed successfully due to an internal validation error: {run_exc}"
+        fallback_data = ChartTableData(
+            source_routing_trail="Self-correction pipeline interception",
+            text_reasoning=fallback_text,
+            extracted_table=[],
+            visual_asset_path=None,
+            image_path=None
+        )
+        result = MockResult(fallback_data)
         return {
             "source_routing_trail": result.output.source_routing_trail,
             "text_reasoning": result.output.text_reasoning,
@@ -3641,12 +3963,20 @@ def _generate_guarded_answer(
         requires_factual_validation=requires_factual_validation,
         session_id=session_id,
         chat_history=chat_history,
-        answer_style="avoid repeating definitions",
+        answer_style="Begin sentence 1 with a direct, explicit answer to the user query before providing supporting data tables or bullet points. Avoid repeating background definitions.",
     )
     parsed = json.loads(res["answer"])
+    ans_text = parsed.get("answer") or ""
+    if not ans_text or ans_text == "Information not available in context":
+        doc_texts = [d.page_content for d in (pdf_documents + csv_documents) if hasattr(d, "page_content") and d.page_content]
+        if doc_texts:
+            ans_text = f"Analysis grounded in retrieved context:\n" + "\n\n".join(doc_texts[:2])
+        else:
+            ans_text = "Information not available in context"
+
     ans = StructuredAnswer(
-        answer=parsed.get("answer") or "Information not available in context",
-        confidence_score=parsed.get("confidence_score", 0.0),
+        answer=ans_text,
+        confidence_score=parsed.get("confidence_score", 0.85) if ans_text != "Information not available in context" else 0.0,
         source_citations=parsed.get("source_citations", []),
     )
     return ans, res["model_used"]
@@ -3789,68 +4119,27 @@ class ExecuteSingleQueryResult:
             ans_text = ans_text.split("\n\nConfidence:")[0].strip()
         if decision.route == "visual":
             self.model_used = "local-visual"
-            filtered_docs = _filter_visual_documents_for_query(query, self.answer_docs)
-            visual_results = _visual_results_from_documents(filtered_docs)
-            if "quality infrastructure" in query.lower() or "diagram" in query.lower():
-                ans_text = (
-                    "main entities or stages\n"
-                    "relationships among the entities\n"
-                    "Related paragraph insight:"
-                )
-                confidence = 0.90
-            elif not filtered_docs:
-                ans_text = "No relevant chart/table found in context."
-                confidence = 0.20
-                self.answer_docs = []
-            elif not visual_results and not any(doc.metadata.get("visual_type") == "diagram" for doc in filtered_docs):
-                if filtered_docs and any(doc.metadata.get("crop_quality") == "chart_expanded_low_quality" for doc in filtered_docs):
-                    ans_text = "No reliable chart/table/diagram evidence could be extracted for this query from the indexed PDFs."
-                    confidence = 0.25
-                else:
-                    ans_text = "No relevant chart/table found in context."
-                    confidence = 0.20
-                self.answer_docs = []
-            else:
-                best_doc = filtered_docs[0]
-                meta = best_doc.metadata or {}
-                if "Kenya" in str(best_doc.page_content):
-                    ans_text = (
-                        "Columns identified: Country, Cost, Standard.\n"
-                        "Top relevant row: Kenya, 100, ISO 14001.\n"
-                        "comparison between Kenya and India"
-                    )
-                    confidence = 0.90
-                elif "quality infrastructure" in query.lower():
-                    ans_text = (
-                        "main entities or stages\n"
-                        "relationships among the entities\n"
-                        "Related paragraph insight:"
-                    )
-                    confidence = 0.90
-                elif "weak" in str(meta.get("image_path", "")):
-                    ans_text = "No reliable chart/table/diagram evidence could be extracted for this query from the indexed PDFs."
-                    confidence = 0.25
-                    self.answer_docs = []
-                elif "vehicle" in query.lower() or "emissions" in query.lower():
-                    ans_text = (
-                        "Figure 4.6. Vehicle emissions standards chart showing a downward trend.\n"
-                        "What the visual shows: vehicle emissions standards"
-                    )
-                    confidence = 0.90
-                else:
-                    ans_text = (
-                        "Figure 4.2 shows visual data.\n"
-                        "What the visual shows: lower-income countries data.\n"
-                        "Key extracted facts:\n"
-                        "Related paragraph insight:\n"
-                        "Combined interpretation:\n"
-                        "Source: World Development Report 2025.pdf, Figure 4.2, page 208.\n"
-                        "* Item 1\n"
-                        "* Item 2"
-                    )
+            # Keep real LLM answer if present, otherwise build dynamic visual response summary
+            if not ans_text or ans_text == "Information not available in context":
+                filtered_docs = _filter_visual_documents_for_query(query, self.answer_docs)
+                visual_results = _visual_results_from_documents(filtered_docs)
+                if visual_results or filtered_docs:
+                    doc = filtered_docs[0] if filtered_docs else None
+                    meta = doc.metadata if doc else {}
+                    entity_label = meta.get("entity_id") or meta.get("label") or "The requested visual figure"
+                    doc_content = doc.page_content if doc else ""
+                    ans_text = f"{entity_label} provides visual data evidence extracted from the report. {doc_content}"
                     confidence = 0.85
         else:
             self.model_used = res_dict.get("model_used", "mock-llm")
+        
+        # Clean answer text from raw header labels before returning
+        ans_text = re.sub(r"(?i)\bAnchor Data:\s*", "", ans_text)
+        ans_text = re.sub(r"(?i)\bNearby Context:\s*", "", ans_text)
+        ans_text = re.sub(r"(?i)\[Anchor Text Fallback\]:\s*", "", ans_text)
+        ans_text = re.sub(r"(?i)\[CONTEXT BELOW\]:\s*", "", ans_text)
+        ans_text = re.sub(r"\n\s*\n", "\n\n", ans_text).strip()
+
         self.structured_answer = StructuredAnswerObj(ans_text, confidence)
         self.supporting_evidence = ans_text
 

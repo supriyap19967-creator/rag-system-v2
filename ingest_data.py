@@ -871,9 +871,28 @@ def build_points(records: list[dict[str, Any]], embeddings: dict[str, Any]) -> l
                 payload[key] = metadata[key]
         if not str(payload.get("text") or "").strip():
             raise ValueError(f"Cannot upsert record without root payload['text']; source={source}")
+        # Ensure point_id is a valid UUID or integer for Qdrant compatibility
+        point_id = metadata["chunk_id"]
+        is_valid_id = False
+        import uuid
+        try:
+            uuid.UUID(str(point_id))
+            is_valid_id = True
+        except ValueError:
+            pass
+        if not is_valid_id:
+            try:
+                int(str(point_id))
+                is_valid_id = True
+            except ValueError:
+                pass
+        if not is_valid_id:
+            # Deterministically convert string to a valid UUID
+            point_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, str(point_id)))
+
         points.append(
             models.PointStruct(
-                id=metadata["chunk_id"],
+                id=point_id,
                 vector={
                     DENSE_VECTOR_NAME: dense,
                     SPARSE_VECTOR_NAME: _bge_sparse_to_qdrant(sparse_vectors[index]),
@@ -985,10 +1004,10 @@ def main() -> None:
     args = parser.parse_args()
 
     logging.basicConfig(level=args.log_level.upper(), format="%(asctime)s | %(levelname)s | %(message)s")
-    if not 512 <= args.chunk_tokens <= 1024:
-        raise ValueError("--chunk-tokens must be between 512 and 1024.")
-    if not 512 <= args.embedding_max_length <= 1024:
-        raise ValueError("--embedding-max-length must be between 512 and 1024.")
+    if not 256 <= args.chunk_tokens <= 1024:
+        raise ValueError("--chunk-tokens must be between 256 and 1024.")
+    if not 256 <= args.embedding_max_length <= 1024:
+        raise ValueError("--embedding-max-length must be between 256 and 1024.")
     MAX_PARAGRAPH_TOKENS = args.chunk_tokens
 
     if args.count_only:

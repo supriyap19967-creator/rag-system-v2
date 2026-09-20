@@ -562,9 +562,12 @@ def _describe_pinecone_stats(index: object) -> object:
     return stats
 
 
+from app.reranker import TransformersReranker, get_reranker_singleton
+
+
 @lru_cache(maxsize=1)
 def _reranker() -> TransformersReranker:
-    return TransformersReranker()
+    return get_reranker_singleton()
 
 
 def _stable_document_key(document: Document) -> str:

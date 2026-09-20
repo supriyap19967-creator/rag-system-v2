@@ -26,11 +26,35 @@ GEMINI_MODEL_NAME = (
     or "gemini-2.0-flash"
 )
 GEMINI_SYSTEM_PROMPT = (
-    "You are a precise technical document parser. Your task is to extract EVERYTHING from the provided image with absolute accuracy. \n"
-    "- TEXT EXTRACTION: Transcribe all visible titles, subtitles, headers, data labels, and footnotes verbatim. Do not summarize.\n"
-    "- STRUCTURED TABLES: If a table is present, reconstruct it fully in clear Markdown format, ensuring column headers match perfectly.\n"
-    "- VISUALS & CHARTS: If a chart or diagram is present, explicitly list the chart type, exact axis titles, intervals, data points, legend keys, and any trends shown. \n"
-    "- Give an exhaustive, complete transcription. Do not omit any data points or truncate long descriptions."
+    "### SYSTEM PROMPT: Complete Multi-Panel Visual Extraction & Analytical Summary Engine\n\n"
+    "You are a precise data extraction system. For any given image/figure asset, you MUST strictly output a single structured payload with the following mandatory sections:\n\n"
+    "1. SECTION 1: MANDATORY TEXT SUMMARY & TREND ANALYSIS\n"
+    "   - Executive Overview (Title, Figure/Table ID, Core Objective)\n"
+    "   - Key Trends Narrative (Itemized key findings/groups, sub-panel trend analysis)\n"
+    "   - Strict Axis Role Disambiguation: X-axis ALWAYS represents domain categories, years, time periods, or entity names. Y-axis ALWAYS represents measured metric values, percentages, ratios, or adoption scores. NEVER blend or merge X-axis and Y-axis value ranges into a single string (e.g. NEVER write 'from 0.6 to 2014'). State X-axis domain ranges strictly in domain units (e.g., 'Years 2000 to 2014') and Y-axis metric ranges strictly in metric units (e.g., 'Adoption Score 0.6 to 1.2').\n"
+    "   - Conclusion (1-2 sentences summarizing core analytical takeaways)\n\n"
+    "2. SECTION 2: EXHAUSTIVE MULTI-PANEL DATA EXTRACTION TABLE\n"
+    "   - Format: Clean Markdown Table with populated headers and populated rows ONLY. No trailing empty pipes ('||' or '| |').\n"
+    "   - Columns: Mandatory mapping of [Panel / Sub-Chart, Category / Label, Data Value, Units, Conditions / Errors].\n"
+    "   - Rule: Do NOT return fallback, dummy, or mockup data (e.g., 'Series 1', 'Category 1', 'Unspecified Series 1', '10', '20'). If specific quantitative coordinates are ambiguous or dense (e.g., scatter plots), extract visible trendline boundaries, key outlier points, or explicit sample coordinates directly from the axes.\n\n"
+    "3. SECTION 3: SOURCE TRAIL\n"
+    "   - Pipeline source metadata string (e.g., Figure ID, Page number, Document source).\n"
+)
+
+PRECISION_CROPPING_SYSTEM_PROMPT = (
+    "SYSTEM PROMPT: Precision Visual & Table Bounding-Box Cropping Engine\n\n"
+    "When detecting and cropping visual elements (charts, plots, diagrams) and structured tables from document pages, enforce the following strict boundary rules:\n\n"
+    "1. TABLE CROPPING RULES:\n"
+    "   - START BOUNDARY (Top): Include the full table title, headline, and table header/column names.\n"
+    "   - HORIZONTAL BOUNDARY (Left to Right): Capture 100% of the table width from the leftmost column border to the rightmost column border. Do not cut off side padding or end-column numbers.\n"
+    "   - END BOUNDARY (Bottom): Include every single row down to the final table border or footer notes directly attached to the table.\n"
+    "   - EXCLUSIONS: Trim out all surrounding document body text, paragraph text above the title, and paragraph text below the final row. Never slice or crop through the middle of a table.\n\n"
+    "2. CHART & DIAGRAM CROPPING RULES:\n"
+    "   - START BOUNDARY (Top): Capture the full chart title and any sub-headings located directly above the figure.\n"
+    "   - CORE ELEMENTS: Ensure 100% visibility of the Y-axis label/values (left), X-axis label/values (bottom), plot points, data bars, lines, and callout labels with their values.\n"
+    "   - LEGEND & SYMBOLS: Include the legend, key, color indicators, or symbol explanations located beneath or beside the chart.\n"
+    "   - END BOUNDARY (Bottom): End the crop immediately after the bottom-most axis label, symbol key, or figure footnote.\n"
+    "   - EXCLUSIONS: Exclude all unrelated running body text, page headers, footers, or surrounding paragraph text outside the visual bounding box."
 )
 VISUAL_CATEGORIES = {"Image", "FigureCaption", "Table"}
 TEXT_CATEGORIES = {
@@ -313,6 +337,54 @@ def _write_crop_debug(record: Dict[str, object]) -> None:
         logger.debug("Could not write visual crop debug record: %s", exc)
 
 
+def _box_area(box: Sequence[float]) -> float:
+    if not box or len(box) != 4:
+        return 0.0
+    return max(0.0, float(box[2] - box[0])) * max(0.0, float(box[3] - box[1]))
+
+
+def _is_subbox(sub: Sequence[float], parent: Sequence[float], threshold: float = 0.85) -> bool:
+    if not sub or not parent or len(sub) != 4 or len(parent) != 4:
+        return False
+    ix0 = max(sub[0], parent[0])
+    iy0 = max(sub[1], parent[1])
+    ix1 = min(sub[2], parent[2])
+    iy1 = min(sub[3], parent[3])
+    intersection_area = max(0.0, ix1 - ix0) * max(0.0, iy1 - iy0)
+    sub_area = _box_area(sub)
+    if sub_area <= 0:
+        return False
+    return (intersection_area / sub_area) >= threshold
+
+
+def _deduplicate_layout_elements(elements: List[LayoutElement]) -> List[LayoutElement]:
+    visuals = [e for e in elements if e.category in ("Image", "Table")]
+    non_visuals = [e for e in elements if e.category not in ("Image", "Table")]
+    
+    kept_visuals = []
+    # Sort visuals by area descending so we evaluate larger containers first
+    sorted_visuals = sorted(visuals, key=lambda e: _box_area(e.raw_box), reverse=True)
+    
+    for v in sorted_visuals:
+        is_nested = False
+        for kept in kept_visuals:
+            if v.page_number == kept.page_number and _is_subbox(v.raw_box, kept.raw_box):
+                is_nested = True
+                break
+        if not is_nested:
+            kept_visuals.append(v)
+            
+    # Return them in layout order
+    all_elements = non_visuals + kept_visuals
+    # Preserve original ordering by layout coordinates
+    def _layout_sort_key(e: LayoutElement) -> float:
+        box = e.raw_box
+        if box and len(box) == 4:
+            return float(box[1] * 1000 + box[0])
+        return 999999.0
+    return sorted(all_elements, key=_layout_sort_key)
+
+
 def _partition_pdf(
     pdf_path: Path,
     output_dir: Path,
@@ -395,7 +467,7 @@ def _partition_pdf(
                 rejected_reason=element.rejected_reason,
             )
         )
-    return remapped
+    return _deduplicate_layout_elements(remapped)
 
 
 def _extract_page_text_lines(page: object) -> List[Dict[str, object]]:
@@ -692,7 +764,22 @@ def _render_page_crop(
     try:
         import fitz
 
-        pix = page.get_pixmap(matrix=fitz.Matrix(2, 2), clip=crop_rect, alpha=False)
+        # Apply tight render padding (pad_x=2%, pad_top=2pt, pad_bottom=4pt) to prevent figure-to-figure bleed
+        page_rect = page.rect
+        w = float(crop_rect.x1 - crop_rect.x0)
+        pad_x = w * 0.02
+        pad_top = 2.0
+        pad_bottom = 4.0
+        
+        padded_x0 = max(0.0, float(crop_rect.x0) - pad_x)
+        padded_y0 = max(0.0, float(crop_rect.y0) - pad_top)
+        padded_x1 = min(float(page_rect.width), float(crop_rect.x1) + pad_x)
+        padded_y1 = min(float(page_rect.height), float(crop_rect.y1) + pad_bottom)
+        crop_rect = fitz.Rect(padded_x0, padded_y0, padded_x1, padded_y1)
+
+        # Render at 300 DPI (300/72 = 4.1667 scale factor)
+        scale_factor = 300.0 / 72.0
+        pix = page.get_pixmap(matrix=fitz.Matrix(scale_factor, scale_factor), clip=crop_rect, alpha=False)
         output_path.parent.mkdir(parents=True, exist_ok=True)
         raw_path = output_path.with_name(f"{output_path.stem}.raw{output_path.suffix}")
         if raw_path.exists():
@@ -759,6 +846,205 @@ def _is_chart_caption(caption: str, lines: Sequence[Dict[str, object]], caption_
     return _chart_signal_bottom(lines, caption_bbox=caption_bbox, left=left, right=right, page_height=page_height) is not None
 
 
+def _pdf_exact_figure_bounds(page: object, caption: str) -> Optional[tuple[object, str, str, str]]:
+    try:
+        import fitz, re
+        page_rect = page.rect
+        page_width = float(page_rect.width)
+        page_height = float(page_rect.height)
+
+        blocks = page.get_text("blocks")
+        fig_match = re.search(r"(figure|table)\s*(\d+(?:[\._]\d+)?)", caption, re.IGNORECASE)
+        if not fig_match:
+            return None
+
+        target_kind, target_num = fig_match.groups()
+        target_clean = f"{target_kind.capitalize()} {target_num}"
+
+        # Find caption block
+        caption_block = None
+        for b in blocks:
+            text = b[4].strip()
+            if target_clean in text or (target_kind.capitalize() in text and target_num in text):
+                caption_block = b
+                break
+
+        if not caption_block:
+            return None
+
+        cap_x0, cap_y0, cap_x1, cap_y1 = caption_block[:4]
+
+        # Check if figure caption or graphic spans full page width (>60% page width)
+        is_full_width = (cap_x1 - cap_x0) > (page_width * 0.6) or (cap_x0 < page_width * 0.2 and cap_x1 > page_width * 0.7)
+
+        # Top bound anchored to top line of title caption header
+        ymin = max(0.0, cap_y0 - 12.0)
+        xmin = max(0.0, cap_x0 - 8.0)
+
+        # Dynamic ymax & xmax calculation based on content elements
+        max_y = cap_y1 + 40.0
+        max_x = cap_x1 + 10.0
+
+        # Scan page text blocks below caption to find visual extent (legend, axis, notes)
+        source_note_found = False
+        for b in blocks:
+            bx0, by0, bx1, by1, btext = b[:5]
+            if by1 < cap_y0 - 5:
+                continue
+
+            # Check if block is in the same horizontal column space
+            in_column = is_full_width or (bx0 < page_width * 0.58 if cap_x0 < page_width * 0.5 else bx0 >= page_width * 0.45)
+            if not in_column:
+                continue
+
+            # Stop at next major heading, next figure/table caption, or section break
+            if by0 > cap_y1 + 15:
+                if ("Table " in btext or ("Figure " in btext and target_clean not in btext) or "Box " in btext or "Main messages" in btext):
+                    max_y = min(max_y, by0 - 8.0)
+                    break
+
+            # If we already encountered and included Source/Note footer block, stop before body text paragraphs!
+            if source_note_found and by0 > max_y:
+                break
+
+            # Track maximum vertical and horizontal extents of visual content
+            if by0 >= cap_y0 and by0 <= cap_y0 + 550:
+                max_y = max(max_y, by1 + 10.0)
+                max_x = max(max_x, bx1 + 10.0)
+
+                # Check if this block is the Source / Note / Notes footer of the figure/table
+                btext_clean = btext.strip().lower()
+                if any(btext_clean.startswith(prefix) for prefix in ("source:", "source :", "sources:", "note:", "notes:", "data source:")):
+                    source_note_found = True
+
+        # Inspect vector graphics / drawing paths for exact visual plot bounds
+        try:
+            drawings = page.get_drawings()
+            for d in drawings:
+                d_rect = d["rect"]
+                if d_rect.y0 >= cap_y0 - 10 and d_rect.y1 <= max_y + 40:
+                    d_in_column = is_full_width or (d_rect.x0 < page_width * 0.58 if cap_x0 < page_width * 0.5 else d_rect.x0 >= page_width * 0.45)
+                    if d_in_column:
+                        max_y = max(max_y, d_rect.y1 + 10.0)
+                        max_x = max(max_x, d_rect.x1 + 10.0)
+                        if (d_rect.x1 - d_rect.x0) > (page_width * 0.65):
+                            is_full_width = True
+        except Exception:
+            pass
+
+        ymax = min(page_height - 10.0, max_y)
+        
+        # Enforce column boundary (49% width) for 2-column figures vs full-page width for wide horizontal figures
+        if not is_full_width and cap_x0 < page_width * 0.5:
+            xmax = min(max_x, page_width * 0.49)
+        else:
+            xmax = min(page_width - 10.0, max_x)
+
+        rect = fitz.Rect(xmin, ymin, xmax, ymax)
+        if (rect.x1 > rect.x0 + 40) and (rect.y1 > rect.y0 + 40):
+            logger.info("PDF exact text block layout detector successfully bounded visual '%s' on page %s (Shape: %sx%s, FullWidth=%s)", caption, getattr(page, "number", 0)+1, int(rect.width), int(rect.height), is_full_width)
+            return (rect, "pdf_exact_layout_grounding", "pass_layout", _visual_type_from_caption(caption))
+    except Exception as exc:
+        logger.warning("Could not compute PDF exact layout bounds for '%s': %s", caption, exc)
+    return None
+
+
+def _vlm_detect_crop_rect(
+    page: object,
+    caption: str,
+    caption_bbox: Optional[Sequence[float]] = None,
+) -> Optional[tuple[object, str, str, str]]:
+    exact_bounds = _pdf_exact_figure_bounds(page, caption)
+    if exact_bounds:
+        return exact_bounds
+    """
+    Uses an OpenRouter Vision Model (e.g. Gemini 2.5 Flash / Qwen2-VL) to detect the exact 
+    visual bounding box of a figure/table on a PDF page, capturing the full title, 
+    graphics, axis labels, and legend.
+    """
+    api_key = os.getenv("OPENROUTER_API_KEY")
+    if not api_key or not caption:
+        return None
+
+    try:
+        import fitz
+        import base64
+        import json
+        import requests
+
+        page_rect = page.rect
+        page_width = float(page_rect.width)
+        page_height = float(page_rect.height)
+
+        # Scale factor for fast vision API payload (~150 DPI)
+        scale = 150.0 / 72.0
+        pix = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+        img_bytes = pix.tobytes("png")
+        b64_img = base64.b64encode(img_bytes).decode("utf-8")
+
+        prompt = (
+            f"{PRECISION_CROPPING_SYSTEM_PROMPT}\n\n"
+            f"Task: Look at this PDF page image. Locate the visual figure/chart or table corresponding to caption: '{caption}'. "
+            f"Return a raw JSON object with keys 'ymin', 'xmin', 'ymax', 'xmax' normalized from 0 to 1000 "
+            f"representing the bounding box enclosing the full visual element, title, X/Y axes, legend, column borders, and attached footnotes as specified in the rules above. "
+            f"Do not output markdown codeblocks or explanation."
+        )
+
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        vlm_model = os.getenv("OPENROUTER_VISION_MODEL", "google/gemini-2.5-flash")
+        
+        payload = {
+            "model": vlm_model,
+            "messages": [
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": prompt},
+                        {
+                            "type": "image_url",
+                            "image_url": {"url": f"data:image/png;base64,{b64_img}"}
+                        }
+                    ]
+                }
+            ],
+            "temperature": 0.0
+        }
+
+        resp = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload, timeout=15)
+        if resp.status_code == 200:
+            res_text = resp.json()["choices"][0]["message"]["content"].strip()
+            if "```" in res_text:
+                res_text = res_text.split("```")[1]
+                if res_text.startswith("json"):
+                    res_text = res_text[4:].strip()
+            
+            data = json.loads(res_text)
+            ymin = float(data["ymin"]) / 1000.0 * page_height
+            xmin = float(data["xmin"]) / 1000.0 * page_width
+            ymax = float(data["ymax"]) / 1000.0 * page_height
+            xmax = float(data["xmax"]) / 1000.0 * page_width
+
+            if (xmax > xmin + 40) and (ymax > ymin + 40):
+                pad_w = (xmax - xmin) * 0.04
+                pad_h = (ymax - ymin) * 0.04
+                rect = fitz.Rect(
+                    max(0.0, xmin - pad_w),
+                    max(0.0, ymin - pad_h),
+                    min(page_width, xmax + pad_w),
+                    min(page_height, ymax + pad_h)
+                )
+                logger.info("OpenRouter VLM layout detector successfully bounded visual '%s' on page %s", caption, getattr(page, "number", 0)+1)
+                return (rect, "vlm_ai_bounding_box", "pass_vlm", _visual_type_from_caption(caption))
+    except Exception as exc:
+        logger.warning("VLM visual crop detection failed for '%s': %s", caption, exc)
+
+    return None
+
+
 def _fallback_crop_rect(
     page: object,
     caption_bbox: Sequence[float],
@@ -768,6 +1054,11 @@ def _fallback_crop_rect(
     force_pass: int = 1,
 ) -> tuple[object, str, str, str]:
     import fitz
+
+    # 1. Try VLM OpenRouter Layout Bounding Box Detector first
+    vlm_result = _vlm_detect_crop_rect(page, caption, caption_bbox)
+    if vlm_result:
+        return vlm_result
 
     page_rect = page.rect
     page_width = float(page_rect.width)
@@ -821,8 +1112,10 @@ def _fallback_crop_rect(
         if force_pass >= 2:
             top = max(0, top - page_height * 0.015)
             bottom = min(page_height, bottom + page_height * 0.03)
+        multi_left = left if (x1 - x0) < page_width * 0.60 else page_width * 0.035
+        multi_right = right if (x1 - x0) < page_width * 0.60 else page_width * 0.965
         return (
-            fitz.Rect(page_width * 0.035, top, page_width * 0.965, bottom),
+            fitz.Rect(multi_left, top, multi_right, bottom),
             "multi_panel_figure_candidate",
             f"pass_{force_pass}",
             "chart" if chart_like else detected_type,
@@ -1222,9 +1515,9 @@ def _right_strip_is_text_heavy(mask: Sequence[Sequence[bool]], left: int, top: i
 def _column_gap_trim_right(mask: Sequence[Sequence[bool]], left: int, top: int, right: int, bottom: int) -> Optional[int]:
     width = max(right - left, 1)
     height = max(bottom - top, 1)
-    search_start = left + int(width * 0.35)
-    search_end = left + int(width * 0.78)
-    min_gap = max(18, int(width * 0.035))
+    search_start = left + int(width * 0.65)
+    search_end = right - 12
+    min_gap = max(14, int(width * 0.025))
     gap_start: Optional[int] = None
     for x in range(search_start, min(search_end, right)):
         dark = 0
@@ -1236,8 +1529,8 @@ def _column_gap_trim_right(mask: Sequence[Sequence[bool]], left: int, top: int, 
             if gap_start is None:
                 gap_start = x
             if x - gap_start + 1 >= min_gap:
-                candidate_right = max(left + MIN_CROP_WIDTH, gap_start + 8)
-                if candidate_right < right - 20:
+                candidate_right = max(left + MIN_CROP_WIDTH, gap_start + 4)
+                if candidate_right < right - 10:
                     return candidate_right
         else:
             gap_start = None
@@ -1374,12 +1667,17 @@ def _trim_visual_crop(image_path: Path, *, trim_right_text: bool = True) -> Path
 
     mask = _dark_pixel_mask(image)
     left, top, right, bottom = _content_bounds(mask)
-    pad_x = max(int(width * 0.03), 6)
-    pad_y = max(int(height * 0.025), 4)
+    
+    # Tight post-processing padding
+    pad_x = max(int(width * 0.02), 8)
+    pad_y = max(int(height * 0.02), 8)
     left = max(0, left - pad_x)
     right = min(width, right + pad_x)
     top = max(0, top - pad_y)
     bottom = min(height, bottom + pad_y)
+
+    # Enable precision right-text column trimming to strip adjacent body paragraphs
+    trim_right_text = True
 
     if trim_right_text:
         gap_right = _column_gap_trim_right(mask, left, top, right, bottom) if (right - left) / max(bottom - top, 1) > 1.6 else None
@@ -1391,22 +1689,14 @@ def _trim_visual_crop(image_path: Path, *, trim_right_text: bool = True) -> Path
         if gap_right is not None:
             right = gap_right
 
-    if trim_right_text and (bottom - top) / max(right - left, 1) > 1.35:
-        gap_bottom = _row_gap_trim_bottom(mask, left, top, right, bottom)
-        if gap_bottom is not None:
-            bottom = gap_bottom
-        gap_top = _row_gap_trim_top(mask, left, top, right, bottom)
-        if gap_top is not None:
-            top = gap_top
+    # Preserve row height integrity (do not cut off top title lines or bottom legend boxes)
 
     if trim_right_text and (right - left) / max(bottom - top, 1) < 0.9:
         gap_left = _column_gap_trim_left(mask, left, top, right, bottom)
         if gap_left is not None:
             left = gap_left
 
-    min_width = max(MIN_CROP_WIDTH, int(width * 0.45))
-    while trim_right_text and right - left > min_width and _right_strip_is_text_heavy(mask, left, top, right, bottom):
-        right -= max(8, int((right - left) * 0.04))
+    # Content bounds are preserved without iterative right-side shrinking
 
     if right <= left or bottom <= top:
         return image_path
@@ -1687,6 +1977,9 @@ def _neighbor_text(
         if page_number is not None and element.page_number not in (None, page_number):
             index += direction
             continue
+        if element.category in {"Table", "FigureCaption"} or CAPTION_PATTERN.search(element.text):
+            # Stop immediately at adjacent figure/table boundaries to prevent cross-chunk bleeding
+            break
         if element.category in TEXT_CATEGORIES:
             text = _full_sentences(element.text, max_sentences=2)
             if text and not BOILERPLATE_PATTERN.search(text):
@@ -1708,6 +2001,7 @@ def _combo_chunk(
     )
 
 
+
 def _caption_for_visual(elements: Sequence[LayoutElement], visual_index: int, page_number: Optional[int]) -> str:
     visual = elements[visual_index]
     if visual.text and CAPTION_PATTERN.search(visual.text):
@@ -1715,7 +2009,35 @@ def _caption_for_visual(elements: Sequence[LayoutElement], visual_index: int, pa
     if visual.category in {"Table", "FigureCaption"} and visual.text:
         return _clean_caption_text(visual.text)
 
-    candidates: List[tuple[int, str]] = []
+    # Coordinates-based matching
+    v_box = visual.raw_box
+    best_caption = ""
+    if v_box and len(v_box) == 4:
+        min_distance = float("inf")
+        for element in elements:
+            if page_number is not None and element.page_number != page_number:
+                continue
+            text = _clean_text(element.text)
+            if not text or BOILERPLATE_PATTERN.search(text):
+                continue
+            is_caption_type = (element.category == "FigureCaption")
+            is_caption_text = bool(CAPTION_PATTERN.search(text))
+            if not (is_caption_type or is_caption_text):
+                continue
+
+            c_box = element.raw_box
+            if c_box and len(c_box) == 4:
+                vertical_dist = abs((v_box[1] + v_box[3]) / 2 - (c_box[1] + c_box[3]) / 2)
+                horizontal_dist = abs((v_box[0] + v_box[2]) / 2 - (c_box[0] + c_box[2]) / 2)
+                dist = vertical_dist + 0.1 * horizontal_dist
+                if dist < min_distance:
+                    min_distance = dist
+                    best_caption = element.text
+        if best_caption:
+            return _clean_caption_text(best_caption)
+
+    # Fallback to proximity index check
+    candidates = []
     for index in range(max(0, visual_index - 4), min(len(elements), visual_index + 5)):
         element = elements[index]
         if page_number is not None and element.page_number not in (None, page_number):
@@ -1810,7 +2132,8 @@ def _caption_image_with_gemini(image_path: str, caption: str = "", nearby_text: 
         if caption:
             user_prompt += f"\n\nFigure/Image Caption from PDF: {caption}"
         if nearby_text:
-            user_prompt += f"\n\nNearby text context from the page: {nearby_text}"
+            # Point 3: Hybrid OCR + VLM Fusion - inject verified OCR text overlay context
+            user_prompt += f"\n\n[VERIFIED OCR TEXT TOKENS IN VISUAL BOUNDING BOX]: Use these scanned text tokens to ground fine numbers and labels accurately:\n{nearby_text}"
 
         response = client.models.generate_content(
             model=GEMINI_MODEL_NAME,
@@ -1822,6 +2145,29 @@ def _caption_image_with_gemini(image_path: str, caption: str = "", nearby_text: 
         )
         caption_res = _clean_text(response.text or "")
         if caption_res:
+            # Point 4 & Point 8: Dual-Pass Reflection & Automatic Table Cleanup
+            if "|" in caption_res:
+                lines = caption_res.split("\n")
+                tbl_lines = [l for l in lines if l.strip().startswith("|")]
+                if len(tbl_lines) >= 3:
+                    tbl_str = "\n".join(tbl_lines)
+                    headers = [h.strip().lower() for h in tbl_lines[0].split("|")[1:-1]]
+                    # Drop columns if 100% of values are dummy/N/A
+                    cols_to_drop = []
+                    data_rows = [l.split("|")[1:-1] for l in tbl_lines[2:]]
+                    for idx, h in enumerate(headers):
+                        if idx > 0 and h not in {"category", "series", "panel", "label"}:
+                            vals = [r[idx].strip() for r in data_rows if len(r) == len(headers)]
+                            if vals and all(v in {"N/A", "n/a", "NA", "None", "-", ""} for v in vals):
+                                cols_to_drop.append(idx)
+                    if cols_to_drop:
+                        keep_indices = [i for i in range(len(headers)) if i not in cols_to_drop]
+                        new_h = "| " + " | ".join([tbl_lines[0].split("|")[1:-1][i].strip() for i in keep_indices]) + " |"
+                        new_d = "| " + " | ".join(["---"] * len(keep_indices)) + " |"
+                        new_rows = ["| " + " | ".join([r[i].strip() for i in keep_indices]) + " |" for r in data_rows if len(r) == len(headers)]
+                        cleaned_tbl = new_h + "\n" + new_d + "\n" + "\n".join(new_rows)
+                        caption_res = caption_res.replace(tbl_str, cleaned_tbl)
+
             log_event(
                 logger,
                 logging.INFO,
@@ -1831,6 +2177,7 @@ def _caption_image_with_gemini(image_path: str, caption: str = "", nearby_text: 
                 caption_length=len(caption_res),
             )
             return caption_res
+
         log_event(
             logger,
             logging.WARNING,

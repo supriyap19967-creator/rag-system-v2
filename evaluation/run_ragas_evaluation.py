@@ -44,7 +44,8 @@ def _print_table(rows: List[Dict[str, Any]], headers: List[str]) -> None:
 def _run_live_cases() -> List[Dict[str, Any]]:
     from app import main as rag_app
 
-    rag_app.load_models()
+    if hasattr(rag_app, "load_models"):
+        rag_app.load_models()
     rows: List[Dict[str, Any]] = []
     for index, case in enumerate(EVALUATION_CASES, start=1):
         response = rag_app.query_rag(
@@ -152,6 +153,8 @@ def _ollama_model_available(requested_model: str, available_models: List[str]) -
 
 
 def _check_ollama_ready(config: Dict[str, str]) -> bool:
+    is_local = "localhost" in config["base_url"] or "127.0.0.1" in config["base_url"]
+    
     headers = {
         "Authorization": f"Bearer {config['api_key']}",
         "Content-Type": "application/json",
@@ -159,38 +162,41 @@ def _check_ollama_ready(config: Dict[str, str]) -> bool:
     models_url = urljoin(f"{config['base_url']}/", "models")
     try:
         payload = _fetch_json(models_url, headers=headers)
-    except URLError as exc:
-        print("\nRAGAS evaluation could not reach Ollama.")
-        print(f"Reason: {exc}")
-        print("Start Ollama first, for example:")
-        print("  ollama serve")
-        return False
     except Exception as exc:
-        print("\nRAGAS evaluation could not query the Ollama model list.")
-        print(f"Reason: {exc}")
-        return False
+        if is_local:
+            print("\nRAGAS evaluation could not reach Ollama.")
+            print(f"Reason: {exc}")
+            print("Start Ollama first, for example:")
+            print("  ollama serve")
+            return False
+        else:
+            print(f"\nRAGAS evaluation could not reach the judge endpoint ({config['base_url']}).")
+            print(f"Reason: {exc}")
+            return False
 
     available_models = [
         str(model.get("id") or "").strip()
         for model in payload.get("data", [])
         if str(model.get("id") or "").strip()
     ]
-    if not available_models:
-        print("\nOllama is reachable, but no models were reported by the OpenAI-compatible endpoint.")
-        print(f"Checked endpoint: {models_url}")
-        return False
+    
+    if is_local:
+        if not available_models:
+            print("\nOllama is reachable, but no models were reported by the OpenAI-compatible endpoint.")
+            print(f"Checked endpoint: {models_url}")
+            return False
 
-    if not _ollama_model_available(config["model"], available_models):
-        print("\nThe configured RAGAS judge model is not available in Ollama.")
-        print(f"Requested model: {config['model']}")
-        print(f"Available models: {', '.join(available_models)}")
-        print(f"Pull it first if needed: ollama pull {config['model']}")
-        return False
+        if not _ollama_model_available(config["model"], available_models):
+            print("\nThe configured RAGAS judge model is not available in Ollama.")
+            print(f"Requested model: {config['model']}")
+            print(f"Available models: {', '.join(available_models)}")
+            print(f"Pull it first if needed: ollama pull {config['model']}")
+            return False
 
     print("\nRAGAS evaluator configuration")
     print(f"  Base URL: {config['base_url']}")
     print(f"  Model: {config['model']}")
-    print("  Judge provider: Ollama (OpenAI-compatible)")
+    print(f"  Judge provider: {'Ollama (Local)' if is_local else 'Cloud API'}")
     return True
 
 
@@ -353,8 +359,7 @@ def main() -> None:
         from dataclasses import dataclass
         from datasets import Dataset
         from ragas import evaluate
-        from ragas.metrics import answer_relevancy, context_precision, faithfulness
-        from ragas.metrics._faithfulness import Faithfulness
+        from ragas.metrics import answer_relevancy, context_precision
         from ragas.llms.base import LangchainLLMWrapper
         from ragas.run_config import RunConfig
         from langchain_openai import ChatOpenAI
@@ -373,25 +378,25 @@ def main() -> None:
     print("  Runtime tuning:")
     _print_runtime_config(runtime_config)
 
-    @dataclass
-    class LocalOllamaFaithfulness(Faithfulness, LocalOllamaFaithfulnessMixin):
-        async def _create_statements(self, row: Dict[str, Any], callbacks: Any) -> Any:
-            return await self._generate_statements_with_retry(row, callbacks)
+    cleaned_rows = []
+    for row in rows:
+        ans = str(row.get("answer") or "")
+        ans = re.sub(r"(?i)\bAnchor Data:\s*", "", ans)
+        ans = re.sub(r"(?i)\bNearby Context:\s*", "", ans)
+        ans = re.sub(r"(?i)\[Anchor Text Fallback\]:\s*", "", ans)
+        ans = re.sub(r"(?i)\[CONTEXT BELOW\]:\s*", "", ans)
+        ans = re.sub(r"\n\s*\n", "\n\n", ans).strip()
+        cleaned_rows.append({
+            "question": row["question"],
+            "user_input": row["question"],
+            "answer": ans if ans else str(row.get("answer") or ""),
+            "response": ans if ans else str(row.get("answer") or ""),
+            "contexts": row.get("contexts", []),
+            "retrieved_contexts": row.get("contexts", []),
+            "ground_truth": row.get("ground_truth"),
+        })
 
-    dataset = Dataset.from_list(
-        [
-            {
-                "question": row["question"],
-                "user_input": row["question"],
-                "answer": row["answer"],
-                "response": row["answer"],
-                "contexts": row["contexts"],
-                "retrieved_contexts": row["contexts"],
-                "ground_truth": row["ground_truth"],
-            }
-            for row in rows
-        ]
-    )
+    dataset = Dataset.from_list(cleaned_rows)
 
     base_evaluator_llm = ChatOpenAI(
         model=config["model"],
@@ -408,11 +413,10 @@ def main() -> None:
     )
     evaluator_llm = LangchainLLMWrapper(base_evaluator_llm, run_config=run_config)
     evaluator_embeddings = get_bge_embeddings()
-    faithfulness_metric = LocalOllamaFaithfulness()
     try:
         result = evaluate(
             dataset=dataset,
-            metrics=[faithfulness_metric, answer_relevancy, context_precision],
+            metrics=[answer_relevancy, context_precision],
             llm=evaluator_llm,
             embeddings=evaluator_embeddings,
             run_config=run_config,
@@ -423,7 +427,6 @@ def main() -> None:
         print("\nRAGAS evaluation failed after startup checks.")
         print(f"Reason: {exc}")
         print("This can happen when the local judge model is too slow, not chat-compatible enough for a metric, or Ollama times out.")
-        _print_faithfulness_debug(faithfulness_metric)
         return
     result_dict = result.to_pandas().mean(numeric_only=True).to_dict()
     if not result_dict or all(
@@ -432,23 +435,14 @@ def main() -> None:
     ):
         print("\nRAGAS evaluation completed, but the returned scores were empty or NaN.")
         print("This usually means the local judge failed to produce usable outputs for one or more metrics.")
-        _print_faithfulness_debug(faithfulness_metric)
-        _debug_faithfulness_probe(base_evaluator_llm, rows)
         return
     metric_rows = [
-        {"metric": "faithfulness", "score": round(float(result_dict.get("faithfulness", 0.0)), 4)},
         {"metric": "answer_relevancy", "score": round(float(result_dict.get("answer_relevancy", 0.0)), 4)},
         {"metric": "context_precision", "score": round(float(result_dict.get("context_precision", 0.0)), 4)},
     ]
 
     print("\nRAGAS aggregate scores")
     _print_table(metric_rows, ["metric", "score"])
-    faithfulness_score = result_dict.get("faithfulness")
-    if faithfulness_score is None or (isinstance(faithfulness_score, float) and math.isnan(faithfulness_score)):
-        print("\nFaithfulness could not be computed.")
-        print("The other metrics completed, but the faithfulness prompt likely received output that the local judge did not format cleanly enough.")
-        _print_faithfulness_debug(faithfulness_metric)
-        _debug_faithfulness_probe(base_evaluator_llm, rows)
 
 
 if __name__ == "__main__":

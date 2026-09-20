@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
 from typing import List, Sequence
 
 import torch
@@ -27,12 +28,26 @@ from app.embeddings import BGE_CACHE_FOLDER
 
 
 RERANKER_MODEL = os.getenv("RERANK_MODEL_NAME", "BAAI/bge-reranker-v2-m3")
-RERANKER_MAX_LENGTH = int(os.getenv("RERANKER_MAX_LENGTH", "1024"))
+RERANKER_MAX_LENGTH = int(os.getenv("RERANKER_MAX_LENGTH", "512"))
 RERANKER_DEVICE = (
     "cuda"
     if torch.cuda.is_available() and os.getenv("RERANKER_DEVICE", "auto").lower() != "cpu"
     else "cpu"
 )
+
+_RERANKER_SINGLETON: TransformersReranker | None = None
+_RERANKER_LOCK = threading.Lock()
+
+
+def get_reranker_singleton(model_name: str = RERANKER_MODEL) -> TransformersReranker:
+    """Thread-safe module-level singleton accessor for TransformersReranker."""
+    global _RERANKER_SINGLETON
+    if _RERANKER_SINGLETON is None or getattr(_RERANKER_SINGLETON, "model_name", None) != model_name:
+        with _RERANKER_LOCK:
+            if _RERANKER_SINGLETON is None or getattr(_RERANKER_SINGLETON, "model_name", None) != model_name:
+                _RERANKER_SINGLETON = TransformersReranker(model_name=model_name)
+    return _RERANKER_SINGLETON
+
 
 
 class TransformersReranker:
@@ -57,6 +72,10 @@ class TransformersReranker:
             trust_remote_code=True,
         ).to(RERANKER_DEVICE)
         self._model.eval()
+        
+        # Safeguard sequence length limit based on model config or default to 512
+        max_position_embeddings = getattr(self._model.config, "max_position_embeddings", 512)
+        self.max_length = min(RERANKER_MAX_LENGTH, max_position_embeddings)
 
     def _score_pairs(self, pairs: Sequence[tuple[str, str]]) -> list[float]:
         if not pairs:
@@ -69,7 +88,7 @@ class TransformersReranker:
             documents,
             padding=True,
             truncation=True,
-            max_length=RERANKER_MAX_LENGTH,
+            max_length=self.max_length,
             return_tensors="pt",
         )
         encoded = {key: value.to(RERANKER_DEVICE) for key, value in encoded.items()}

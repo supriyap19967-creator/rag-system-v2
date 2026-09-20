@@ -1,33 +1,103 @@
-venv/ 
-.venv/ 
-hf_models_v2/ 
-.hf_home/ 
-.hf_cache/ 
-.hf_cache_v2/ 
-docling_models/ 
-assets/ 
-data_cache/ 
-*.qdrant/ 
-data/ 
-*.db 
-*.bin 
-*.onnx 
-*.safetensors 
-*.sqlite 
-qdrant_db/ 
-.env 
-.env* 
-.venv/  
-venv/  
-.hf_home/  
-hf_models_v2/  
-docling_models/  
-hf_cache_v2/  
-.hf_cache/ 
-.venv/  
-venv/  
-.hf_home/  
-hf_models_v2/  
-docling_models/  
-hf_cache_v2/  
-.hf_cache/ 
+# ========================
+# Python & Environments
+# ========================
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.cache/
+venv/
+.venv/
+env/
+pip_cache/
+tmp_pip/
+
+# ========================
+# Secrets
+# ========================
+.env
+.env.*
+.streamlit/secrets.toml
+
+# ========================
+# Logs
+# ========================
+*.log
+logs/
+
+# ========================
+# Local Databases
+# ========================
+*.db
+*.sqlite
+*.sqlite3
+qdrant_db/
+qdrant_db_local/
+*.qdrant/
+
+# ========================
+# ML Models & Heavy Caches
+# ========================
+hf_models/
+hf_models_v2/
+docling_models/
+.hf_home/
+.hf_cache/
+hf_cache/
+hf_cache_v2/
+.fastembed_cache/
+gptqmodel_cache/
+.deepeval/
+.paddle_home/
+.paddleocr/
+.paddlex_home/
+*.bin
+*.onnx
+*.safetensors
+
+# ========================
+# Generated Data & Dumps
+# ========================
+data_cache/
+tmpkojxffmp/
+test_perfect_crops/
+extracted_images/
+extracted_charts/
+scratch/
+.tmp_visual_test/
+*.jsonl
+tables_raw*.json
+ingestion_progress.json
+visual_progress.json
+visual_checkpoint.json
+diag_output.txt
+page_*_markdown.txt
+docling_page_*.json
+
+
+# ========================
+# Evaluation Outputs & Locks
+# ========================
+*.lock
+evaluation/*.json
+
+# ========================
+# Embedding artifacts
+# ========================
+embeddings/*.npy
+embeddings/*.npz
+embeddings/*.pkl
+
+# ========================
+# Scratch
+# ========================
+scratch_*.py
+scratch_crop_*.png
+
+# ========================
+# OS & IDE
+# ========================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/

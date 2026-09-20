@@ -5,6 +5,7 @@ import logging
 import os
 import re
 import threading
+import concurrent.futures
 from collections import defaultdict
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -20,10 +21,15 @@ Role = Literal["user", "assistant"]
 RELATIVE_REFERENCE_PATTERN = re.compile(
     r"\b("
     r"it|this|that|these|those|"
-    r"this\s+(?:chart|figure|table|diagram|image|csv|file|data|visual)|"
-    r"that\s+(?:chart|figure|table|diagram|image|csv|file|data|visual)|"
-    r"the\s+(?:chart|figure|table|diagram|image|csv|file|data|visual)\s+(?:above|before|shown|mentioned)|"
-    r"same\s+(?:chart|figure|table|diagram|image|csv|file|data|visual)"
+    r"this\s+(?:chart|figure|table|diagram|image|csv|file|data|visual|graph|plot)|"
+    r"that\s+(?:chart|figure|table|diagram|image|csv|file|data|visual|graph|plot)|"
+    r"(?:in\s+|from\s+|the\s+)?above\s+(?:chart|figure|table|diagram|image|csv|file|data|visual|graph|plot|one)|"
+    r"above\s+(?:chart|figure|table|diagram|image|csv|file|data|visual|graph|plot|one)|"
+    r"the\s+(?:chart|figure|table|diagram|image|csv|file|data|visual|graph|plot)\s+(?:above|before|shown|mentioned|preceding|prior)|"
+    r"same\s+(?:chart|figure|table|diagram|image|csv|file|data|visual|graph|plot)|"
+    r"preceding\s+(?:chart|figure|table|diagram|image|csv|file|data|visual|graph|plot)|"
+    r"previous\s+(?:chart|figure|table|diagram|image|csv|file|data|visual|graph|plot)|"
+    r"what\s+(?:are|is)\s+(?:the\s+)?values?"
     r")\b",
     flags=re.IGNORECASE,
 )
@@ -71,6 +77,7 @@ class MultimodalConversationManager:
         )
         self._sessions: dict[str, list[ConversationTurn]] = defaultdict(list)
         self._lock = threading.RLock()
+        self._bg_executor = concurrent.futures.ThreadPoolExecutor(max_workers=1, thread_name_prefix="rag_memory_bg")
         self._gateway = GatewayInfrastructure(request_cap=1_000_000)
         self._load_from_disk()
 
@@ -88,7 +95,33 @@ class MultimodalConversationManager:
     def get_optimized_history(self, session_id: str | None = None, max_turns: int = 3) -> list[dict[str, Any]]:
         history = self.get_history(session_id)
         window = history[-max(max_turns, 0) * 2 :] if max_turns else []
-        return [asdict(turn) for turn in window]
+        optimized = []
+        for turn in window:
+            turn_dict = asdict(turn)
+            role = turn_dict.get("role")
+            raw_content = str(turn_dict.get("content") or "").strip()
+            if role == "assistant" and raw_content:
+                fig_match = re.search(r"\b(?:Figure|Fig|Table)[\s_]*([sS]?\d+(?:\.\d+)*)\b", raw_content, re.IGNORECASE)
+                asset_ref = f"{fig_match.group(0)}" if fig_match else None
+                headers_match = re.search(r"\|([^\n]+)\|", raw_content)
+                headers_str = ""
+                if headers_match:
+                    cols = [c.strip() for c in headers_match.group(1).split("|") if c.strip() and not set(c.strip()).issubset({"-", ":"})]
+                    if cols:
+                        headers_str = ", ".join(cols[:6])
+                lines = raw_content.split("\n")
+                clean_lines = [line for line in lines if not line.strip().startswith(("|", "```"))]
+                clean_narrative = "\n".join(clean_lines).strip()
+                if len(clean_narrative) > 800:
+                    clean_narrative = clean_narrative[:800] + "..."
+                if asset_ref or headers_str:
+                    tag_parts = []
+                    if asset_ref: tag_parts.append(f"Target Asset: {asset_ref}")
+                    if headers_str: tag_parts.append(f"Table Schema: [{headers_str}]")
+                    clean_narrative += f"\n[Historical Asset Context: {' | '.join(tag_parts)}]"
+                turn_dict["content"] = clean_narrative
+            optimized.append(turn_dict)
+        return optimized
 
     def get_full_history(self, session_id: str | None = None) -> list[dict[str, Any]]:
         return [asdict(turn) for turn in self.get_history(session_id)]
@@ -202,6 +235,74 @@ class MultimodalConversationManager:
             len(sources or []),
             len(last_turn.asset_paths),
         )
+
+    def contextualize_user_query(self, user_query: str, session_id: str | None = None) -> str:
+        """
+        Rewrites implicit relative follow-up queries ('in above figure...', 'what is the value of X')
+        into explicit standalone queries by referencing active figures/tables from previous turns.
+        """
+        if not user_query or not user_query.strip():
+            return user_query
+            
+        history = self.get_history(session_id)
+        if not history:
+            return user_query
+
+        # Extract active asset / figure / table names from recent turns
+        active_target = None
+        for turn in reversed(history[-4:]):
+            content = turn.content if hasattr(turn, 'content') else (turn.get('content', '') if isinstance(turn, dict) else '')
+            fig_match = re.search(r"\b(?:Figure|Fig|Table)[\s_]*([sS]?\d+(?:\.\d+)*)\b", content, re.IGNORECASE)
+            if fig_match:
+                kind = "Figure" if ("figure" in fig_match.group(0).lower() or "fig" in fig_match.group(0).lower()) else "Table"
+                active_target = f"{kind} {fig_match.group(1)}"
+                break
+            asset_paths = turn.asset_paths if hasattr(turn, 'asset_paths') else (turn.get('asset_paths', []) if isinstance(turn, dict) else [])
+            if asset_paths:
+                for path in asset_paths:
+                    file_name = Path(path).name
+                    fig_match_path = re.search(r"(?:Figure|Fig|Table)[_\s]*([sS]?\d+(?:\.\d+)*)", file_name, re.IGNORECASE)
+                    if fig_match_path:
+                        kind = "Figure" if ("figure" in file_name.lower() or "fig" in file_name.lower()) else "Table"
+                        active_target = f"{kind} {fig_match_path.group(1)}"
+                        break
+                if active_target:
+                    break
+
+        if not active_target:
+            return user_query
+
+        # Check if the current user_query already specifies an explicit figure or table ID
+        current_fig_match = re.search(r"\b(?:Figure|Fig|Table)[\s_]*([sS]?\d+(?:\.\d+)*)\b", user_query, re.IGNORECASE)
+        if current_fig_match:
+            return user_query
+
+        # Replace implicit reference phrases if present
+        contextualized = re.sub(
+            r"\b(?:in\s+|from\s+)?(?:the\s+)?above\s+(?:figure|chart|table|diagram|image|csv|data|visual|one)\b",
+            f"in {active_target}",
+            user_query,
+            flags=re.IGNORECASE
+        )
+        contextualized = re.sub(
+            r"\bthis\s+(?:figure|chart|table|diagram|image|csv|data|visual)\b",
+            f"{active_target}",
+            contextualized,
+            flags=re.IGNORECASE
+        )
+        contextualized = re.sub(
+            r"\b(?:in\s+|from\s+)?it\b",
+            f"in {active_target}",
+            contextualized,
+            flags=re.IGNORECASE
+        )
+
+        if contextualized != user_query:
+            logger.info("Contextualized query session_id=%s original='%s' rewritten='%s'", session_id, user_query, contextualized)
+            return contextualized
+
+        return user_query
+
 
     def compile_generator_input(
         self,
@@ -427,17 +528,26 @@ class MultimodalConversationManager:
 
     def _save_to_disk(self) -> None:
         try:
-            self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+            # Snapshot state inside lock
             serializable = {
                 session_id: [asdict(turn) for turn in turns]
                 for session_id, turns in self._sessions.items()
             }
-            self.storage_path.write_text(
-                json.dumps(serializable, ensure_ascii=False, indent=2, default=str),
-                encoding="utf-8",
-            )
+            
+            def _bg_write(data):
+                try:
+                    self.storage_path.parent.mkdir(parents=True, exist_ok=True)
+                    self.storage_path.write_text(
+                        json.dumps(data, ensure_ascii=False, indent=2, default=str),
+                        encoding="utf-8",
+                    )
+                except Exception as exc:
+                    logger.warning("Could not save chat history to %s: %s", self.storage_path, exc)
+            
+            # Offload serialization and disk I/O to background thread
+            self._bg_executor.submit(_bg_write, serializable)
         except Exception as exc:
-            logger.warning("Could not save chat history to %s: %s", self.storage_path, exc)
+            logger.warning("Failed to dispatch background save for %s: %s", self.storage_path, exc)
 
     def _mask_pii(self, text: Any) -> str:
         return self._gateway.mask_pii(str(text or "").strip())

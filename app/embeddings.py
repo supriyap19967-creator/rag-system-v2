@@ -53,8 +53,13 @@ os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 # Load local SentenceTransformer model
 logger = logging.getLogger(__name__)
-logger.info("Initializing local SentenceTransformer('all-MiniLM-L6-v2')...")
-model = SentenceTransformer('all-MiniLM-L6-v2')
+try:
+    model = SentenceTransformer('all-MiniLM-L6-v2', cache_folder=BGE_CACHE_FOLDER, local_files_only=True)
+except Exception:
+    try:
+        model = SentenceTransformer('all-MiniLM-L6-v2', cache_folder=BGE_CACHE_FOLDER)
+    except Exception:
+        model = SentenceTransformer('all-MiniLM-L6-v2')
 logger.info("Local SentenceTransformer model loaded successfully.")
 
 

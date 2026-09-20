@@ -36,14 +36,18 @@ QWEN_CHART_PROMPT = """You are a data analyst extracting structured information 
 Analyze the chart and extract ALL of the following that are visible:
 1. CHART TYPE: (bar / line / pie / scatter / area / histogram / combo / other)
 2. TITLE: Exact chart title if present
-3. X-AXIS: Label name + unit + value range
-4. Y-AXIS: Label name + unit + value range
+3. X-AXIS (DOMAIN / CATEGORIES): Label name + unit + domain/category list or time range (e.g. Years 2000 to 2014, countries). Represents the independent variable.
+4. Y-AXIS (METRIC / RANGE): Label name + unit + metric value range (e.g. Adoption score 0.6 to 1.2, percentages). Represents the measured dependent variable.
 5. LEGEND: All series/category names exactly as shown
 6. DATA POINTS: Every visible data value (numbers, percentages, dates)
 7. TRENDS: Direction of change (rising/falling/stable/cyclical)
 8. PEAK/TROUGH: Highest and lowest values with their labels
 9. COMPARISONS: Key differences between series or categories
 10. ANNOTATIONS: Any callouts, footnotes, or source labels
+STRICT AXIS RULES:
+- NEVER blend or merge X-axis and Y-axis value ranges into a single range string (e.g. NEVER write 'from 0.6 to 2014').
+- Keep X-axis domain ranges (years/categories) and Y-axis metric ranges (percentages/scores) strictly separate.
+- For horizontal bar charts, categories printed vertically function logically as the X-axis, and bar lengths function logically as the Y-axis.
 Use the OCR literals provided to ground all numeric values exactly."""
 
 QWEN_TABLE_PROMPT = """You are a data extraction specialist analyzing a table image for RAG retrieval.
