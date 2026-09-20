@@ -6,18 +6,8 @@ os.environ["MKL_NUM_THREADS"] = "1"
 os.environ["OPENBLAS_NUM_THREADS"] = "1"
 os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
 os.environ["NUMEXPR_NUM_THREADS"] = "1"
-os.environ["HF_HUB_OFFLINE"] = "1"
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
-os.environ["FASTEMBED_LOCAL_FILES_ONLY"] = "true"
+# Configure default thread environment
 
-try:
-    import fastembed.common.model_management as _fe_mm
-    _fe_mm.download_files_from_huggingface = lambda *args, **kwargs: []
-except Exception:
-    pass
-
-import socket
-socket.setdefaulttimeout(3.0)
 
 import concurrent.futures
 import atexit
