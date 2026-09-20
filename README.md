@@ -94,6 +94,56 @@ flowchart TD
 ```
 
 ---
+# Enterprise Multimodal Conversational RAG System: Flowcharts & Architecture
+
+This document provides an end-to-end, interview-grade architectural specification and system flowcharts for our **Enterprise Multimodal Conversational RAG System**. It covers the complete lifecycle of data ingestion, contextual query rewriting, deterministic intent routing, multi-agent collaboration, parallel multi-threaded retrieval, and 14-layer compliance gauntlet validation.
+
+---
+
+## 1. High-Level Architecture Overview (7-Layer Multimodal Pipeline)
+
+```mermaid
+flowchart TD
+    subgraph L1 ["Layer 1: Client Interface & Gateway Control"]
+        User(["👤 User Input Question"]) --> StreamlitUI["Streamlit UI Container [StreamlitApp.py]"]
+        StreamlitUI --> Gateway["Gateway Guardrails [gateway_guardrails.py]"]
+    end
+
+    subgraph L2 ["Layer 2: Memory & Contextual Query Engine"]
+        Gateway --> MemoryManager["Multimodal Conversation Manager [conversation_manager.py]"]
+        MemoryManager <--> SessionStore[("Session Memory & Asset Registry")]
+    end
+
+    subgraph L3 ["Layer 3: Intent Classification & Modality Dispatcher"]
+        MemoryManager --> LRUCache{"LRU Cache Hit?"}
+        LRUCache -- "Yes (<10ms)" --> StreamlitUI
+        LRUCache -- "No Hit" --> IntentRouter["Deterministic Intent Router [intent_router.py]"]
+    end
+
+    subgraph L4 ["Layer 4 & 5: Specialized Modality Execution Pipelines"]
+        IntentRouter --> ModalitySwitch{"Identify Required Modality"}
+        ModalitySwitch -- "TEXT_ONLY" --> QdrantHybrid["Text Pipeline: Qdrant Hybrid Search [retriever.py]"]
+        ModalitySwitch -- "VISUAL_SPECIFIC" --> VisionStore["Visual Pipeline: RAM Lookup & Vision OCR [schemas_and_agent.py]"]
+        ModalitySwitch -- "CSV_ONLY" --> PandasEngine["CSV Pipeline: Pandas Sandbox [structured_query.py]"]
+    end
+
+    subgraph L6 ["Layer 6: Answer Synthesis & 15-Layer Safety Gauntlet"]
+        QdrantHybrid & VisionStore & PandasEngine --> Synthesizer["LLM Synthesizer Engine [query_rag.py]"]
+        Synthesizer --> Gauntlet["15-Layer Safety Gauntlet Evaluator [compliance_safety.py]"]
+        
+        subgraph GauntletPhases ["3 Compliance Phases"]
+            Phase1["Phase 1: Input Security"] --> Phase2["Phase 2: Alignment"] --> Phase3["Phase 3: Fidelity"]
+        end
+        Gauntlet --> GauntletPhases
+    end
+
+    subgraph L7 ["Layer 7: Presentation & Telemetry"]
+        GauntletPhases --> Formatter["UI Formatter & OTEL Telemetry [StreamlitApp.py]"]
+        Formatter --> StreamlitUI
+    end
+```
+
+---
 
 ## Technical Legend & Component Responsibilities
 
@@ -115,6 +165,27 @@ flowchart TD
 | **Validator Agent & Safety Gauntlet** | [validation.py](file:///C:/Users/supri/recovered-rag-project/app/agents/validation.py) & [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) | Draft response + Source context | Cleared payload + Faithfulness score | 14-Layer gatekeeper running prompt injection filters, PII checks, system prompt scanners, exact quote anchoring, and line-level faithfulness evaluation. |
 
 ---
+## Technical Legend & Component Responsibilities
+
+### Subsystem Component Matrix
+
+| Subsystem / Node | Code File Location | Input Payload | Output Payload | Key Technical Responsibilities |
+| :--- | :--- | :--- | :--- | :--- |
+| **Streamlit UI** | [StreamlitApp.py](file:///C:/Users/supri/recovered-rag-project/streamlit_ui/StreamlitApp.py) | User prompt / Voice WAV | Rendered Markdown + Images | Main user interaction interface, session state maintenance (`LAST_ACTIVE_IMAGE_PATH`), voice transcription trigger, and response streaming. |
+| **Gateway Guardrails** | [gateway_guardrails.py](file:///C:/Users/supri/recovered-rag-project/gateway_guardrails.py) | Raw user string | Sanitized query string | Enforces rate limits, token budgets, toxicity filters, PII masking, and Layer 1–3 security checks before retrieval. |
+| **Multimodal Conversation Manager** | [conversation_manager.py](file:///C:/Users/supri/recovered-rag-project/app/conversation_manager.py) | Sanitized query + session ID | Contextualized standalone query | Evaluates relative references (`above figure`, `this table`, `it`). Resolves implicit follow-ups against past turns and active asset memory into explicit standalone queries. |
+| **Deterministic Intent Router** | [intent_router.py](file:///C:/Users/supri/recovered-rag-project/app/intent_router.py) | Standalone query string | `(QueryIntent, allowed_tools)` | Sub-millisecond (<1ms) intent classifier. Prioritizes `VISUAL_SPECIFIC` for figure queries and bypasses unnecessary LLM supervisor calls. |
+| **Supervisor Orchestrator Agent** | [supervisor.py](file:///C:/Users/supri/recovered-rag-project/app/agents/supervisor.py) | Contextualized query + history | Structured TaskPlan | Pydantic AI agent that analyzes complex multi-part queries and delegates sub-tasks to specialized sub-agents (`RESEARCH_AGENT`, `VISION_AGENT`, `DATA_AGENT`). |
+| **Research Agent** | [research.py](file:///C:/Users/supri/recovered-rag-project/app/agents/research.py) | Textual sub-query | Key findings + Source notes | Specialized sub-agent for qualitative text search, semantic document retrieval, and report synthesis. |
+| **Vision Agent** | [vision.py](file:///C:/Users/supri/recovered-rag-project/app/agents/vision.py) | Image path + user query | Structured VisionOutput payload | Handles visual charts, diagrams, and figures. Features **PIL thumbnail downscaling (max 1024px)** for 70% lighter base64 network payloads. |
+| **Data Agent** | [data.py](file:///C:/Users/supri/recovered-rag-project/app/agents/data.py) | Quantitative sub-query | Executive metrics + Code ref | Executes Pandas dataframe code in a sandboxed execution environment for calculations, groupbys, and rankings. |
+| **Qdrant Hybrid Retriever** | [retriever.py](file:///C:/Users/supri/recovered-rag-project/app/retriever.py) | Query string + Filters | Raw matching points | Performs dense vector search (BGE-M3, 1024-dim) combined with sparse token search (BM25) inside local Qdrant collections. |
+| **Cross-Encoder Reranker** | [reranker.py](file:///C:/Users/supri/recovered-rag-project/app/reranker.py) | Query + Top-N candidates | Top-3 reranked documents | Uses `BAAI/bge-reranker-v2-m3` to compute deep cross-attention similarity scores between query and retrieved document text. |
+| **In-Memory RAM Transcription Store** | [schemas_and_agent.py](file:///C:/Users/supri/recovered-rag-project/multimodal-rag-system/schemas_and_agent.py) | Figure / Table ID | Markdown table string | Eagerly pre-loads 215+ pre-computed visual table markdowns into RAM (`_IN_MEMORY_TRANSCRIPTION_CACHE`) on startup, serving extractions in **<10ms**. |
+| **Validator Agent & Safety Gauntlet** | [validation.py](file:///C:/Users/supri/recovered-rag-project/app/agents/validation.py) & [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) | Draft response + Source context | Cleared payload + Faithfulness score | 15-Layer gatekeeper running prompt injection filters, PII checks, system prompt scanners, exact quote anchoring, and line-level faithfulness evaluation. |
+
+---
+
 
 ### Detailed 14-Layer Compliance Safety Gauntlet Breakdown
 
@@ -214,6 +285,107 @@ flowchart TD
 | **7** | Streamlit UI | [StreamlitApp.py](file:///C:/Users/supri/recovered-rag-project/streamlit_ui/StreamlitApp.py) | Cleared Payload | Rendered Markdown + Crop + Sources | Unconditional session state saving of active visual asset path. |
 
 ---
+
+
+### Detailed 15-Layer Compliance Safety Gauntlet Breakdown
+
+To ensure zero visual clutter in the high-level architecture diagram while providing full technical depth for technical interviews, the complete 15-layer compliance gauntlet implemented in [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) is categorized below:
+
+#### **Phase 1: Input Security & Pre-Sanitization (Layers 1–4)**
+1. **Layer 1: Prompt Injection Filter**: Scans user input for adversarial instructions (e.g. `ignore previous rules`, `DAN mode`).
+2. **Layer 2: PII Redaction**: Masks sensitive personal data (emails, phone numbers, API keys) before query processing.
+3. **Layer 3: Rate Limit & Token Budget**: Enforces rate limits and monitors token budgets to ensure system availability.
+4. **Layer 4: Retrieval Coverage**: Verifies that the retrieval context adequately covers the user's requested concepts.
+
+#### **Phase 2: Contextual & Structural Alignment (Layers 5–10)**
+5. **Layer 5: Semantic Content Check**: Validates that queries and responses align semantically with allowed domain topics.
+6. **Layer 6: Path Verification**: Verifies that referenced visual crops (`figure_4_2.png`) exist on disk before VLM calls.
+7. **Layer 7: Bounding Box Validator**: Ensures visual coordinates match original PDF page bounding boxes.
+8. **Layer 8: Entity Cross Checker**: Prevents conflating single categories with aggregate brackets (e.g. Income Groups).
+9. **Layer 9: Exact Quote Anchoring**: Cross-checks verbatim text claims against retrieved vector context chunks.
+10. **Layer 10: Markdown Sanitizer**: Cleans and validates the structural formatting of generated tables and markdowns.
+
+#### **Phase 3: Fidelity & Hallucination Defense (Layers 11–15)**
+11. **Layer 11: System Prompt Leakage Scanner**: Detects and blocks attempts to extract internal system prompt instructions.
+12. **Layer 12: DLP Blocklist**: Prevents data loss by scanning output against a strict blacklist of sensitive terms.
+13. **Layer 13: Faithfulness Evaluation**: Computes sentence-level max semantic similarity, enforcing a strict passing threshold ($\ge 0.90$).
+14. **Layer 14: Dummy Value Blacklist Scanner**: Checks for and scrubs hallucinated generic filler words (e.g. `John Doe`, `xxx`).
+15. **Layer 15: Income Group Claim Sanitizer**: Specifically audits statements about low, middle, and high-income bands against verified constants.
+
+---
+
+## 2. Deep Dive: Ingestion Pipeline
+
+```mermaid
+flowchart TD
+    Start([Start Ingestion]) --> CheckType{Document Type}
+    
+    CheckType -- CSV --> CSVProc["Parse CSV Rows & Token Chunking"]
+    CheckType -- PDF --> PDFProc["PDF Layout & Visual Extraction [Docling Parser]"]
+    
+    PDFProc --> Cropper["Generate High-Res Crops [pdf_visual_extraction.py]"]
+    
+    CSVProc & PDFProc & Cropper --> ChunkCombine["Unify Chunks & Generate Metadata"]
+    ChunkCombine --> SafetyVetting["Compliance Vetting & Safety Verification"]
+    
+    SafetyVetting --> Embeddings["Dual Embeddings: BGE-M3 (Dense) + BM25 (Sparse)"]
+    Embeddings --> UploadQdrant[("Upsert to Qdrant Collection [deploy_to_qdrant.py]")]
+    UploadQdrant --> EndIngest([Ingestion Complete])
+```
+
+- **Visual Extraction**: Uses [pdf_visual_extraction.py](file:///C:/Users/supri/recovered-rag-project/app/pdf_visual_extraction.py) to isolate visual elements and crops.
+- **Data Ingestion Script**: Managed by [ingest_data.py](file:///C:/Users/supri/recovered-rag-project/ingest_data.py) and deployment scripts like [deploy_to_qdrant.py](file:///C:/Users/supri/recovered-rag-project/deploy_to_qdrant.py).
+
+---
+
+## 3. Deep Dive: Multi-Turn Execution Sequence & Follow-up Resolution
+
+```mermaid
+flowchart TD
+    subgraph Step1 ["Step 1: User Follow-up Input"]
+        Input["👤 User Query: 'in above figure what are the values of low income?'"]
+    end
+
+    subgraph Step2 ["Step 2: Contextual Query Rewriting [conversation_manager.py]"]
+        Input --> ContextManager["Multimodal Conversation Manager"]
+        SessionStore[("Active Session Store (Figure 4.2)")] <--> ContextManager
+        ContextManager --> Rewritten["Rewritten Query: 'in Figure 4.2 what are the values of low income?'"]
+    end
+
+    subgraph Step3 ["Step 3: Intent Classification [intent_router.py]"]
+        Rewritten --> Router["Intent Router: VISUAL_SPECIFIC (allow_pandas: False)"]
+    end
+
+    subgraph Step4 ["Step 4: Parallel Retrieval [ThreadPoolExecutor max_workers=3]"]
+        Router --> ParallelPool["Parallel Worker Dispatcher"]
+        ParallelPool --> QdrantWorker["Worker 1: Qdrant Vector Search"]
+        ParallelPool --> RAMWorker["Worker 2: RAM Store Lookup (<10ms)"]
+    end
+
+    subgraph Step5 ["Step 5: Synthesis & 15-Layer Safety Gauntlet"]
+        QdrantWorker & RAMWorker --> Synthesizer["LLM Synthesizer Engine"]
+        Synthesizer --> DraftAnswer["Draft Answer: '$1,135 or less'"]
+        DraftAnswer --> SafetyGauntlet["15-Layer Compliance Safety Evaluator (Score = 0.95 Cleared)"]
+    end
+
+    subgraph Step6 ["Step 6: Rendered UI Response [StreamlitApp.py]"]
+        SafetyGauntlet --> UIResponse["Streamlit UI Card (Markdown Answer + Figure 4.2 Crop + Citations)"]
+    end
+```
+
+### Multi-Turn Execution Step Walkthrough
+
+| Step | Subsystem | Code Location | Input Action / Data | Output Result | Key Engineering Advantage |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **1** | User Input | UI Prompt | `"in above figure what are the values of low income?"` | Raw User String | Captures implicit relative reference (`"above figure"`). |
+| **2** | Memory Engine | [conversation_manager.py](file:///C:/Users/supri/recovered-rag-project/app/conversation_manager.py) | Inspects active session (`LAST_ACTIVE_IMAGE_PATH`) | Rewritten: `"in Figure 4.2 what are the values of low income?"` | Resolves anaphora references into standalone queries before vector search. |
+| **3** | Intent Router | [intent_router.py](file:///C:/Users/supri/recovered-rag-project/app/intent_router.py) | Standalone Query | Intent: `VISUAL_SPECIFIC` (`allow_pandas: False`) | Sub-millisecond (<1ms) routing; prevents misrouting figure questions to CSV dataframes. |
+| **4** | Parallel Pool | `ThreadPoolExecutor` | Concurrent Dispatch | Worker 1: Qdrant Chunks<br/>Worker 2: RAM Table (`<10ms`) | Runs vector search and pre-computed RAM lookup concurrently in parallel. |
+| **5** | Synthesizer | [query_rag.py](file:///C:/Users/supri/recovered-rag-project/query_rag.py) | RAM Markdown Table + Context | `"Low-income economies are defined as $1,135 or less."` | Grounded synthesis directly using extracted tabular metrics. |
+| **6** | Safety Gauntlet | [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) | Draft Answer + Source Chunks | Faithfulness Score = 0.95 (Cleared) | Sentence-level max similarity and comma-normalized token overlap check. |
+| **7** | Streamlit UI | [StreamlitApp.py](file:///C:/Users/supri/recovered-rag-project/streamlit_ui/StreamlitApp.py) | Cleared Payload | Rendered Markdown + Crop + Sources | Unconditional session state saving of active visual asset path. |
+
+
 
 ## 2. Key Components
 
