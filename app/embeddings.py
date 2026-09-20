@@ -53,18 +53,26 @@ os.environ.setdefault("HF_HUB_DISABLE_SYMLINKS_WARNING", "1")
 
 # Load local SentenceTransformer model
 logger = logging.getLogger(__name__)
-try:
-    model = SentenceTransformer('all-MiniLM-L6-v2', cache_folder=BGE_CACHE_FOLDER, local_files_only=True)
-except Exception:
-    try:
-        model = SentenceTransformer('all-MiniLM-L6-v2', cache_folder=BGE_CACHE_FOLDER)
-    except Exception:
-        model = SentenceTransformer('all-MiniLM-L6-v2')
-logger.info("Local SentenceTransformer model loaded successfully.")
+_MODEL_SINGLETON = None
+
+def get_sentence_transformer():
+    global _MODEL_SINGLETON
+    if _MODEL_SINGLETON is None:
+        logger.info("Initializing local SentenceTransformer model...")
+        try:
+            _MODEL_SINGLETON = SentenceTransformer('all-MiniLM-L6-v2', cache_folder=BGE_CACHE_FOLDER, local_files_only=True)
+        except Exception:
+            try:
+                _MODEL_SINGLETON = SentenceTransformer('all-MiniLM-L6-v2', cache_folder=BGE_CACHE_FOLDER)
+            except Exception:
+                _MODEL_SINGLETON = SentenceTransformer('all-MiniLM-L6-v2')
+        logger.info("Local SentenceTransformer model loaded successfully.")
+    return _MODEL_SINGLETON
 
 
 def get_query_vector(query_text: str) -> list[float]:
     """Embed a query with local all-MiniLM-L6-v2."""
+    model = get_sentence_transformer()
     vector = model.encode(query_text).tolist()
     return [float(x) for x in vector]
 
