@@ -2998,6 +2998,11 @@ def trigger_background_warmup() -> bool:
             logger.warning("Background warmup notice: %s", err)
 
     thread = threading.Thread(target=_warmup_worker, daemon=True)
+    try:
+        from streamlit.runtime.scriptrunner import add_script_run_ctx
+        add_script_run_ctx(thread)
+    except Exception:
+        pass
     thread.start()
     return True
 
@@ -10516,7 +10521,10 @@ def run_pipeline(
 
 
 def main() -> None:
-    st.set_page_config(page_title=APP_TITLE, layout="wide")
+    try:
+        st.set_page_config(page_title=APP_TITLE, layout="wide")
+    except Exception:
+        pass
     _init_session_state()
     _consume_voice_query_params()
     groq_api_key, nvidia_api_key = _render_sidebar()
