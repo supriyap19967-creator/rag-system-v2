@@ -101,3 +101,8 @@ scratch_crop_*.png
 Thumbs.db
 .idea/
 .vscode/
+"extracted_charts/" 
+"extracted_images/" 
+"Data/extracted_visuals_smoke/" 
+"assets/extracted_images/" 
+"assets/extracted_charts/" 
