@@ -4141,26 +4141,35 @@ def display_image_robustly(img_path: str):
         ]
         
         found_path = None
-        for path in possible_paths:
-            is_lfs = False
-            if "assets/extracted_images" in path.lower():
-                if os.path.exists(path) and os.path.getsize(path) <= 1000:
-                    is_lfs = True
-            if os.path.exists(path) and os.path.isfile(path) and not is_lfs:
-                # Pre-validate PIL image readability safely
-                try:
-                    from PIL import Image
-                    with Image.open(path) as test_img:
-                        test_img.verify()
+        if str(visual_asset_path).startswith("http://") or str(visual_asset_path).startswith("https://"):
+            found_path = visual_asset_path
+        else:
+            for path in possible_paths:
+                if str(path).startswith("http://") or str(path).startswith("https://"):
                     found_path = path
                     break
-                except Exception as img_err:
-                    logger.warning("PIL image header validation notice for %s: %s", path, img_err)
-                    continue
+                is_lfs = False
+                if "assets/extracted_images" in str(path).lower():
+                    if os.path.exists(path) and os.path.getsize(path) <= 1000:
+                        is_lfs = True
+                if os.path.exists(path) and os.path.isfile(path) and not is_lfs:
+                    try:
+                        from PIL import Image
+                        with Image.open(path) as test_img:
+                            test_img.verify()
+                        found_path = path
+                        break
+                    except Exception as img_err:
+                        logger.warning("PIL image header validation notice for %s: %s", path, img_err)
+                        continue
+
+            if not found_path:
+                from app.multimodal_assets import get_supabase_asset_url
+                found_path = get_supabase_asset_url(visual_asset_path)
 
         if found_path:
             try:
-                st.image(found_path, caption=f"Extracted Asset: {filename}", width="stretch")
+                st.image(found_path, caption=f"Extracted Asset: {filename}", use_container_width=True)
             except Exception as render_err:
                 st.warning(f"Unable to render image asset ({filename}): {render_err}")
         else:

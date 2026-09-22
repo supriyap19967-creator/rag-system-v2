@@ -692,8 +692,33 @@ def get_supabase_asset_url(path_or_url: str) -> str:
     marker = "recovered-rag-project/"
     if marker in path_str:
         path_str = path_str.split(marker, 1)[1]
+
+    known_subfolders = [
+        "extracted_charts", "extracted_images", "Data/extracted_visuals_smoke",
+        "assets/extracted_images", "assets/extracted_charts", "assets/extracted_tables", "Data/csv"
+    ]
+    path_lower = path_str.lower()
+    for sub in known_subfolders:
+        if sub.lower() in path_lower:
+            idx = path_lower.find(sub.lower())
+            rel_path = path_str[idx:].lstrip("/")
+            return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_NAME}/{rel_path}"
+
+    filename = Path(path_str).name
+    norm_id = normalize_entity_id(filename)
     
+    try:
+        registry = build_asset_registry()
+        for record in registry:
+            rec_rel = record.relative_path.replace("\\", "/").lstrip("/")
+            if norm_id in record.entity_id or record.entity_id in norm_id:
+                return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_NAME}/{rec_rel}"
+    except Exception:
+        pass
+
     clean_rel = path_str.lstrip("/")
+    if "/" not in clean_rel:
+        clean_rel = f"extracted_charts/{clean_rel}"
     return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_NAME}/{clean_rel}"
 
 def _resolve_existing_image_path(input_path: str) -> str | None:

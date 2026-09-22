@@ -101,7 +101,8 @@ def execute_pandas_query(ctx: RunContext[Any], python_code: str) -> str:
     """
     logger.info("Executing Pandas code on local tables...")
     
-    # Expose preloaded dataframes if they exist on disk, else search folder
+    # Expose preloaded dataframes if they exist on disk, else load from Supabase CDN
+    from app.multimodal_assets import get_supabase_asset_url
     locs = {}
     tables_dir = PROJECT_ROOT / "assets" / "extracted_tables"
     if tables_dir.exists():
@@ -112,13 +113,18 @@ def execute_pandas_query(ctx: RunContext[Any], python_code: str) -> str:
             except Exception:
                 pass
                 
-    # Also expose standard names
-    gdp_path = PROJECT_ROOT / "Data" / "gdp_data.csv"
-    if gdp_path.exists():
-        locs["gdp_df"] = pd.read_csv(gdp_path)
-    co2_path = PROJECT_ROOT / "Data" / "co2_data.csv"
-    if co2_path.exists():
-        locs["co2_df"] = pd.read_csv(co2_path)
+    # Also expose standard names (from local disk or Supabase Cloud CDN)
+    for name, rel_path in [("gdp_df", "Data/gdp_data.csv"), ("co2_df", "Data/co2_data.csv"), ("all_tables_df", "Data/csv/World_Development_Report_2025_All_Tables.csv")]:
+        local_p = PROJECT_ROOT / rel_path
+        try:
+            if local_p.exists() and local_p.is_file():
+                locs[name] = pd.read_csv(local_p)
+            else:
+                supa_url = get_supabase_asset_url(rel_path)
+                logger.info(f"🌐 Fetching CSV dataset '{name}' from Supabase CDN: {supa_url}")
+                locs[name] = pd.read_csv(supa_url)
+        except Exception as csv_err:
+            logger.warning(f"Could not load CSV dataset '{name}': {csv_err}")
         
     stdout = io.StringIO()
     old_stdout = sys.stdout
