@@ -20,7 +20,7 @@ class QdrantSettings:
     """Environment-backed Qdrant connection settings."""
 
     collection_name: str = os.getenv("QDRANT_COLLECTION", "conversational_rag")
-    path: str = (os.getenv("QDRANT_PATH") or "./qdrant_db").strip()
+    path: str = os.getenv("QDRANT_PATH", "").strip()
     host: str = os.getenv("QDRANT_HOST", "localhost")
     port: int = int(os.getenv("QDRANT_PORT", "6333"))
     grpc_port: int = int(os.getenv("QDRANT_GRPC_PORT", "6334"))
@@ -151,7 +151,7 @@ def get_qdrant_client(settings: QdrantSettings | None = None):
     except ImportError as exc:
         raise RuntimeError("Install qdrant-client to use Qdrant vector storage.") from exc
 
-    settings = settings or QdrantSettings(path=os.path.abspath("./qdrant_db"))
+    settings = settings or QdrantSettings()
     logger.info("Initializing Qdrant client for collection %s", settings.collection_name)
     client = _create_qdrant_client(settings)
     ensure_hybrid_collection(client, settings.collection_name)

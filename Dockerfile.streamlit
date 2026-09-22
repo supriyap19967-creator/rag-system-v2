@@ -2,10 +2,16 @@ FROM python:3.10-slim
 
 WORKDIR /app
 
-COPY requirements-streamlit.txt .
+COPY streamlit_ui/requirements.txt ./requirements.txt
 
 RUN pip install --no-cache-dir -r requirements-streamlit.txt
 
 COPY streamlit_ui ./streamlit_ui
+COPY app ./app
+COPY vectordb ./vectordb
+COPY embeddings ./embeddings
+COPY ingestion ./ingestion
+COPY multimodal-rag-system ./multimodal-rag-system
+COPY gateway_guardrails.py compliance_safety.py self_rag_utils.py ./
 
 CMD streamlit run streamlit_ui/StreamlitApp.py --server.port $PORT --server.address 0.0.0.0 --server.enableCORS false --server.enableXsrfProtection false

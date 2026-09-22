@@ -5,6 +5,10 @@ import hashlib
 import logging
 import os
 import re
+import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
 from dataclasses import dataclass, field
 from functools import lru_cache
 from pathlib import Path
@@ -37,6 +41,12 @@ MARKDOWN_TABLE_PATTERN = re.compile(r"^\s*\|.+\|\s*$", flags=re.MULTILINE)
 ASSET_FIELDS = (
     "image_path",
     "image_paths",
+    "image_url",
+    "image_urls",
+    "visual_asset_url",
+    "visual_asset_urls",
+    "storage_path",
+    "storage_paths",
     "figure_image_path",
     "figure_image_paths",
     "chart_image_path",
@@ -62,6 +72,11 @@ ASSET_FIELDS = (
     "contains_diagram",
     "contains_map",
 )
+
+SUPABASE_URL = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY", "").strip()
+SUPABASE_BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "").strip()
+SUPABASE_ASSET_CACHE_DIR = Path(tempfile.gettempdir()) / "rag_supabase_assets"
 
 
 @dataclass(frozen=True, slots=True)
@@ -277,6 +292,54 @@ def _as_list(value: object) -> list[str]:
     if isinstance(value, (list, tuple, set)):
         return [str(item) for item in value if str(item or "").strip()]
     return [str(value)]
+
+
+def _supabase_asset_url(value: str) -> str:
+    """Build or accept a Supabase Storage URL for a visual asset."""
+
+    raw = str(value or "").strip()
+    if not raw or not SUPABASE_URL:
+        return ""
+    if raw.startswith(("http://", "https://")):
+        return raw
+    if not SUPABASE_BUCKET_NAME or raw.startswith(("/", "./", "../")):
+        return ""
+    encoded_path = urllib.parse.quote(raw.lstrip("/"), safe="/%:@-._~")
+    encoded_bucket = urllib.parse.quote(SUPABASE_BUCKET_NAME, safe="")
+    return f"{SUPABASE_URL}/storage/v1/object/public/{encoded_bucket}/{encoded_path}"
+
+
+def _materialize_supabase_asset(value: object) -> str:
+    raw = str(value or "").strip()
+    url = _supabase_asset_url(raw)
+    if not url:
+        return ""
+    parsed = urllib.parse.urlparse(url)
+    configured_host = urllib.parse.urlparse(SUPABASE_URL).netloc.lower()
+    if parsed.scheme not in {"http", "https"} or not configured_host or parsed.netloc.lower() != configured_host:
+        return ""
+    suffix = Path(urllib.parse.unquote(parsed.path)).suffix.lower()
+    if suffix not in IMAGE_EXTENSIONS | TABLE_EXTENSIONS | PDF_EXTENSIONS:
+        return ""
+    cache_key = hashlib.sha256(url.encode("utf-8")).hexdigest()
+    cached_path = SUPABASE_ASSET_CACHE_DIR / f"{cache_key}{suffix}"
+    if cached_path.is_file() and cached_path.stat().st_size > 0:
+        return str(cached_path)
+    try:
+        headers = {"User-Agent": "rag-system-v2/1.0"}
+        if SUPABASE_KEY:
+            headers.update({"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"})
+        request = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(request, timeout=20) as response:
+            payload = response.read()
+        if not payload:
+            return ""
+        SUPABASE_ASSET_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        cached_path.write_bytes(payload)
+        return str(cached_path)
+    except (OSError, urllib.error.URLError, ValueError) as exc:
+        logger.warning("Supabase asset download failed for %s: %s", url, exc)
+        return ""
 
 
 def _append_unique(metadata: dict[str, Any], key: str, value: str) -> None:
@@ -580,7 +643,11 @@ def validate_asset_path(path_value: object, asset_type: str = "") -> PathValidat
     raw = str(path_value or "").strip()
     if not raw:
         return PathValidationResult(False, reason="asset path was empty or null", asset_type=asset_type)
-    
+
+    remote_path = _materialize_supabase_asset(raw)
+    if remote_path:
+        raw = remote_path
+
     resolved = _resolve_existing_image_path(raw)
     if resolved:
         raw = resolved
@@ -591,6 +658,8 @@ def validate_asset_path(path_value: object, asset_type: str = "") -> PathValidat
     else:
         path = path.resolve()
     approved_dirs = [directory.resolve() for directory in APPROVED_ASSET_DIRS if directory.exists()]
+    if SUPABASE_ASSET_CACHE_DIR.exists():
+        approved_dirs.append(SUPABASE_ASSET_CACHE_DIR.resolve())
     if not any(_is_relative_to(path, directory) for directory in approved_dirs):
         return PathValidationResult(False, str(path), reason="path is outside the approved asset directories", asset_type=asset_type)
     allowed = IMAGE_EXTENSIONS
@@ -616,7 +685,7 @@ def candidate_asset_paths(chunk: dict[str, Any], requested_type: str = "") -> li
     keys_by_type = {
         "table": ("table_csv_path", "table_csv_paths", "csv_path", "csv_paths", "table_image_path", "table_image_paths", "asset_paths"),
         "csv": ("csv_path", "csv_paths", "table_csv_path", "table_csv_paths", "asset_paths"),
-        "image": ("image_path", "image_paths", "figure_image_path", "figure_image_paths", "chart_image_path", "chart_image_paths", "diagram_image_path", "diagram_image_paths", "table_image_path", "table_image_paths", "asset_paths"),
+        "image": ("image_path", "image_paths", "image_url", "image_urls", "visual_asset_url", "visual_asset_urls", "storage_path", "storage_paths", "figure_image_path", "figure_image_paths", "chart_image_path", "chart_image_paths", "diagram_image_path", "diagram_image_paths", "table_image_path", "table_image_paths", "asset_paths"),
     }
     keys = keys_by_type.get(requested_type) or tuple(ASSET_FIELDS)
     output: list[tuple[str, str]] = []
