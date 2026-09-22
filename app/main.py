@@ -1194,8 +1194,9 @@ IMAGE_FILENAME_PATTERN = re.compile(
 
 def _resolve_existing_image_path(value: object) -> str:
     raw_path = str(value or "").strip()
-    if not raw_path:
-        return ""
+    raw_path = raw_path.strip(" '\"`").replace("\\", "/")
+    if raw_path.startswith("http://") or raw_path.startswith("https://"):
+        return raw_path
     from app.multimodal_assets import build_asset_registry, normalize_entity_id
 
     # Convert Windows prefix to Streamlit Cloud / Hugging Face mount points if running on Linux
@@ -1347,7 +1348,8 @@ def _resolve_existing_image_path(value: object) -> str:
                     if marker in cand_posix:
                         return marker + cand_posix.split(marker)[-1]
                 return cand_posix
-    return ""
+    from app.multimodal_assets import get_supabase_asset_url
+    return get_supabase_asset_url(raw_path)
 
 
 def _extract_image_filename_from_text(value: object) -> str:

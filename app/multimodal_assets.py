@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import logging
+import os
 import re
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -678,12 +679,31 @@ def preview_csv(path: str, max_rows: int = 20) -> list[list[str]]:
     return rows[:max_rows]
 
 
-import os
-from pathlib import Path
+SUPABASE_URL = os.getenv("SUPABASE_URL", "https://furnlyvcinfdoctxtkiu.supabase.co").rstrip("/")
+SUPABASE_BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "rag-assets").strip("/")
+
+def get_supabase_asset_url(path_or_url: str) -> str:
+    path_str = str(path_or_url or "").strip(" '\"`").replace("\\", "/")
+    if not path_str:
+        return ""
+    if path_str.startswith("http://") or path_str.startswith("https://"):
+        return path_str
+    
+    marker = "recovered-rag-project/"
+    if marker in path_str:
+        path_str = path_str.split(marker, 1)[1]
+    
+    clean_rel = path_str.lstrip("/")
+    return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_NAME}/{clean_rel}"
 
 def _resolve_existing_image_path(input_path: str) -> str | None:
-    # 1. Direct path check
-    if os.path.exists(input_path) and not input_path.endswith(".raw.png"):
+    if not input_path:
+        return None
+    if str(input_path).startswith("http://") or str(input_path).startswith("https://"):
+        return str(input_path)
+
+    # 1. Direct local path check (if file exists locally and is not a LFS pointer)
+    if os.path.exists(input_path) and os.path.isfile(input_path) and not input_path.endswith(".raw.png") and os.path.getsize(input_path) > 1000:
         return input_path
 
         
@@ -775,5 +795,5 @@ def _resolve_existing_image_path(input_path: str) -> str | None:
     if best_match and best_score > 0:
         return best_match
 
-    return None
+    return get_supabase_asset_url(input_path)
 
