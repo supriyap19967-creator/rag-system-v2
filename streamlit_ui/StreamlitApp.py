@@ -2949,66 +2949,40 @@ def get_persistent_http_client():
     )
 
 
-@st.cache_resource
-def trigger_background_warmup() -> bool:
+@st.cache_resource(show_spinner=False)
+def warmup_cached_pipeline_components() -> bool:
     """
-    Asynchronously warms up heavy ML models (BGE-M3, BM25, Reranker), 
-    Qdrant connections, and RAM transcription caches on server launch.
+    Warms up core RAG singletons (Qdrant, Sparse Encoder, Reranker, Asset Registry) 
+    thread-safely inside Streamlit's native resource manager lifecycle.
     """
-    import threading
-
-    def _warmup_worker():
-        try:
-            logger.info("🔥 [COLD-START FIX] Warmup thread started in background...")
-            client = get_qdrant_client()
-            try:
-                client.get_collections()
-            except Exception:
-                pass
-            
-            encoder = get_sparse_encoder()
-            try:
-                encoder.embed(["warmup query text"])
-            except Exception:
-                pass
-
-            try:
-                reranker = load_reranker_model()
-                reranker.score_pairs([("warmup query", "warmup context")])
-            except Exception:
-                pass
-
-            try:
-                from schemas_and_agent import load_disk_transcriptions_to_memory
-                load_disk_transcriptions_to_memory()
-            except Exception:
-                pass
-
-            try:
-                from app.multimodal_assets import build_asset_registry
-                from embeddings.embedding_model import get_embedding_model
-                build_asset_registry()
-                emb = get_embedding_model()
-                emb.embed_query("warmup")
-            except Exception:
-                pass
-
-            logger.info("✅ [COLD-START FIX] Pipeline fully pre-warmed for Turn 1.")
-        except Exception as err:
-            logger.warning("Background warmup notice: %s", err)
-
-    thread = threading.Thread(target=_warmup_worker, daemon=True)
     try:
-        from streamlit.runtime.scriptrunner import add_script_run_ctx
-        add_script_run_ctx(thread)
-    except Exception:
-        pass
-    thread.start()
+        logger.info("🔥 [RESOURCE CACHE] Warming up core RAG singletons inside Streamlit resource manager...")
+        client = get_qdrant_client()
+        try:
+            client.get_collections()
+        except Exception:
+            pass
+
+        try:
+            from schemas_and_agent import load_disk_transcriptions_to_memory
+            load_disk_transcriptions_to_memory()
+        except Exception:
+            pass
+
+        try:
+            from app.multimodal_assets import build_asset_registry
+            build_asset_registry()
+        except Exception:
+            pass
+
+        logger.info("✅ [RESOURCE CACHE] Core RAG singletons pre-warmed & cached in memory.")
+    except Exception as err:
+        logger.warning("Pipeline resource warmup notice: %s", err)
     return True
 
-# Initialize background warmup on startup
+# Initialize pipeline resources on startup via native Streamlit cache manager
 try:
-    trigger_background_warmup()
+    warmup_cached_pipeline_components()
 except Exception:
     pass
 
