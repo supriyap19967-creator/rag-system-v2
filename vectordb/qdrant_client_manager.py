@@ -56,15 +56,22 @@ def _client_kwargs(settings: QdrantSettings) -> dict[str, object]:
     if limits is not None:
         kwargs["limits"] = limits
         kwargs.pop("pool_size", None)
-    if settings.path:
+    if settings.url:
+        kwargs["url"] = settings.url
+    elif os.getenv("QDRANT_PATH"):
         kwargs["path"] = str(Path(settings.path).expanduser())
         kwargs.pop("prefer_grpc", None)
         kwargs.pop("pool_size", None)
         kwargs.pop("host", None)
         kwargs.pop("port", None)
         kwargs.pop("grpc_port", None)
-    elif settings.url:
-        kwargs["url"] = settings.url
+    elif settings.path:
+        kwargs["path"] = str(Path(settings.path).expanduser())
+        kwargs.pop("prefer_grpc", None)
+        kwargs.pop("pool_size", None)
+        kwargs.pop("host", None)
+        kwargs.pop("port", None)
+        kwargs.pop("grpc_port", None)
     else:
         kwargs["host"] = settings.host
         kwargs["port"] = settings.port
