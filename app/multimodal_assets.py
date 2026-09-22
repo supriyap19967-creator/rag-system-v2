@@ -680,7 +680,7 @@ def preview_csv(path: str, max_rows: int = 20) -> list[list[str]]:
 
 
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://furnlyvcinfdoctxtkiu.supabase.co").rstrip("/")
-SUPABASE_BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "rag-assets").strip("/")
+SUPABASE_BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "rag").strip("/")
 
 def get_supabase_asset_url(path_or_url: str) -> str:
     path_str = str(path_or_url or "").strip(" '\"`").replace("\\", "/")

@@ -30,7 +30,7 @@ class TestArchitecturalSolutions(unittest.TestCase):
 
     def test_layer06_supabase_url_bypasses_local_disk_check(self):
         invariants = RAGInvariantsValidator()
-        supabase_url = "https://furnlyvcinfdoctxtkiu.supabase.co/storage/v1/object/public/rag-assets/extracted_charts/page_208_Figure_4.2.png"
+        supabase_url = "https://furnlyvcinfdoctxtkiu.supabase.co/storage/v1/object/public/rag/extracted_charts/page_208_Figure_4.2.png"
         count = invariants.validate_asset_paths([supabase_url])
         self.assertEqual(count, 1)
 
