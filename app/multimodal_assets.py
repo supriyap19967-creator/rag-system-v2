@@ -693,6 +693,10 @@ def get_supabase_asset_url(path_or_url: str) -> str:
     if marker in path_str:
         path_str = path_str.split(marker, 1)[1]
 
+    if path_str.startswith("./"):
+        path_str = path_str[2:]
+    path_str = path_str.lstrip("/")
+
     known_subfolders = [
         "extracted_charts", "extracted_images", "Data/extracted_visuals_smoke",
         "assets/extracted_images", "assets/extracted_charts", "assets/extracted_tables", "Data/csv"
@@ -706,19 +710,43 @@ def get_supabase_asset_url(path_or_url: str) -> str:
 
     filename = Path(path_str).name
     norm_id = normalize_entity_id(filename)
-    
+
+    # Solution 2: Alias / Entity map to exact Supabase subfolder paths
+    sequential_mappings = {
+        "img_04_02": "extracted_charts/page_208_Figure_4.2.png",
+        "figure_4_2": "extracted_charts/page_208_Figure_4.2.png",
+        "figure_42": "extracted_charts/page_208_Figure_4.2.png",
+        "figure_4.2": "extracted_charts/page_208_Figure_4.2.png",
+        "table_2_1": "assets/extracted_tables/page111_table1.csv",
+        "table_21": "assets/extracted_tables/page111_table1.csv",
+        "table_3_1": "assets/extracted_tables/page_154_Table_3.1.csv",
+        "table_31": "assets/extracted_tables/page_154_Table_3.1.csv",
+        "table_3_2": "assets/extracted_tables/page154_table2.csv",
+        "table_32": "assets/extracted_tables/page154_table2.csv",
+    }
+    for k, v in sequential_mappings.items():
+        if k in norm_id.lower().replace(".", "_"):
+            return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_NAME}/{v}"
+
     try:
         registry = build_asset_registry()
         for record in registry:
             rec_rel = record.relative_path.replace("\\", "/").lstrip("/")
-            if norm_id in record.entity_id or record.entity_id in norm_id:
+            if norm_id and (norm_id in record.entity_id or record.entity_id in norm_id):
                 return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_NAME}/{rec_rel}"
     except Exception:
         pass
 
     clean_rel = path_str.lstrip("/")
     if "/" not in clean_rel:
-        clean_rel = f"extracted_charts/{clean_rel}"
+        clean_lower = clean_rel.lower()
+        if clean_lower.endswith(".csv") or "table" in clean_lower or "tab" in clean_lower:
+            clean_rel = f"assets/extracted_tables/{clean_rel}"
+        elif "image" in clean_lower:
+            clean_rel = f"assets/extracted_images/{clean_rel}"
+        else:
+            clean_rel = f"extracted_charts/{clean_rel}"
+
     return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_NAME}/{clean_rel}"
 
 def _resolve_existing_image_path(input_path: str) -> str | None:

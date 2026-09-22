@@ -4121,20 +4121,23 @@ def display_image_robustly(img_path: str):
     if not img_path:
         return
         
-    # Support multiple images delimited by semicolon
+    # Support multiple assets delimited by semicolon
     paths_to_process = [p.strip() for p in str(img_path).split(";") if p.strip()]
     for single_path in paths_to_process:
         visual_asset_path = single_path
         filename = os.path.basename(visual_asset_path)
+        is_csv = str(visual_asset_path).lower().endswith(".csv")
+        
         possible_paths = [
             visual_asset_path,
-            os.path.join("./extracted_charts", filename),
+            os.path.join("./assets/extracted_tables", filename) if is_csv else os.path.join("./extracted_charts", filename),
             os.path.join("./assets/extracted_tables", filename),
+            os.path.join("./extracted_charts", filename),
             os.path.join("./assets/extracted_charts", filename),
             os.path.join("./assets/extracted_images", filename),
             os.path.join("./extracted_images", filename),
-            os.path.join("/mount/src/rag-system-v2/extracted_charts", filename),
             os.path.join("/mount/src/rag-system-v2/assets/extracted_tables", filename),
+            os.path.join("/mount/src/rag-system-v2/extracted_charts", filename),
             os.path.join("/mount/src/rag-system-v2/assets/extracted_images", filename),
             os.path.join("/mount/src/rag-system-v2/extracted_images", filename),
             os.path.abspath(visual_asset_path)
@@ -4153,6 +4156,10 @@ def display_image_robustly(img_path: str):
                     if os.path.exists(path) and os.path.getsize(path) <= 1000:
                         is_lfs = True
                 if os.path.exists(path) and os.path.isfile(path) and not is_lfs:
+                    # Solution 1: Bypass PIL Image validation for CSV table files
+                    if str(path).lower().endswith(".csv"):
+                        found_path = path
+                        break
                     try:
                         from PIL import Image
                         with Image.open(path) as test_img:
@@ -4169,11 +4176,24 @@ def display_image_robustly(img_path: str):
 
         if found_path:
             try:
-                st.image(found_path, caption=f"Extracted Asset: {filename}", use_container_width=True)
+                if str(found_path).lower().endswith(".csv") or is_csv:
+                    if str(found_path).startswith("http://") or str(found_path).startswith("https://"):
+                        from app.agents.data import load_rag_dataframe
+                        df_table = load_rag_dataframe(filename, found_path)
+                    else:
+                        df_table = pd.read_csv(found_path)
+                    
+                    if df_table is not None and not df_table.empty:
+                        st.markdown(f"**Extracted Table Data: `{filename}`**")
+                        st.dataframe(df_table, use_container_width=True)
+                    else:
+                        st.warning(f"Extracted table `{filename}` is empty.")
+                else:
+                    st.image(found_path, caption=f"Extracted Asset: {filename}", use_container_width=True)
             except Exception as render_err:
-                st.warning(f"Unable to render image asset ({filename}): {render_err}")
+                st.warning(f"Unable to render asset ({filename}): {render_err}")
         else:
-            st.warning(f"Unable to locate visual image asset at: {visual_asset_path}")
+            st.warning(f"Unable to locate visual asset at: {visual_asset_path}")
 
 def _resolve_existing_image_path(value: object) -> str:
     raw_path = str(value or "").strip()

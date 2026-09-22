@@ -487,7 +487,10 @@ class RAGMasterSafetyGauntlet:
                     except Exception as e:
                         val_logger.warning(f"Skipping Langfuse score logging due to error: {e}")
                 else:
-                    val_logger.info("Langfuse credentials not configured. Skipping metric logging.")
+                    try:
+                        val_logger.info("Langfuse credentials not configured. Skipping metric logging.")
+                    except Exception:
+                        pass
             except Exception as lf_eval_exc:
                 val_logger.warning("Failed to log evaluation metrics or export dataset item to Langfuse: %s", lf_eval_exc)
 
