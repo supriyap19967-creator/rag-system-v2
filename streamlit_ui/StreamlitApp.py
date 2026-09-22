@@ -50,14 +50,18 @@ MULTIMODAL_RAG_DIR = PROJECT_ROOT / "multimodal-rag-system"
 if str(MULTIMODAL_RAG_DIR) not in sys.path:
     sys.path.insert(0, str(MULTIMODAL_RAG_DIR))
 
+try:
+    import importlib
+    schemas_mod = importlib.import_module("multimodal-rag-system.schemas_and_agent")
+except Exception:
+    schemas_mod = None
+
 def _warmup_embedding_models_bg():
     """Asynchronously warm up dense, sparse, and reranker models on startup to eliminate cold-start latency."""
     def _warmup_worker():
         try:
             logger.info("🔥 Starting background model warm-up (BGE-M3 Dense + FastEmbed Sparse + Transformers Reranker)...")
             from embeddings.embedding_model import get_embedding_model
-            import importlib
-            schemas_mod = importlib.import_module("multimodal-rag-system.schemas_and_agent")
             get_shared_sparse_encoder = schemas_mod.get_shared_sparse_encoder
             from app.reranker import get_reranker_singleton
             from langchain_core.documents import Document
@@ -9742,8 +9746,6 @@ def run_pipeline(
 
                 # 2. ALSO run general hybrid vector pre-fetch if query is HYBRID_MULTIMODAL or general text query
                 if not (target_cat and target_id) or query_intent == QueryIntent.HYBRID_MULTIMODAL or allowed_tools.get("allow_pandas"):
-                    import importlib
-                    schemas_mod = importlib.import_module("multimodal-rag-system.schemas_and_agent")
                     get_cached_vector_names = schemas_mod.get_cached_vector_names
                     get_shared_sparse_encoder = schemas_mod.get_shared_sparse_encoder
                     from embeddings.embedding_model import get_embedding_model
@@ -9785,8 +9787,6 @@ def run_pipeline(
                 if not raw_payloads:
                     return []
 
-                import importlib
-                schemas_mod = importlib.import_module("multimodal-rag-system.schemas_and_agent")
                 clean_and_strip_chunk = schemas_mod.clean_and_strip_chunk
                 cleaned_payloads = []
                 for p in raw_payloads:
