@@ -128,6 +128,9 @@ class RAGInvariantsValidator:
                 resolved_paths.append(path)
         registry = None
         for path in resolved_paths:
+            path_str = str(path or "").strip()
+            if path_str.startswith("http://") or path_str.startswith("https://"):
+                continue
             if os.path.exists(path):
                 continue
             # If the path is a .pdf or generic .csv citation, skip raising path error

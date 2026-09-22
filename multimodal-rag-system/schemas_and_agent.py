@@ -78,17 +78,34 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
 
 try:
-    provider = TracerProvider()
-    processor = BatchSpanProcessor(OTLPSpanExporter())
-    provider.add_span_processor(processor)
-    try:
-        if not isinstance(trace.get_tracer_provider(), TracerProvider):
-            trace.set_tracer_provider(provider)
-    except Exception:
-        pass
+    public_key = os.getenv("LANGFUSE_PUBLIC_KEY")
+    secret_key = os.getenv("LANGFUSE_SECRET_KEY")
+    base_url = os.getenv("LANGFUSE_BASE_URL", "https://cloud.langfuse.com")
+    otlp_endpoint = os.getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
     
-    # Enable global auto-instrumentation for Pydantic AI Agents
-    Agent.instrument_all()
+    if public_key or otlp_endpoint:
+        provider = TracerProvider()
+        if public_key:
+            import base64
+            auth_token = base64.b64encode(f"{public_key}:{secret_key or ''}".encode()).decode()
+            endpoint = f"{base_url.rstrip('/')}/api/public/otel/v1/traces"
+            headers = {
+                "Authorization": f"Basic {auth_token}",
+                "x-langfuse-ingestion-version": "4"
+            }
+            exporter = OTLPSpanExporter(endpoint=endpoint, headers=headers)
+        else:
+            exporter = OTLPSpanExporter()
+        processor = BatchSpanProcessor(exporter)
+        provider.add_span_processor(processor)
+        try:
+            if not isinstance(trace.get_tracer_provider(), TracerProvider):
+                trace.set_tracer_provider(provider)
+        except Exception:
+            pass
+        
+        # Enable global auto-instrumentation for Pydantic AI Agents
+        Agent.instrument_all()
 except Exception as te_exc:
     logging.warning("Failed to initialize OpenTelemetry auto-instrumentation: %s", te_exc)
 

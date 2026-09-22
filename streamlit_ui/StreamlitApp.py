@@ -9711,7 +9711,8 @@ def run_pipeline(
                     id_clean = str(target_id).replace('.', '_')
                     cache_key = f"{asset_kind}_{id_clean}".lower()
                     
-                    fast_text = _IN_MEMORY_TRANSCRIPTION_CACHE.get(cache_key) or _GLOBAL_VISION_OCR_CACHE.get(cache_key)
+                    transcription_ram_cache = getattr(schemas_mod, "_IN_MEMORY_TRANSCRIPTION_CACHE", {})
+                    fast_text = transcription_ram_cache.get(cache_key) or _GLOBAL_VISION_OCR_CACHE.get(cache_key)
                     if not fast_text:
                         disk_cache_file = os.path.join(os.getcwd(), "data_cache", "transcriptions", f"{asset_kind}_{id_clean}.json")
                         if os.path.exists(disk_cache_file):

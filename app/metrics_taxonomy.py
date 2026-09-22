@@ -153,12 +153,13 @@ def contains_synthetic_or_dummy_data(obj: Any) -> Tuple[bool, Optional[str]]:
                 val = str(row.get("TargetValue", "")).strip().lower()
                 
                 # Check for explicit placeholder series/categories in structured table rows
-                if series in PLACEHOLDER_ENTITIES or category in PLACEHOLDER_ENTITIES:
+                is_placeholder_entity = series in PLACEHOLDER_ENTITIES or category in PLACEHOLDER_ENTITIES
+                if is_placeholder_entity:
                     return True, f"Extracted table contains synthetic placeholder entity ('{series or category}')."
                 
-                # Check for explicit dummy template numbers in table values
-                if val in {"1234", "5678", "50000", "20000", "12345", "9999", "99999"}:
-                    return True, f"Extracted table contains dummy fallback value '{val}'."
+                # Check for explicit text placeholder words in value field (avoid flagging valid chart numbers)
+                if val in {"dummy", "placeholder", "sample", "n/a", "none", "null", "123456789"}:
+                    return True, f"Extracted table contains dummy placeholder text '{val}'."
     elif isinstance(obj, str):
         text_lower = obj.lower()
         if "unable to calculate requested result from available csv data" in text_lower:
