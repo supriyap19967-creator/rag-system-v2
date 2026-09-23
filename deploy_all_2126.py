@@ -333,7 +333,15 @@ def main():
     logger.info(f"Uploading {total_points} points to Qdrant Cloud in batches of {batch_size}...")
     for start in range(0, total_points, batch_size):
         batch = points[start : start + batch_size]
-        client.upsert(collection_name=COLLECTION_NAME, points=batch, wait=True)
+        for attempt in range(3):
+            try:
+                client.upsert(collection_name=COLLECTION_NAME, points=batch, wait=True)
+                break
+            except Exception as exc:
+                if attempt == 2:
+                    raise exc
+                logger.warning(f"Batch upsert retry {attempt+1}/3 after network glitch: {exc}")
+                time.sleep(1.0)
         uploaded += len(batch)
         logger.info(f"Upserted {uploaded}/{total_points} points to Qdrant Cloud.")
 
@@ -344,14 +352,24 @@ def main():
     offset = None
     counts = {"csv": 0, "text only": 0, "visual": 0, "unknown": 0}
     while True:
-        records, next_offset = client.scroll(
-            collection_name=COLLECTION_NAME,
-            limit=100,
-            offset=offset,
-            with_payload=True,
-            with_vectors=False
-        )
-        for record in records:
+        records, next_offset = None, None
+        for attempt in range(3):
+            try:
+                records, next_offset = client.scroll(
+                    collection_name=COLLECTION_NAME,
+                    limit=100,
+                    offset=offset,
+                    with_payload=True,
+                    with_vectors=False
+                )
+                break
+            except Exception as exc:
+                if attempt == 2:
+                    raise exc
+                logger.warning(f"Scroll count retry {attempt+1}/3 after network glitch: {exc}")
+                time.sleep(1.0)
+                
+        for record in (records or []):
             payload = record.payload or {}
             metadata = payload.get("metadata", {})
             doc_type = payload.get("document_type") or metadata.get("document_type") or "unknown"
