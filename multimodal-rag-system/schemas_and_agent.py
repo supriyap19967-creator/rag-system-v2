@@ -48,16 +48,26 @@ def load_disk_transcriptions_to_memory() -> Dict[str, str]:
         return _IN_MEMORY_TRANSCRIPTION_CACHE
     
     import json
-    transcriptions_dir = PROJECT_ROOT / "data_cache" / "transcriptions"
-    if transcriptions_dir.exists():
+    possible_dirs = [
+        PROJECT_ROOT / "data_cache" / "transcriptions",
+        Path.cwd() / "data_cache" / "transcriptions",
+        Path(__file__).resolve().parent.parent / "data_cache" / "transcriptions",
+        Path(__file__).resolve().parent / "data_cache" / "transcriptions"
+    ]
+    transcriptions_dir = next((d for d in possible_dirs if d.exists()), None)
+    if transcriptions_dir and transcriptions_dir.exists():
         for json_file in transcriptions_dir.glob("*.json"):
             try:
                 with open(json_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
                     if data and "markdown_table" in data:
                         tb = data["markdown_table"]
-                        if tb and "|" in tb and not any(err in tb.lower() for err in ["i'm sorry", "cannot extract", "no data", "too blurry"]):
-                            _IN_MEMORY_TRANSCRIPTION_CACHE[json_file.stem.lower()] = sanitize_axis_cross_blending_text(tb)
+                        if tb and ("|" in tb or "SECTION" in tb) and not any(err in tb.lower() for err in ["i'm sorry", "cannot extract", "no data", "too blurry"]):
+                            clean_text = sanitize_axis_cross_blending_text(tb)
+                            stem = json_file.stem.lower()
+                            _IN_MEMORY_TRANSCRIPTION_CACHE[stem] = clean_text
+                            _IN_MEMORY_TRANSCRIPTION_CACHE[stem.replace(".", "_")] = clean_text
+                            _IN_MEMORY_TRANSCRIPTION_CACHE[stem.replace("_", ".")] = clean_text
             except Exception:
                 pass
     logging.getLogger(__name__).info(f"⚡ [COLD-START FIX] Pre-loaded {len(_IN_MEMORY_TRANSCRIPTION_CACHE)} sanitized transcription assets into RAM cache.")
