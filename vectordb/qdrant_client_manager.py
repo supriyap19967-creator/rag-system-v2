@@ -27,7 +27,7 @@ class QdrantSettings:
     url: str = os.getenv("QDRANT_URL", "").strip()
     api_key: str = os.getenv("QDRANT_API_KEY", "").strip()
     prefer_grpc: bool = os.getenv("QDRANT_PREFER_GRPC", "false").lower() in {"1", "true", "yes"}
-    timeout_seconds: float = float(os.getenv("QDRANT_TIMEOUT_SECONDS", "3.0"))
+    timeout_seconds: float = float(os.getenv("QDRANT_TIMEOUT_SECONDS", "30.0"))
     pool_size: int = int(os.getenv("QDRANT_GRPC_POOL_SIZE", "4"))
     max_connections: int = int(os.getenv("QDRANT_HTTP_MAX_CONNECTIONS", "24"))
     max_keepalive_connections: int = int(os.getenv("QDRANT_HTTP_MAX_KEEPALIVE", "12"))
@@ -76,7 +76,7 @@ def _client_kwargs(settings: QdrantSettings) -> dict[str, object]:
         kwargs["host"] = settings.host
         kwargs["port"] = settings.port
         kwargs["grpc_port"] = settings.grpc_port
-    kwargs["timeout"] = 3.0
+    kwargs["timeout"] = settings.timeout_seconds
     return kwargs
 
 
