@@ -49,8 +49,10 @@ VISUAL_JSONL_PATH = PROJECT_ROOT / "visual_chunks_output.jsonl"
 csv_dir = PROJECT_ROOT / "Data" / "csv"
 pdf_path = PROJECT_ROOT / "Data" / "Pdf" / "World Development Report 2025.pdf"
 
-# Import existing pipeline components to parse PDF text-only chunks
+# Import existing pipeline components and asset helpers
 from ingest_data import parse_sources
+from app.multimodal_assets import get_supabase_asset_url
+from vectordb.qdrant_client_manager import get_qdrant_client, ensure_hybrid_collection
 
 def is_valid_value(val):
     if val is None:
@@ -85,8 +87,27 @@ def read_csv_as_dicts(filepath, header_first_col):
 def _stable_chunk_id(chunk_content: str) -> str:
     return str(uuid.uuid5(uuid.NAMESPACE_DNS, str(chunk_content)))
 
+def _transform_payload_urls(payload: dict) -> dict:
+    """Ensure all image and table asset paths in payload are converted to public Supabase CDN URLs."""
+    path_keys = [
+        "image_path", "figure_image_path", "chart_image_path",
+        "diagram_image_path", "table_image_path", "csv_path", "table_csv_path"
+    ]
+    for key in path_keys:
+        if payload.get(key):
+            payload[key] = get_supabase_asset_url(str(payload[key]))
+    
+    if isinstance(payload.get("metadata"), dict):
+        meta = dict(payload["metadata"])
+        for key in path_keys:
+            if meta.get(key):
+                meta[key] = get_supabase_asset_url(str(meta[key]))
+        payload["metadata"] = meta
+        
+    return payload
+
 def main():
-    logger.info("Starting complete Qdrant deployment for 2126 chunks...")
+    logger.info("Starting complete Qdrant Cloud deployment for 2126 chunks...")
 
     # 1. Gather PDF text-only chunks (834 chunks)
     logger.info("Parsing PDF text-only chunks...")
@@ -108,7 +129,7 @@ def main():
         metadata["document_type"] = "pdf"
         chunk_id = metadata.get("chunk_id") or _stable_chunk_id(text)
         
-        payload = {
+        payload = _transform_payload_urls({
             "text": text,
             "page_content": text,
             "source": record.get("source", pdf_path.name),
@@ -119,7 +140,7 @@ def main():
             "contains_csv": False,
             "document_type": "pdf",
             "metadata": metadata,
-        }
+        })
         text_chunks.append({
             "text": text,
             "chunk_id": chunk_id,
@@ -177,10 +198,13 @@ def main():
             text_payload += "\n".join(historical_lines)
             
             chunk_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, text_payload))
-            payload = {
+            raw_csv_path = get_supabase_asset_url(str(data_file))
+            payload = _transform_payload_urls({
                 "text": text_payload,
                 "page_content": text_payload,
                 "source": data_file.name,
+                "csv_path": raw_csv_path,
+                "table_csv_path": raw_csv_path,
                 "contains_chart": False,
                 "contains_table": True,
                 "contains_figure": False,
@@ -192,6 +216,8 @@ def main():
                     "document_type": "csv",
                     "source_file": data_file.name,
                     "source_path": str(data_file),
+                    "csv_path": raw_csv_path,
+                    "table_csv_path": raw_csv_path,
                     "row_id": idx,
                     "contains_csv": True,
                     "contains_table": True,
@@ -199,7 +225,7 @@ def main():
                     "contains_figure": False,
                     "contains_image": False,
                 },
-            }
+            })
             csv_chunks.append({
                 "text": text_payload,
                 "chunk_id": chunk_id,
@@ -228,11 +254,16 @@ def main():
             metadata["document_type"] = "pdf_visual"
             chunk_id = str(metadata.get("chunk_id") or _stable_chunk_id(text))
             
-            payload = {
+            raw_img_path = metadata.get("image_path") or metadata.get("figure_image_path")
+            cdn_img_path = get_supabase_asset_url(str(raw_img_path)) if raw_img_path else ""
+            
+            payload = _transform_payload_urls({
                 "text": text,
                 "page_content": text,
                 "source": str(metadata.get("source_file") or metadata.get("source") or pdf_path.name),
-                "image_path": metadata.get("image_path") or metadata.get("figure_image_path"),
+                "image_path": cdn_img_path,
+                "figure_image_path": cdn_img_path,
+                "chart_image_path": cdn_img_path if (metadata.get("contains_chart") or "[visual element" in text.lower()) else "",
                 "contains_chart": bool(metadata.get("contains_chart") or "[visual element" in text.lower()),
                 "contains_table": bool(metadata.get("contains_table") or "|--" in text),
                 "contains_figure": bool(metadata.get("contains_figure") or "figure" in text.lower()),
@@ -240,7 +271,7 @@ def main():
                 "contains_csv": bool(metadata.get("contains_csv")),
                 "document_type": "pdf_visual",
                 "metadata": metadata,
-            }
+            })
             
             # Transfer asset specific metadata mappings same
             for key in ["row_id", "columns"]:
@@ -259,33 +290,13 @@ def main():
     total_count = len(all_chunks)
     logger.info(f"Consolidated total chunks gathered: {total_count} (Expected: 2126)")
 
-    # 5. Setup Qdrant Client and recreate collection
-    logger.info("Recreating Qdrant collection with vector size 384...")
-    client = QdrantClient(path=str(QDRANT_PATH))
+    # 5. Setup Qdrant Client (Connecting to Qdrant Cloud or configured QDRANT_URL)
+    logger.info("Initializing connection to Qdrant...")
+    client = get_qdrant_client()
     
-    if client.collection_exists(COLLECTION_NAME):
-        logger.info(f"Deleting existing collection '{COLLECTION_NAME}'...")
-        client.delete_collection(COLLECTION_NAME)
-        
-    try:
-        sparse_params = models.SparseVectorParams(
-            index=models.SparseIndexParams(on_disk=True),
-            modifier=models.Modifier.IDF,
-        )
-    except Exception:
-        sparse_params = models.SparseVectorParams(index=models.SparseIndexParams(on_disk=True))
-
-    client.create_collection(
-        collection_name=COLLECTION_NAME,
-        vectors_config={
-            "dense": models.VectorParams(
-                size=384,
-                distance=models.Distance.COSINE,
-            )
-        },
-        sparse_vectors_config={"sparse": sparse_params},
-    )
-    logger.info("Collection created successfully.")
+    # Ensure collection and payload indexes exist without dropping existing schema
+    ensure_hybrid_collection(client, COLLECTION_NAME)
+    logger.info(f"Connected to Qdrant collection '{COLLECTION_NAME}'.")
 
     # 6. Load SentenceTransformer and generate embeddings
     logger.info("Loading SentenceTransformer('all-MiniLM-L6-v2')...")
@@ -297,7 +308,7 @@ def main():
     logger.info("Embeddings generated successfully.")
 
     # 7. Construct points and upsert to Qdrant
-    logger.info("Constructing Qdrant points...")
+    logger.info("Constructing Qdrant points with deterministic UUIDs and Supabase URLs...")
     points = []
     for idx, item in enumerate(all_chunks):
         chunk_id = item["chunk_id"]
@@ -315,19 +326,19 @@ def main():
             )
         )
         
-    # Upsert in batches
+    # Upsert in batches of 64
     batch_size = 64
     uploaded = 0
     total_points = len(points)
-    logger.info(f"Uploading {total_points} points to Qdrant in batches of {batch_size}...")
+    logger.info(f"Uploading {total_points} points to Qdrant Cloud in batches of {batch_size}...")
     for start in range(0, total_points, batch_size):
         batch = points[start : start + batch_size]
         client.upsert(collection_name=COLLECTION_NAME, points=batch, wait=True)
         uploaded += len(batch)
-        logger.info(f"Upserted {uploaded}/{total_points} points.")
+        logger.info(f"Upserted {uploaded}/{total_points} points to Qdrant Cloud.")
 
     # 8. Retrieve final counts breakdown from Qdrant
-    logger.info("Verifying final database counts...")
+    logger.info("Verifying final database counts on Qdrant Cloud...")
     final_count = client.count(collection_name=COLLECTION_NAME, exact=True).count
     
     offset = None
