@@ -1,4 +1,25 @@
----
+
+    flowchart TD
+        UserQuery["User Query: 'tell me about figure 4.2'"] --> IntentRouter["Pillar 1 Intent Router"]
+        IntentRouter --> AssetCheck{"Is Target Asset Detected?<br/>(e.g., Figure 4.2)"}
+
+        %% Fast Path Branch
+        AssetCheck -- Yes --> FastPath["⚡ Fast Path (Local Tier)"]
+        FastPath --> CheckRAM["Check RAM Cache (_IN_MEMORY_TRANSCRIPTION_CACHE)"]
+        FastPath --> CheckDisk["Check Local Disk ('data_cache/transcriptions/')"]
+
+        CheckRAM -- Found --> ServeFast["Return Payload in <10ms (Skip Qdrant)"]
+        CheckDisk -- Found --> ServeFast
+
+        %% Fallback / General Search Branch
+        AssetCheck -- No / Cache Miss --> QdrantCloud["☁️ Qdrant Cloud Tier"]
+        CheckRAM -- Miss --> QdrantCloud
+        CheckDisk -- Miss --> QdrantCloud
+
+        QdrantCloud --> DenseEmb["Dense Vector Embedding (MiniLM)"]
+        QdrantCloud --> SparseEmb["Sparse Vector Embedding (BGE-M3/BM25)"]
+        DenseEmb & SparseEmb --> RRF["RRF Fusion Search at Qdrant Cloud Cluster"]
+        RRF --> Reranker["Local BGE Reranker"] --> LLM["Pass Chunks to LLM Agent"]---
 title: Rag System V2
 emoji: 🚀
 colorFrom: blue
