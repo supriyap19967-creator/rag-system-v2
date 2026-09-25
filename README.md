@@ -1,4 +1,4 @@
-```
+```mermaid
     flowchart TD
         UserQuery["User Query: 'tell me about figure 4.2'"] --> IntentRouter["Pillar 1 Intent Router"]
         IntentRouter --> AssetCheck{"Is Target Asset Detected?<br/>(e.g., Figure 4.2)"}
