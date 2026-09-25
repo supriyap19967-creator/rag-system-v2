@@ -1,4 +1,4 @@
-
+```
     flowchart TD
         UserQuery["User Query: 'tell me about figure 4.2'"] --> IntentRouter["Pillar 1 Intent Router"]
         IntentRouter --> AssetCheck{"Is Target Asset Detected?<br/>(e.g., Figure 4.2)"}
@@ -19,7 +19,9 @@
         QdrantCloud --> DenseEmb["Dense Vector Embedding (MiniLM)"]
         QdrantCloud --> SparseEmb["Sparse Vector Embedding (BGE-M3/BM25)"]
         DenseEmb & SparseEmb --> RRF["RRF Fusion Search at Qdrant Cloud Cluster"]
-        RRF --> Reranker["Local BGE Reranker"] --> LLM["Pass Chunks to LLM Agent"]---
+        RRF --> Reranker["Local BGE Reranker"] --> LLM["Pass Chunks to LLM Agent"]
+```
+---
 title: Rag System V2
 emoji: 🚀
 colorFrom: blue
