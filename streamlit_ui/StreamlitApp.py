@@ -9706,17 +9706,20 @@ def run_pipeline(
                 from qdrant_client import models
                 raw_payloads = []
                 
-                # 4. Direct Fast-Path Return for Visual Queries (< 0.01ms)
-                # Bypass Qdrant scrolling and vector search completely when an asset ID is present (Table 2.2, Table 2.1)
+                # 4. Direct Fast-Path Return for Visual Queries (RAM -> Disk -> Qdrant Cloud Payload)
                 if target_cat and target_id:
                     from app.multimodal_assets import get_asset_record_fast
                     fast_rec = get_asset_record_fast(f"{target_cat}_{target_id}") or get_asset_record_fast(str(target_id))
                     asset_kind = "figure" if "fig" in str(target_cat).lower() or "chart" in str(target_cat).lower() else "table"
                     id_clean = str(target_id).replace('.', '_')
+                    id_raw = str(target_id)
                     cache_key = f"{asset_kind}_{id_clean}".lower()
                     
+                    # Tier 1: Check In-Memory RAM Cache (0.1ms)
                     transcription_ram_cache = getattr(schemas_mod, "_IN_MEMORY_TRANSCRIPTION_CACHE", {})
                     fast_text = transcription_ram_cache.get(cache_key) or _GLOBAL_VISION_OCR_CACHE.get(cache_key)
+                    
+                    # Tier 2: Check Local Disk JSON Cache (1ms)
                     if not fast_text:
                         disk_cache_file = os.path.join(os.getcwd(), "data_cache", "transcriptions", f"{asset_kind}_{id_clean}.json")
                         if os.path.exists(disk_cache_file):
@@ -9727,25 +9730,61 @@ def run_pipeline(
                             except Exception:
                                 pass
                     
-                    img_path = (fast_rec.absolute_path if fast_rec else None) or resolved_img_path or ""
-                    fast_payload = {
-                        "content": fast_text or f"[{target_cat} {target_id}] pre-indexed visual asset context.",
-                        "page_content": fast_text or f"[{target_cat} {target_id}] pre-indexed visual asset context.",
-                        "metadata": {
-                            "asset_type": asset_kind,
-                            "asset_id": str(target_id),
-                            "image_path": img_path,
-                            "figure_image_path": img_path,
-                            "table_image_path": img_path,
-                            "document_type": "pdf_visual" if asset_kind == "figure" else "pdf_table"
-                        },
-                        "image_path": img_path
-                    }
-                    logger.info("⚡ [Direct Fast-Path Return] Bypassed Qdrant scrolling & vector search for %s_%s (<0.01ms)", target_cat, target_id)
-                    return [fast_payload]
+                    # Tier 3: Qdrant Cloud Payload Filtered Fast-Path (~15ms)
+                    if not fast_text and client:
+                        try:
+                            id_clean_dot = id_raw.replace('_', '.')
+                            filter_conds = [
+                                models.FieldCondition(key="metadata.asset_id", match=models.MatchValue(value=id_raw)),
+                                models.FieldCondition(key="metadata.asset_id", match=models.MatchValue(value=id_clean)),
+                                models.FieldCondition(key="metadata.asset_id", match=models.MatchValue(value=id_clean_dot)),
+                                models.FieldCondition(key="entity_id", match=models.MatchValue(value=id_raw)),
+                                models.FieldCondition(key="entity_id", match=models.MatchValue(value=id_clean)),
+                                models.FieldCondition(key="chunk_id", match=models.MatchValue(value=id_raw)),
+                                models.FieldCondition(key="chunk_id", match=models.MatchValue(value=id_clean)),
+                            ]
+                            scroll_res, _ = client.scroll(
+                                collection_name=COLLECTION_NAME,
+                                scroll_filter=models.Filter(should=filter_conds),
+                                limit=5,
+                                with_payload=True
+                            )
+                            if scroll_res:
+                                for pt in scroll_res:
+                                    p = pt.payload or {}
+                                    candidate_text = p.get("content") or p.get("text") or p.get("caption_text") or p.get("markdown_table")
+                                    if candidate_text and len(candidate_text.strip()) > 10:
+                                        fast_text = candidate_text
+                                        # Hydrate RAM cache for 10-minute fast-path hit next time
+                                        if hasattr(schemas_mod, "_IN_MEMORY_TRANSCRIPTION_CACHE"):
+                                            schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[cache_key] = fast_text
+                                            schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{id_raw}".lower()] = fast_text
+                                        _GLOBAL_VISION_OCR_CACHE[cache_key] = fast_text
+                                        logger.info("⚡ [Qdrant Cloud Payload Fast-Path] Hydrated RAM cache for %s_%s (~15ms)", target_cat, target_id)
+                                        break
+                        except Exception as q_payload_err:
+                            logger.warning("Qdrant Cloud payload fast-path lookup notice: %s", q_payload_err)
 
-                # 2. ALSO run general hybrid vector pre-fetch if query is HYBRID_MULTIMODAL or general text query
-                if not (target_cat and target_id) or query_intent == QueryIntent.HYBRID_MULTIMODAL or allowed_tools.get("allow_pandas"):
+                    if fast_text:
+                        img_path = (fast_rec.absolute_path if fast_rec else None) or resolved_img_path or ""
+                        fast_payload = {
+                            "content": fast_text,
+                            "page_content": fast_text,
+                            "metadata": {
+                                "asset_type": asset_kind,
+                                "asset_id": str(target_id),
+                                "image_path": img_path,
+                                "figure_image_path": img_path,
+                                "table_image_path": img_path,
+                                "document_type": "pdf_visual" if asset_kind == "figure" else "pdf_table"
+                            },
+                            "image_path": img_path
+                        }
+                        logger.info("⚡ [Direct Fast-Path Return] Served %s_%s from RAM/Disk/Qdrant Payload", target_cat, target_id)
+                        return [fast_payload]
+
+                # 2. ALSO run general hybrid vector pre-fetch if query is HYBRID_MULTIMODAL, general text query, or fast-path missed
+                if not (target_cat and target_id) or query_intent == QueryIntent.HYBRID_MULTIMODAL or allowed_tools.get("allow_pandas") or not raw_payloads:
                     get_cached_vector_names = schemas_mod.get_cached_vector_names
                     get_shared_sparse_encoder = schemas_mod.get_shared_sparse_encoder
                     from embeddings.embedding_model import get_embedding_model
