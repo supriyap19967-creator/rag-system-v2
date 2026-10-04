@@ -252,9 +252,14 @@ class RAGMasterSafetyGauntlet:
                 with tracer.start_as_current_span(layer_name) as layer_span:
                     try:
                         layer_func()
+                        duration_ms = (time.time() - start_layer) * 1000.0
                         layer_span.set_status(trace.status.Status(trace.status.StatusCode.OK))
-                        val_logger.info(f"🛡️ [{layer_name}] Passed successfully.")
+                        msg = f"🛡️ [{layer_name}] Passed successfully ({duration_ms:.2f} ms)."
+                        val_logger.info(msg)
+                        logging.getLogger("streamlit_ui.StreamlitApp").info(msg)
+                        print(msg, flush=True)
                     except Exception as e:
+                        duration_ms = (time.time() - start_layer) * 1000.0
                         passed = False
                         error_info = traceback.format_exc()
                         layer_span.record_exception(e)
@@ -262,9 +267,15 @@ class RAGMasterSafetyGauntlet:
                         layer_span.set_attribute("guardrail.error_trace", error_info)
                         
                         if isinstance(e, SyntheticDataViolation):
-                            val_logger.info(f"🛡️ [{layer_name}] Synthetic data intercepted successfully: {e}")
+                            msg = f"🛡️ [{layer_name}] Synthetic data intercepted successfully: {e}"
+                            val_logger.info(msg)
+                            logging.getLogger("streamlit_ui.StreamlitApp").info(msg)
+                            print(msg, flush=True)
                         else:
-                            val_logger.error(f"❌ [{layer_name}] Security gauntlet exception: {e}")
+                            msg = f"❌ [{layer_name}] Security gauntlet exception: {e}"
+                            val_logger.error(msg)
+                            logging.getLogger("streamlit_ui.StreamlitApp").error(msg)
+                            print(msg, flush=True)
                         
                         CRITICAL_LAYERS = {
                             "Guardrail_Layer_01_Prompt_Injection_Filter",
@@ -288,7 +299,6 @@ class RAGMasterSafetyGauntlet:
                             execution_context["payload"]["metadata"]["warning"] = f"Non-critical failure in {layer_name}: {str(e)}"
                             execution_context["payload"]["confidence_score"] = min(execution_context["payload"].get("confidence_score", 1.0), 0.5)
                         
-                    duration_ms = (time.time() - start_layer) * 1000.0
                     layer_span.set_attribute("guardrail.passed", passed)
                     layer_span.set_attribute("guardrail.duration_ms", duration_ms)
                     
