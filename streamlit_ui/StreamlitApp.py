@@ -1374,14 +1374,38 @@ def validate_result(ctx: RunContext[SystemPipelinesDeps], result: ChartTableData
             t_cat, t_id = parse_target_asset(ctx.deps.user_query)
             if t_cat and t_id:
                 a_kind = "figure" if "fig" in str(t_cat).lower() or "chart" in str(t_cat).lower() else "table"
-                for cand in [str(t_id), str(t_id).replace('.', '_'), str(t_id).replace('_', '.')]:
-                    d_file = os.path.join(os.getcwd(), "data_cache", "transcriptions", f"{a_kind}_{cand}.json")
-                    if os.path.exists(d_file):
-                        with open(d_file, "r", encoding="utf-8") as f_disk:
-                            d_data = json.load(f_disk)
-                            if d_data and "markdown_table" in d_data:
-                                raw_markdown = d_data["markdown_table"]
-                                break
+                id_clean = str(t_id).replace('.', '_')
+                id_raw = str(t_id)
+                cache_key = f"{a_kind}_{id_clean}".lower()
+
+                # Tier 1: RAM Cache
+                transcription_ram_cache = getattr(schemas_mod, "_IN_MEMORY_TRANSCRIPTION_CACHE", {})
+                raw_markdown = transcription_ram_cache.get(cache_key) or _GLOBAL_VISION_OCR_CACHE.get(cache_key) or ""
+
+                # Tier 2: Qdrant Cloud Payload Lookup (~15ms)
+                if not raw_markdown and client:
+                    try:
+                        from qdrant_client import models
+                        scroll_res, _ = client.scroll(
+                            collection_name=COLLECTION_NAME,
+                            scroll_filter=models.Filter(
+                                should=[
+                                    models.FieldCondition(key="metadata.asset_id", match=models.MatchValue(value=id_raw)),
+                                    models.FieldCondition(key="asset_id", match=models.MatchValue(value=id_raw)),
+                                    models.FieldCondition(key="chunk_id", match=models.MatchValue(value=f"{a_kind}_{id_clean}".lower())),
+                                ]
+                            ),
+                            limit=1,
+                            with_payload=True
+                        )
+                        if scroll_res and scroll_res[0].payload:
+                            p = scroll_res[0].payload
+                            raw_markdown = p.get("markdown_table") or p.get("content") or p.get("text") or ""
+                            if raw_markdown:
+                                schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[cache_key] = raw_markdown
+                                _GLOBAL_VISION_OCR_CACHE[cache_key] = raw_markdown
+                    except Exception as q_err:
+                        logger.debug("Qdrant Cloud fallback read notice: %s", q_err)
         except Exception:
             pass
 
@@ -1562,7 +1586,7 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
         "5. VISUAL ASSETS AND PATHS: You MUST always populate the 'visual_asset_path' and 'image_path' fields in the output schema with the path to the visual asset or image if any visual asset is processed or queried. If no visual asset is involved, leave them as null or empty.\n"
         "6. VISUAL QUERY ROUTING RULE: If a user query refers to a chart, figure, or document image, you MUST ALWAYS execute both tools: first call `query_qdrant_vector_search` to retrieve the surrounding text chunks and metadata, AND call `process_vision_element` to parse the visual image asset. You must then merge both retrieved contexts into the final answer.\n"
         "7. TEXT-ONLY EXPLANATORY QUERY RULE: For any general text-only questions, explanations, reasons, or policy summaries (which do not reference visual assets or tabular calculations), you MUST call `query_qdrant_vector_search` to retrieve the relevant document context, and then synthesize a detailed and complete explanation based ONLY on that context. Do NOT call `process_vision_element` or `query_pandas_dataframe` for these queries.\n"
-        "8. NON-EXISTENT ASSET TARGET MANDATE: If the user queries a figure, table, or chart that does not exist in the document dataset (e.g. Table 6.1 or Figure 9.9), or if `process_vision_element` returns `NON_EXISTENT_ASSET_ERROR`, state immediately in the very first sentence of 'text_reasoning': '<Asset Name> does not exist in the document dataset.' Do NOT fabricate mock image paths (such as 'tables/Table 6.1.png'). Leave 'extracted_table' as an empty list ([]) and set 'image_path' and 'visual_asset_path' to null.\n\n"
+        "8. NON-EXISTENT ASSET TARGET MANDATE: If an exact visual image file for a queried figure, table, or chart is not found in the dataset (e.g. Figure 4.2), DO NOT state 'Asset does not exist' and stop. Instead, state transparently in the opening note: 'Note: An exact visual image for <Asset Name> was not found in the dataset. Summarizing related document context from Qdrant Cloud:' and then analyze and summarize all retrieved Qdrant Cloud document text chunks (e.g., Table 4.2, Box 4.2, or Chapter 4 text) to provide a complete, well-structured, and helpful answer for the user. Do NOT fabricate mock image paths (such as 'tables/Table 6.1.png'). Leave 'extracted_table' as an empty list ([]) if no tabular rows are present, and set 'image_path' and 'visual_asset_path' to null.\n\n"
 
         "GENERAL GUIDELINES:\n"
         "- DECIMAL PRECISION RULE: When extracting numeric values or floats from charts, tables, or text chunks, do NOT perform any custom rounding or arbitrary truncation. Extract the exact value visible or, if rounding is required, round to match the source precision (or round to 2 decimal places using standard round-half-up math, checking carefully for last-digit differences like 17.43 vs 17.44). Double check the final digits against the visual graphic and text chunks to ensure absolute alignment.\n"
