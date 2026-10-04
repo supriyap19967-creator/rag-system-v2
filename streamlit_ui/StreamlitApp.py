@@ -7118,7 +7118,7 @@ def _render_history() -> None:
                     if best_img_in_msg and best_img_in_msg not in seen_image_paths:
                         seen_image_paths.add(best_img_in_msg)
                         img_path = _resolve_existing_image_path(best_img_in_msg) or best_img_in_msg
-                        if img_path and os.path.exists(img_path):
+                        if img_path and (str(img_path).startswith("http") or os.path.exists(img_path)):
                             hist_img = img_path
 
                 render_enhanced_assistant_turn(
@@ -8174,7 +8174,7 @@ def render_retrieved_figure(retrieval_results: list[dict[str, Any]], query: str 
             display_path = _resolve_existing_image_path(img_path) or img_path
             
             # 3. ONLY display the image and its background paragraph if we haven't seen this file yet
-            if os.path.exists(display_path) and display_path not in seen_images:
+            if (str(display_path).startswith("http") or os.path.exists(display_path)) and display_path not in seen_images:
                 # Add label or title
                 label = ""
                 for key in ("entity_id", "linked_entity_id", "visual_title", "caption_text"):
@@ -8474,7 +8474,7 @@ def resolve_single_figure_path(query_text: str, agent_result: any, source_chunks
         try:
             import streamlit as st
             active_img = st.session_state.get("LAST_ACTIVE_IMAGE_PATH")
-            if active_img and os.path.exists(active_img):
+            if active_img and (str(active_img).startswith("http") or os.path.exists(active_img)):
                 return active_img
         except Exception:
             pass
@@ -9017,15 +9017,18 @@ def generate_executive_briefing_report_html(
     embedded Base64 images, styled data tables, KPI summary cards, and source citations.
     """
     img_b64_tag = ""
-    if image_path and os.path.exists(image_path):
-        try:
-            with open(image_path, "rb") as f:
-                encoded = base64.b64encode(f.read()).decode("utf-8")
-                ext = os.path.splitext(image_path)[1].lstrip(".").lower()
-                mime = "image/png" if ext == "png" else "image/jpeg"
-                img_b64_tag = f'<div style="text-align: center; margin: 15px 0;"><img src="data:{mime};base64,{encoded}" style="max-width: 100%; max-height: 450px; border-radius: 8px; border: 1px solid #444;" alt="Extracted Visual Asset"/></div>'
-        except Exception as e:
-            img_b64_tag = f'<p style="color: #FF6B6B;"><em>[Visual asset image load error: {e}]</em></p>'
+    if image_path:
+        if str(image_path).startswith("http://") or str(image_path).startswith("https://"):
+            img_b64_tag = f'<div style="text-align: center; margin: 15px 0;"><img src="{image_path}" style="max-width: 100%; max-height: 450px; border-radius: 8px; border: 1px solid #444;" alt="Extracted Visual Asset"/></div>'
+        elif os.path.exists(image_path):
+            try:
+                with open(image_path, "rb") as f:
+                    encoded = base64.b64encode(f.read()).decode("utf-8")
+                    ext = os.path.splitext(image_path)[1].lstrip(".").lower()
+                    mime = "image/png" if ext == "png" else "image/jpeg"
+                    img_b64_tag = f'<div style="text-align: center; margin: 15px 0;"><img src="data:{mime};base64,{encoded}" style="max-width: 100%; max-height: 450px; border-radius: 8px; border: 1px solid #444;" alt="Extracted Visual Asset"/></div>'
+            except Exception as e:
+                img_b64_tag = f'<p style="color: #FF6B6B;"><em>[Visual asset image load error: {e}]</em></p>'
 
     table_html = ""
     if table_text:
@@ -9200,7 +9203,7 @@ def render_enhanced_assistant_turn(
     kpis = extract_kpis_from_table_text_or_df(table_text, df) if (table_text or (df is not None and not df.empty)) else {}
 
     # 1. Visual Asset Image (fully visible inline container)
-    if image_path and os.path.exists(image_path):
+    if image_path and (str(image_path).startswith("http") or os.path.exists(image_path)):
         st.markdown("##### 📷 Extracted Visual Asset Image")
         display_image_robustly(image_path)
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
@@ -9782,7 +9785,7 @@ def run_pipeline(
                 return None
 
         def _fetch_vision():
-            if not (resolved_img_path and os.path.exists(resolved_img_path)):
+            if not (resolved_img_path and (str(resolved_img_path).startswith("http") or os.path.exists(resolved_img_path))):
                 return None
 
             cache_key = f"{resolved_img_path}_{target_cat}_{target_id}"
@@ -10170,42 +10173,39 @@ def run_pipeline(
                                 if raw_markdown:
                                     parsed_rows = parse_markdown_table_to_dicts(raw_markdown)
                                 
-                                if not parsed_rows:
-                                    for text_src in (result.output.text_reasoning, getattr(deps, "last_vision_raw_content", None), getattr(deps, "pre_fetched_vision_data", None), LAST_VISION_RAW_CONTENT):
-                                        if text_src:
-                                            parsed_rows = extract_rows_from_key_values(text_src)
-                                            if parsed_rows:
-                                                break
-                                
                                 if parsed_rows:
                                     logger.info(f"✅ [Post-Agent Interceptor] Successfully parsed {len(parsed_rows)} rows. Forcefully populating extracted_table.")
                                     result.output.extracted_table = [ChartTableRow(**r) for r in parsed_rows]
 
-                        # ---------------------------------------------------------
-                        # Post-Agent Deterministic Image URL Population Interceptor
-                        # ---------------------------------------------------------
-                        current_image = getattr(result.output, "image_path", None) or getattr(result.output, "visual_asset_path", None)
-                        if not current_image or not str(current_image).startswith("http"):
-                            supabase_url = None
-                            search_chunks = list(top_chunks or []) + list(getattr(deps, "retrieved_chunks", []) or [])
-                            for chunk in search_chunks:
-                                meta = chunk.get("metadata", {}) if isinstance(chunk, dict) else getattr(chunk, "metadata", {})
-                                if isinstance(meta, dict):
-                                    cand = meta.get("image_path") or meta.get("figure_image_path") or meta.get("table_image_path") or meta.get("visual_asset_path")
-                                    if cand and str(cand).startswith("http"):
-                                        supabase_url = str(cand)
-                                        break
-                            if not supabase_url:
-                                t_cat_check, t_id_check = parse_target_asset(user_query)
-                                if t_cat_check and t_id_check:
-                                    from app.multimodal_assets import get_supabase_asset_url
-                                    supabase_url = get_supabase_asset_url(f"{t_cat_check}_{t_id_check}")
-                            if not supabase_url and LAST_RESOLVED_VISION_PATH:
+                    # ---------------------------------------------------------
+                    # Post-Agent Deterministic Image URL Population Interceptor (Unconditional)
+                    # ---------------------------------------------------------
+                    current_image = getattr(result.output, "image_path", None) or getattr(result.output, "visual_asset_path", None)
+                    if not current_image or not str(current_image).startswith("http"):
+                        supabase_url = None
+                        search_chunks = list(top_chunks or []) + list(getattr(deps, "retrieved_chunks", []) or [])
+                        for chunk in search_chunks:
+                            meta = chunk.get("metadata", {}) if isinstance(chunk, dict) else getattr(chunk, "metadata", {})
+                            if isinstance(meta, dict):
+                                cand = meta.get("image_path") or meta.get("figure_image_path") or meta.get("table_image_path") or meta.get("visual_asset_path")
+                                if cand and str(cand).startswith("http"):
+                                    supabase_url = str(cand)
+                                    break
+                        if not supabase_url:
+                            t_cat_check, t_id_check = parse_target_asset(user_query)
+                            if t_cat_check and t_id_check:
+                                from app.multimodal_assets import get_supabase_asset_url
+                                supabase_url = get_supabase_asset_url(f"{t_cat_check}_{t_id_check}")
+                        if not supabase_url and LAST_RESOLVED_VISION_PATH:
+                            if str(LAST_RESOLVED_VISION_PATH).startswith("http"):
                                 supabase_url = LAST_RESOLVED_VISION_PATH
-                            if supabase_url:
-                                result.output.image_path = supabase_url
-                                result.output.visual_asset_path = supabase_url
-                                logger.info("✅ [Post-Agent Interceptor] Enforced Supabase HTTPS Image URL: %s", supabase_url)
+                            else:
+                                from app.multimodal_assets import get_supabase_asset_url
+                                supabase_url = get_supabase_asset_url(LAST_RESOLVED_VISION_PATH)
+                        if supabase_url:
+                            result.output.image_path = supabase_url
+                            result.output.visual_asset_path = supabase_url
+                            logger.info("✅ [Post-Agent Interceptor] Enforced Supabase HTTPS Image URL: %s", supabase_url)
 
             
             # Log final successfully parsed Pydantic object
@@ -10357,8 +10357,6 @@ def run_pipeline(
         # 4. Append extracted table if present and not blocked
         if not result.output.extracted_table and answer_text:
             parsed_rows = parse_markdown_table_to_dicts(answer_text)
-            if not parsed_rows:
-                parsed_rows = extract_rows_from_key_values(answer_text)
             if parsed_rows:
                 result.output.extracted_table = [ChartTableRow(**r) for r in parsed_rows]
 
@@ -10656,8 +10654,10 @@ def main() -> None:
         filename = os.path.basename(raw_path) if raw_path else ""
 
         found_image = None
-        # 0. Direct check if raw_path exists on disk
-        if raw_path and os.path.exists(raw_path) and os.path.isfile(raw_path):
+        # 0. Direct check if raw_path is URL or exists on disk
+        if raw_path and (str(raw_path).startswith("http://") or str(raw_path).startswith("https://")):
+            found_image = raw_path
+        elif raw_path and os.path.exists(raw_path) and os.path.isfile(raw_path):
             found_image = os.path.abspath(raw_path).replace("\\", "/")
 
         # Server directories where extracted assets reside (prioritizing clean recropped charts/tables)
