@@ -192,9 +192,7 @@ try:
             from pydantic_ai.providers.openai import OpenAIProvider
             class OpenAIModel:
                 def __new__(cls, model_name, base_url=None, api_key=None, http_client=None):
-                    import httpx
-                    client = http_client or httpx.AsyncClient(timeout=3.0)
-                    provider = OpenAIProvider(base_url=base_url, api_key=api_key, http_client=client)
+                    provider = OpenAIProvider(base_url=base_url, api_key=api_key)
                     return OpenAIChatModel(model_name, provider=provider)
 except ImportError:
     class ModelSettings:
@@ -9554,103 +9552,8 @@ def run_pipeline(
                 
                 return not_exist_msg, [], fast_timings, None, agent_result
 
-            if not is_compound_multi_source_query(user_query):
-                asset_kind = "figure" if "fig" in str(t_cat).lower() or "chart" in str(t_cat).lower() else "table"
-
-            for candidate_id in [str(t_id), str(t_id).replace('.', '_'), str(t_id).replace('_', '.')]:
-                disk_file = os.path.join(os.getcwd(), "data_cache", "transcriptions", f"{asset_kind}_{candidate_id}.json")
-                if os.path.exists(disk_file):
-                    with open(disk_file, "r", encoding="utf-8") as f_disk:
-                        d_data = json.load(f_disk)
-                    if d_data and ("markdown_table" in d_data or "extracted_table" in d_data):
-                        raw_table_md = d_data.get("markdown_table", "")
-                        if not is_pure_general_overview_query(user_query):
-                            raw_table_md = filter_cached_transcription_for_user_query(user_query, raw_table_md)
-                        parsed_rows = parse_markdown_table_to_dicts(raw_table_md)
-                        if not parsed_rows:
-                            parsed_rows = extract_rows_from_key_values(raw_table_md)
-                        table_rows = []
-                        if parsed_rows:
-                            for r in parsed_rows:
-                                if isinstance(r, dict):
-                                    row_data = {
-                                        "Series": str(r.get("Series") or r.get("series") or r.get("Key") or "Data Point").strip(),
-                                        "Category": str(r.get("Category") or r.get("category") or "N/A").strip(),
-                                        "TargetValue": r.get("TargetValue") if r.get("TargetValue") is not None else (r.get("value") or r.get("Value") or "N/A"),
-                                        "Unit": str(r.get("Unit") or r.get("unit") or "N/A").strip(),
-                                        "Summary": str(r.get("Summary") or r.get("summary") or "").strip()
-                                    }
-                                    table_rows.append(ChartTableRow(**row_data))
-                        
-                        # Generate narrative summary FIRST and sanitize formatting
-                        answer_text = ensure_text_summary_narrative_first(raw_table_md, table_rows)
-                        answer_text = unwrap_markdown_table_code_fences(answer_text)
-                        narrative_text, table_text = format_answer_with_collapsible_table(answer_text)
-                        
-                        # Resolve visual asset path
-                        resolved_img = d_data.get("image_path")
-                        if not resolved_img or not os.path.exists(resolved_img):
-                            resolved_img = resolve_single_figure_path(user_query, None, [])
-                        
-                        # Construct mock agent output
-                        class FastMockResult:
-                            def __init__(self, output: ChartTableData):
-                                self.output = output
-                                self.usage = type('Usage', (), {'input_tokens': 0, 'output_tokens': 0, 'total_tokens': 0})()
-                            def new_messages(self):
-                                return []
-
-                        fallback_data = ChartTableData(
-                            source_routing_trail="Pre-transcribed visual store fast-path",
-                            text_reasoning=answer_text,
-                            extracted_table=table_rows,
-                            visual_asset_path=resolved_img or None,
-                            image_path=resolved_img or None
-                        )
-                        agent_result = FastMockResult(fallback_data)
-                        
-                        # Construct dummy chunk source for source trail & metadata rendering
-                        fast_source = {
-                            "content": raw_table_md[:300],
-                            "source": f"{asset_kind}_{candidate_id}",
-                            "metadata": {
-                                "asset_type": asset_kind,
-                                "asset_id": candidate_id,
-                                "image_path": resolved_img,
-                                "source": f"{asset_kind}_{candidate_id}"
-                            }
-                        }
-                        sources = [fast_source]
-                        
-                        fast_timings = {
-                            "disk_transcription_fastpath_ms": round((time.time() - start_time) * 1000, 2),
-                            "total_pipeline_seconds": round(time.time() - start_time, 4)
-                        }
-                        # Compute dynamic scores for fast-path responses (<1ms overhead)
-                        q_words = [w.lower() for w in re.findall(r"[a-z0-9.]+", user_query) if len(w) >= 3]
-                        if q_words:
-                            ans_lower = answer_text.lower()
-                            match_cnt = sum(1 for w in q_words if w in ans_lower)
-                            dyn_faith = round(min(0.99, max(0.85, 0.88 + 0.10 * (match_cnt / len(q_words)))), 2)
-                            dyn_rel = round(min(0.98, max(0.82, 0.80 + 0.18 * (match_cnt / len(q_words)))), 2)
-                        else:
-                            dyn_faith = 0.98
-                            dyn_rel = 0.96
-
-                        st.session_state["last_faithfulness_score"] = dyn_faith
-                        st.session_state["last_relevance_score"] = dyn_rel
-
-                        out_payload = (answer_text, sources, fast_timings, resolved_img, agent_result)
-                        SemanticCacheManager.put(user_query, out_payload)
-                        
-                        _dispatch_early_return_telemetry(answer_text, sources, tag="fast-path-success")
-                        
-                        if text_stream_callback and callable(text_stream_callback):
-                            text_stream_callback(narrative_text or answer_text)
-                            
-                        return out_payload
     except Exception as fastpath_err:
-        logger.warning("Disk transcription fast-path notice: %s", fastpath_err)
+        logger.warning("Target asset validation notice: %s", fastpath_err)
     
     # Update Langfuse trace metadata with session, user, and deployment tags context
     if os.getenv("LANGFUSE_PUBLIC_KEY") and langfuse_context is not None:
@@ -9790,21 +9693,25 @@ def run_pipeline(
                             logger.warning("Qdrant Cloud payload fast-path lookup notice: %s", q_payload_err)
 
                     if fast_text:
+                        from app.multimodal_assets import get_supabase_asset_url
                         img_path = (fast_rec.absolute_path if fast_rec else None) or resolved_img_path or ""
+                        supabase_https_url = get_supabase_asset_url(f"{target_cat}_{target_id}") or img_path
                         fast_payload = {
                             "content": fast_text,
                             "page_content": fast_text,
                             "metadata": {
                                 "asset_type": asset_kind,
                                 "asset_id": str(target_id),
-                                "image_path": img_path,
-                                "figure_image_path": img_path,
-                                "table_image_path": img_path,
-                                "document_type": "pdf_visual" if asset_kind == "figure" else "pdf_table"
+                                "image_path": supabase_https_url,
+                                "figure_image_path": supabase_https_url,
+                                "table_image_path": supabase_https_url,
+                                "visual_asset_path": supabase_https_url,
+                                "document_type": "pdf_visual" if asset_kind == "figure" else "pdf_table",
+                                "source": f"{asset_kind}_{target_id}"
                             },
-                            "image_path": img_path
+                            "image_path": supabase_https_url
                         }
-                        logger.info("⚡ [Direct Fast-Path Return] Served %s_%s from RAM/Disk/Qdrant Payload", target_cat, target_id)
+                        logger.info("⚡ [Qdrant Context Hydration] Formatted visual payload for %s_%s for Pydantic AI agent context", target_cat, target_id)
                         return [fast_payload]
 
                 # 2. ALSO run general hybrid vector pre-fetch if query is HYBRID_MULTIMODAL, general text query, or fast-path missed
@@ -10273,6 +10180,32 @@ def run_pipeline(
                                 if parsed_rows:
                                     logger.info(f"✅ [Post-Agent Interceptor] Successfully parsed {len(parsed_rows)} rows. Forcefully populating extracted_table.")
                                     result.output.extracted_table = [ChartTableRow(**r) for r in parsed_rows]
+
+                        # ---------------------------------------------------------
+                        # Post-Agent Deterministic Image URL Population Interceptor
+                        # ---------------------------------------------------------
+                        current_image = getattr(result.output, "image_path", None) or getattr(result.output, "visual_asset_path", None)
+                        if not current_image or not str(current_image).startswith("http"):
+                            supabase_url = None
+                            search_chunks = list(top_chunks or []) + list(getattr(deps, "retrieved_chunks", []) or [])
+                            for chunk in search_chunks:
+                                meta = chunk.get("metadata", {}) if isinstance(chunk, dict) else getattr(chunk, "metadata", {})
+                                if isinstance(meta, dict):
+                                    cand = meta.get("image_path") or meta.get("figure_image_path") or meta.get("table_image_path") or meta.get("visual_asset_path")
+                                    if cand and str(cand).startswith("http"):
+                                        supabase_url = str(cand)
+                                        break
+                            if not supabase_url:
+                                t_cat_check, t_id_check = parse_target_asset(user_query)
+                                if t_cat_check and t_id_check:
+                                    from app.multimodal_assets import get_supabase_asset_url
+                                    supabase_url = get_supabase_asset_url(f"{t_cat_check}_{t_id_check}")
+                            if not supabase_url and LAST_RESOLVED_VISION_PATH:
+                                supabase_url = LAST_RESOLVED_VISION_PATH
+                            if supabase_url:
+                                result.output.image_path = supabase_url
+                                result.output.visual_asset_path = supabase_url
+                                logger.info("✅ [Post-Agent Interceptor] Enforced Supabase HTTPS Image URL: %s", supabase_url)
 
             
             # Log final successfully parsed Pydantic object

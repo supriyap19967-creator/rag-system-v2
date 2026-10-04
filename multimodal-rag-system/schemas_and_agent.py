@@ -879,6 +879,8 @@ class ChartTableData(BaseModel):
     text_reasoning: Optional[str] = Field(default="", description="The step-by-step logical summary.")
     extracted_table: Optional[List[ChartTableRow]] = Field(default_factory=list, description="List of precise parsed table rows.")
     has_table_data: bool = Field(default=True, description="Flag indicating if the table contains non-dummy, actual tabular data.")
+    visual_asset_path: Optional[str] = Field(default=None, description="Path or HTTP URL to the visual chart/figure image.")
+    image_path: Optional[str] = Field(default=None, description="Path or HTTP URL to the visual chart/figure image.")
 
     @model_validator(mode='after')
     def validate_table_integrity(self) -> 'ChartTableData':
