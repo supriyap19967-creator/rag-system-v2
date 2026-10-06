@@ -938,7 +938,7 @@ class ChartTableData(BaseModel):
         is_extraction = False
         if user_query:
             query_lower = user_query.lower()
-            strict_extraction_keywords = ["extract to table", "extract values", "tabular format", "rows", "dataframe", "visual", "figure", "chart", "share", "shares"]
+            strict_extraction_keywords = ["extract to table", "extract values", "tabular format", "rows", "dataframe", "table", "csv", "spreadsheet"]
             if any(k in query_lower for k in strict_extraction_keywords):
                 is_extraction = True
 

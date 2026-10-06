@@ -3595,12 +3595,13 @@ def safe_get_conversation_id(obj: Any, default: str = "default_conversation") ->
     return str(getattr(obj, "conversation_id", None) or getattr(obj, "session_id", None) or default)
 
 
-def build_capped_pydantic_history(raw_messages: list, max_turns: int = 3) -> list:
+def build_capped_pydantic_history(raw_messages: list, max_turns: int = 3, current_query: str = "") -> list:
     """
     Converts raw session_state messages into a lightweight, token-efficient PydanticAI message history.
     Caps history to the last `max_turns` (default: 3 turns = up to 6 messages) and strips massive markdown
     tables from historical assistant responses while preserving explicit Asset Metadata Tags (Asset ID & Table Schema)
-    to enable precise follow-up disk lookups.
+    to enable precise follow-up disk lookups. If current_query targets a NEW explicit asset (e.g. Figure 4.2),
+    prior distinct asset completions are pruned to prevent cross-query data leakage.
     """
     if not isinstance(raw_messages, list) or not raw_messages:
         return []
@@ -3612,8 +3613,12 @@ def build_capped_pydantic_history(raw_messages: list, max_turns: int = 3) -> lis
     except ImportError:
         has_pydantic = False
 
+    curr_cat, curr_id = None, None
+    if current_query:
+        from app.multimodal_assets import parse_target_asset
+        curr_cat, curr_id = parse_target_asset(current_query)
+
     valid_turns = [m for m in raw_messages if isinstance(m, dict) and m.get("content")]
-    # Max `max_turns` turns = max `max_turns * 2` messages
     recent_turns = valid_turns[-(max_turns * 2):]
 
     history_objs = []
@@ -3634,6 +3639,11 @@ def build_capped_pydantic_history(raw_messages: list, max_turns: int = 3) -> lis
             # Extract asset ID (e.g. Figure 4.2 or Table 2.1) if present in raw content
             fig_match = re.search(r"\b(?:Figure|Fig|Table)[\s_]*([sS]?\d+(?:\.\d+)*)\b", raw_content, re.IGNORECASE)
             asset_ref = f"{fig_match.group(0)}" if fig_match else None
+            prev_id = fig_match.group(1) if fig_match else None
+
+            # If current query explicitly targets a NEW distinct asset (e.g. 4.2 vs 4.3), skip prior asset output
+            if curr_id and prev_id and curr_id != prev_id:
+                continue
 
             # Detect table headers or column names
             headers_match = re.search(r"\|([^\n]+)\|", raw_content)
@@ -4199,6 +4209,12 @@ def display_image_robustly(img_path: str):
             if not found_path:
                 from app.multimodal_assets import get_supabase_asset_url
                 found_path = get_supabase_asset_url(visual_asset_path)
+
+        if found_path and not (str(found_path).startswith("http://") or str(found_path).startswith("https://")) and not (str(found_path).lower().endswith(".csv") or is_csv):
+            from app.multimodal_assets import get_supabase_asset_url
+            supa_url = get_supabase_asset_url(found_path) or get_supabase_asset_url(visual_asset_path)
+            if supa_url and str(supa_url).startswith("http"):
+                found_path = supa_url
 
         if found_path:
             try:
@@ -9217,8 +9233,13 @@ def render_enhanced_assistant_turn(
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
         render_kpi_cards(kpis)
 
-    # 4. Extracted Data Table (full width left-to-right, zero vertical scrolling)
-    if table_text or (df is not None and not df.empty):
+    # 4. Extracted Data Table (rendered conditionally for tabular queries or explicit extraction requests)
+    target_cat_q, _ = parse_target_asset(user_query)
+    is_table_query = (
+        (target_cat_q and "table" in target_cat_q.lower()) or 
+        any(kw in (user_query or "").lower() for kw in ["table", "csv", "dataframe", "tabular", "extract to table", "rows", "columns", "spreadsheet"])
+    )
+    if is_table_query and (table_text or (df is not None and not df.empty)):
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         if is_qualitative_diagram(df, table_text):
             render_qualitative_diagram_cards(df, table_text)
@@ -9617,6 +9638,8 @@ def run_pipeline(
                 logger.info("🔄 [Follow-up Memory Hydrated] Hydrated active session asset: %s %s (%s)", target_cat, target_id, resolved_img_path)
 
         if target_cat and target_id:
+            if st.session_state.get("LAST_ACTIVE_TARGET_ID") and st.session_state.get("LAST_ACTIVE_TARGET_ID") != target_id:
+                st.session_state["LAST_ACTIVE_IMAGE_PATH"] = None
             if not resolved_img_path:
                 try:
                     from app.multimodal_assets import _resolve_existing_image_path
@@ -9990,7 +10013,7 @@ def run_pipeline(
                     else:
                         target_agent = multimodal_agent
                     raw_messages = st.session_state.get("messages", [])
-                    capped_history = build_capped_pydantic_history(raw_messages, max_turns=3)
+                    capped_history = build_capped_pydantic_history(raw_messages, max_turns=3, current_query=user_query)
                     future = _AGENT_EXECUTOR.submit(
                         target_agent.run_sync,
                         user_query,
