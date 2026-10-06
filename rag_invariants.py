@@ -117,8 +117,9 @@ class RAGInvariantsValidator:
         )
 
     def validate_asset_paths(self, asset_paths: list[str]) -> int:
-        from app.multimodal_assets import build_asset_registry, normalize_entity_id
+        from app.multimodal_assets import build_asset_registry, normalize_entity_id, get_supabase_asset_url
         from app.main import _resolve_existing_image_path
+        resolved_paths = []
         for path in asset_paths:
             path_str = str(path or "").strip()
             if not path_str:

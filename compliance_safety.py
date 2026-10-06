@@ -19,6 +19,28 @@ from typing import Any
 
 _METRICS_EXECUTOR = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="langfuse_async")
 
+import sys
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+if hasattr(sys.stderr, "reconfigure"):
+    try:
+        sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
+
+def _safe_print(text: str) -> None:
+    try:
+        print(text, flush=True)
+    except Exception:
+        try:
+            sys.stdout.write(text + "\n")
+            sys.stdout.flush()
+        except Exception:
+            pass
+
 from gateway_guardrails import GatewayInfrastructure
 from rag_invariants import RAGInvariantsValidator
 from structural_vetting import StructuralOutputVetter
@@ -257,7 +279,7 @@ class RAGMasterSafetyGauntlet:
                         msg = f"🛡️ [{layer_name}] Passed successfully ({duration_ms:.2f} ms)."
                         val_logger.info(msg)
                         logging.getLogger("streamlit_ui.StreamlitApp").info(msg)
-                        print(msg, flush=True)
+                        _safe_print(msg)
                     except Exception as e:
                         duration_ms = (time.time() - start_layer) * 1000.0
                         passed = False
@@ -270,12 +292,12 @@ class RAGMasterSafetyGauntlet:
                             msg = f"🛡️ [{layer_name}] Synthetic data intercepted successfully: {e}"
                             val_logger.info(msg)
                             logging.getLogger("streamlit_ui.StreamlitApp").info(msg)
-                            print(msg, flush=True)
+                            _safe_print(msg)
                         else:
                             msg = f"❌ [{layer_name}] Security gauntlet exception: {e}"
                             val_logger.error(msg)
                             logging.getLogger("streamlit_ui.StreamlitApp").error(msg)
-                            print(msg, flush=True)
+                            _safe_print(msg)
                         
                         CRITICAL_LAYERS = {
                             "Guardrail_Layer_01_Prompt_Injection_Filter",
