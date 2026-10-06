@@ -9663,6 +9663,7 @@ def run_pipeline(
                     # Tier 3: Qdrant Cloud Payload Filtered Fast-Path (~15ms)
                     if not fast_text and client:
                         try:
+                            id_clean_dot = id_raw.replace('_', '.')
                             must_conds = [
                                 models.FieldCondition(key="metadata.asset_type", match=models.MatchValue(value=asset_kind))
                             ]
