@@ -119,13 +119,19 @@ class RAGInvariantsValidator:
     def validate_asset_paths(self, asset_paths: list[str]) -> int:
         from app.multimodal_assets import build_asset_registry, normalize_entity_id
         from app.main import _resolve_existing_image_path
-        resolved_paths = []
         for path in asset_paths:
-            resolved = _resolve_existing_image_path(path)
-            if resolved and os.path.exists(resolved):
-                resolved_paths.append(resolved)
-            else:
-                resolved_paths.append(path)
+            path_str = str(path or "").strip()
+            if not path_str:
+                continue
+            if path_str.startswith("http://") or path_str.startswith("https://"):
+                continue
+            supa_url = get_supabase_asset_url(path_str)
+            if supa_url and (supa_url.startswith("http://") or supa_url.startswith("https://")):
+                continue
+            resolved = _resolve_existing_image_path(path_str)
+            if resolved and (str(resolved).startswith("http://") or str(resolved).startswith("https://") or os.path.exists(resolved)):
+                continue
+            resolved_paths.append(path_str)
         registry = None
         for path in resolved_paths:
             path_str = str(path or "").strip()

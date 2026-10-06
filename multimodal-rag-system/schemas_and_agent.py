@@ -945,17 +945,8 @@ class ChartTableData(BaseModel):
         if not v:
             # Step 1: Attempt to parse markdown table from text_reasoning
             parsed_rows = parse_markdown_table_to_dicts(self.text_reasoning)
-            if not parsed_rows:
-                # Step 2: Fallback to extract rows from key-values in text reasoning
-                parsed_rows = extract_rows_from_key_values(self.text_reasoning)
-            if not parsed_rows and LAST_VISION_RAW_CONTENT:
-                # Step 3: Fallback to extract rows from LAST_VISION_RAW_CONTENT OCR text
-                parsed_rows = parse_markdown_table_to_dicts(LAST_VISION_RAW_CONTENT)
-                if not parsed_rows:
-                    parsed_rows = extract_rows_from_key_values(LAST_VISION_RAW_CONTENT)
-                
             if parsed_rows:
-                val_logger.info(f"[VALIDATION SUCCESS] Automatically parsed {len(parsed_rows)} rows from vision ground truth.")
+                val_logger.info(f"[VALIDATION SUCCESS] Automatically parsed {len(parsed_rows)} rows from markdown table.")
                 self.extracted_table = parsed_rows
                 return self
                 

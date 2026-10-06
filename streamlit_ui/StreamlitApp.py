@@ -9424,8 +9424,8 @@ class SemanticCacheManager:
 def clear_semantic_cache() -> None:
     SemanticCacheManager.clear()
 
-
-# (Cache clear on startup removed to prevent wiping cache on every Streamlit render)
+# Purge any stale cache entries on module load to guarantee clean slate
+clear_semantic_cache()
 
 
 @observe()
@@ -9663,7 +9663,9 @@ def run_pipeline(
                     # Tier 3: Qdrant Cloud Payload Filtered Fast-Path (~15ms)
                     if not fast_text and client:
                         try:
-                            id_clean_dot = id_raw.replace('_', '.')
+                            must_conds = [
+                                models.FieldCondition(key="metadata.asset_type", match=models.MatchValue(value=asset_kind))
+                            ]
                             filter_conds = [
                                 models.FieldCondition(key="metadata.asset_id", match=models.MatchValue(value=id_raw)),
                                 models.FieldCondition(key="metadata.asset_id", match=models.MatchValue(value=id_clean)),
@@ -9675,7 +9677,7 @@ def run_pipeline(
                             ]
                             scroll_res, _ = client.scroll(
                                 collection_name=COLLECTION_NAME,
-                                scroll_filter=models.Filter(should=filter_conds),
+                                scroll_filter=models.Filter(must=must_conds, should=filter_conds),
                                 limit=5,
                                 with_payload=True
                             )
@@ -9956,14 +9958,6 @@ def run_pipeline(
 
     # 2. Run the Pydantic AI agent
     try:
-        global ACTIVE_USER_QUERY, VISION_ELEMENT_PROCESSED, VISION_TOOL_SUCCEEDED, VALIDATION_ATTEMPT_COUNT, LAST_VISION_RAW_CONTENT, LAST_RESOLVED_VISION_PATH
-        ACTIVE_USER_QUERY = user_query
-        VISION_ELEMENT_PROCESSED = bool(pre_fetched_vision_data)
-        VISION_TOOL_SUCCEEDED = bool(pre_fetched_vision_data)
-        LAST_VISION_RAW_CONTENT = pre_fetched_vision_data or ""
-        LAST_RESOLVED_VISION_PATH = resolved_img_path or ""
-        VALIDATION_ATTEMPT_COUNT = 0
-        
         from pydantic_ai.usage import UsageLimits
         from opentelemetry import trace
         
@@ -10052,12 +10046,17 @@ def run_pipeline(
                             fallback_text = f"Visual extraction summary based on pre-transcribed asset:\n\n{pre_fetched_vision_data}"
                         else:
                             fallback_text = f"The query could not be completed: {openrouter_exc}"
+                        
+                        fb_path = getattr(deps, "last_resolved_vision_path", None)
+                        if fb_path and not str(fb_path).startswith("http"):
+                            from app.multimodal_assets import get_supabase_asset_url
+                            fb_path = get_supabase_asset_url(fb_path) or fb_path
                         fallback_data = ChartTableData(
                             source_routing_trail="Pre-transcribed visual store pipeline",
                             text_reasoning=fallback_text,
                             extracted_table=[],
-                            visual_asset_path=LAST_RESOLVED_VISION_PATH or None,
-                            image_path=LAST_RESOLVED_VISION_PATH or None
+                            visual_asset_path=fb_path,
+                            image_path=fb_path
                         )
                         result = MockResult(fallback_data)
 
@@ -10065,19 +10064,21 @@ def run_pipeline(
                 # Post-Execution Interceptor for Visual Extraction
                 if result and hasattr(result, "output") and result.output:
                     # Programmatic fallback injection if visual_asset_path/image_path is empty
-                    if LAST_RESOLVED_VISION_PATH:
+                    deps_res_path = getattr(deps, "last_resolved_vision_path", None)
+                    if deps_res_path:
+                        if not str(deps_res_path).startswith("http"):
+                            from app.multimodal_assets import get_supabase_asset_url
+                            deps_res_path = get_supabase_asset_url(deps_res_path) or deps_res_path
                         if not getattr(result.output, "visual_asset_path", None):
-                            result.output.visual_asset_path = LAST_RESOLVED_VISION_PATH
+                            result.output.visual_asset_path = deps_res_path
                         if not getattr(result.output, "image_path", None):
-                            result.output.image_path = LAST_RESOLVED_VISION_PATH
+                            result.output.image_path = deps_res_path
                     
                     t_cat_check, t_id_check = parse_target_asset(user_query)
                     is_visual_query = (
-                        VISION_ELEMENT_PROCESSED or
-                        VISION_TOOL_SUCCEEDED or
                         bool(deps and getattr(deps, 'pre_fetched_vision_data', None)) or
                         bool(t_cat_check and t_id_check) or
-                        bool(LAST_RESOLVED_VISION_PATH)
+                        bool(deps and getattr(deps, 'last_resolved_vision_path', None))
                     )
                     if is_visual_query:
                         extracted = result.output.extracted_table
@@ -10112,7 +10113,7 @@ def run_pipeline(
                             found_json = False
                             import re
                             json_pattern = re.compile(r'"data"\s*:\s*(\[.*?\])', re.DOTALL)
-                            for text_src in (result.output.text_reasoning, deps.last_vision_raw_content, LAST_VISION_RAW_CONTENT):
+                            for text_src in (result.output.text_reasoning, getattr(deps, "last_vision_raw_content", None), getattr(deps, "pre_fetched_vision_data", None)):
                                 if not text_src:
                                     continue
                                 match = json_pattern.search(text_src)
@@ -10144,12 +10145,10 @@ def run_pipeline(
                                 raw_markdown = ""
                                 if result.output.text_reasoning and "|" in result.output.text_reasoning:
                                     raw_markdown = result.output.text_reasoning
-                                elif getattr(deps, "last_vision_raw_content", None) and "|" in deps.last_vision_raw_content:
-                                    raw_markdown = deps.last_vision_raw_content
                                 elif getattr(deps, "pre_fetched_vision_data", None) and "|" in deps.pre_fetched_vision_data:
                                     raw_markdown = deps.pre_fetched_vision_data
-                                elif LAST_VISION_RAW_CONTENT and "|" in LAST_VISION_RAW_CONTENT:
-                                    raw_markdown = LAST_VISION_RAW_CONTENT
+                                elif getattr(deps, "last_vision_raw_content", None) and "|" in deps.last_vision_raw_content:
+                                    raw_markdown = deps.last_vision_raw_content
                                 
                                 # Check disk transcription cache if raw_markdown is missing or empty
                                 if not raw_markdown:
@@ -10178,7 +10177,7 @@ def run_pipeline(
                                     result.output.extracted_table = [ChartTableRow(**r) for r in parsed_rows]
 
                     # ---------------------------------------------------------
-                    # Post-Agent Deterministic Image URL Population Interceptor (Unconditional)
+                    # Post-Agent Deterministic Image URL Population Interceptor (Unconditional for Visual Queries)
                     # ---------------------------------------------------------
                     current_image = getattr(result.output, "image_path", None) or getattr(result.output, "visual_asset_path", None)
                     if not current_image or not str(current_image).startswith("http"):
@@ -10196,12 +10195,13 @@ def run_pipeline(
                             if t_cat_check and t_id_check:
                                 from app.multimodal_assets import get_supabase_asset_url
                                 supabase_url = get_supabase_asset_url(f"{t_cat_check}_{t_id_check}")
-                        if not supabase_url and LAST_RESOLVED_VISION_PATH:
-                            if str(LAST_RESOLVED_VISION_PATH).startswith("http"):
-                                supabase_url = LAST_RESOLVED_VISION_PATH
+                        if not supabase_url and getattr(deps, "last_resolved_vision_path", None):
+                            cand_path = deps.last_resolved_vision_path
+                            if str(cand_path).startswith("http"):
+                                supabase_url = cand_path
                             else:
                                 from app.multimodal_assets import get_supabase_asset_url
-                                supabase_url = get_supabase_asset_url(LAST_RESOLVED_VISION_PATH)
+                                supabase_url = get_supabase_asset_url(cand_path)
                         if supabase_url:
                             result.output.image_path = supabase_url
                             result.output.visual_asset_path = supabase_url
@@ -10466,9 +10466,18 @@ def run_pipeline(
         if result and hasattr(result, "output") and result.output:
             agent_img = getattr(result.output, "visual_asset_path", None) or getattr(result.output, "image_path", None)
             if agent_img:
-                resolved_img = image_path or agent_img
+                resolved_img = agent_img
         elif isinstance(result, dict):
             resolved_img = result.get("image_path") or result.get("final_image_path")
+
+        if resolved_img and not str(resolved_img).startswith("http"):
+            from app.multimodal_assets import get_supabase_asset_url
+            norm_url = get_supabase_asset_url(resolved_img)
+            if norm_url:
+                resolved_img = norm_url
+                if hasattr(result, "output") and result.output:
+                    result.output.image_path = norm_url
+                    result.output.visual_asset_path = norm_url
 
         # Execute live Step-by-Step Modular RAGAS Evaluation (Disabled by default during testing via ENABLE_RAGAS_EVAL toggle)
         if os.getenv("ENABLE_RAGAS_EVAL", "false").strip().lower() in ("true", "1", "yes"):
