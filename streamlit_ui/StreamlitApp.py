@@ -3615,7 +3615,6 @@ def build_capped_pydantic_history(raw_messages: list, max_turns: int = 3, curren
 
     curr_cat, curr_id = None, None
     if current_query:
-        from app.multimodal_assets import parse_target_asset
         curr_cat, curr_id = parse_target_asset(current_query)
 
     valid_turns = [m for m in raw_messages if isinstance(m, dict) and m.get("content")]
@@ -10003,6 +10002,13 @@ def run_pipeline(
                     def new_messages(self):
                         return []
 
+                raw_messages = st.session_state.get("messages", [])
+                try:
+                    capped_history = build_capped_pydantic_history(raw_messages, max_turns=3, current_query=user_query)
+                except Exception as hist_exc:
+                    logger.warning("⚠️ Error building capped pydantic history: %s. Defaulting to empty history.", hist_exc)
+                    capped_history = []
+
                 try:
                     if allowed_tools.get("allow_pandas"):
                         target_agent = multimodal_agent
@@ -10012,8 +10018,6 @@ def run_pipeline(
                         target_agent = fast_fallback_agent
                     else:
                         target_agent = multimodal_agent
-                    raw_messages = st.session_state.get("messages", [])
-                    capped_history = build_capped_pydantic_history(raw_messages, max_turns=3, current_query=user_query)
                     future = _AGENT_EXECUTOR.submit(
                         target_agent.run_sync,
                         user_query,
