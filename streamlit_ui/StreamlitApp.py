@@ -6392,48 +6392,98 @@ def parse_target_asset(query: str) -> tuple[str | None, str | None]:
     return None, None
 
 
-KNOWN_DATASET_ASSET_IDS = {
-    "3.1", "4.1", "4.2", "5.1", "2.1", "1.1", "1.2", "2.2", "2.3", "2.4", "2.5", "3.2", "3.3", "3.4", "4.3", "5.2", "6.2", "6.3", "7.1", "8.1"
-}
-
-
 def is_target_asset_existing(target_cat: str, target_id: str) -> bool:
-    """Check if a requested target figure/table exists anywhere in disk transcriptions or asset registry."""
+    """
+    4-Step Dynamic Source-of-Truth Visual Asset Validation Engine:
+    Step 1: Check Local Fast-Path Cache (RAM + Ephemeral Disk) (<5ms)
+    Step 2: Check Dynamic Cloud Source of Truth (Qdrant Cloud vectorless payload search + Supabase Asset Registry) (20-40ms)
+    Step 3: Write-through payload caching for cold-start persistence (Lookout 1, 2, 4)
+    Step 4: Return False ONLY IF 0 matching records were found in BOTH Qdrant Cloud and Asset Registry.
+    """
     if not target_cat or not target_id:
         return True
     
-    cat_norm = "table" if "tab" in target_cat.lower() else "figure"
-    id_clean = target_id.strip().lower()
-
-    # Check 0: Known dataset asset index fallback (for CI/lightweight environments without local LFS image files)
-    if id_clean in KNOWN_DATASET_ASSET_IDS:
-        return True
+    cat_norm = "table" if "tab" in str(target_cat).lower() else "figure"
+    id_raw = str(target_id).strip().lower()
     
-    # Check 1: Disk transcriptions
-    for var in [id_clean, id_clean.replace('.', '_'), id_clean.replace('_', '.')]:
+    # Lookout 2: ID Normalization & Canonical Key Variants
+    id_clean_dot = id_raw.replace('_', '.')
+    id_clean_underscore = id_raw.replace('.', '_')
+    
+    candidate_keys = [
+        f"{cat_norm}_{id_raw}",
+        f"{cat_norm}_{id_clean_dot}",
+        f"{cat_norm}_{id_clean_underscore}",
+        id_raw,
+        id_clean_dot,
+        id_clean_underscore
+    ]
+
+    # --- STEP 1: Local Fast-Path Cache Check (RAM + Ephemeral Disk) (<5ms) ---
+    transcription_ram_cache = getattr(schemas_mod, "_IN_MEMORY_TRANSCRIPTION_CACHE", {})
+    for k in candidate_keys:
+        if k in _GLOBAL_VISION_OCR_CACHE or k in transcription_ram_cache:
+            return True
+
+    for var in [id_raw, id_clean_dot, id_clean_underscore]:
         f1 = PROJECT_ROOT / "data_cache" / "transcriptions" / f"{cat_norm}_{var}.json"
         if f1.exists():
             return True
 
-    # Check 2: Asset Registry
+    # --- STEP 2: Dynamic Cloud Source-of-Truth Check (Qdrant Cloud + Supabase Asset Registry) (20-40ms) ---
+    # A) Check Qdrant Cloud Collection using Vectorless Payload Search (Lookout 4)
+    try:
+        q_client = get_qdrant_client()
+        if q_client:
+            from qdrant_client import models
+            should_conditions = []
+            for var in candidate_keys:
+                should_conditions.append(models.FieldCondition(key="chunk_id", match=models.MatchValue(value=var)))
+                should_conditions.append(models.FieldCondition(key="source_file", match=models.MatchValue(value=var)))
+                should_conditions.append(models.FieldCondition(key="metadata.entity_id", match=models.MatchValue(value=var)))
+                should_conditions.append(models.FieldCondition(key="metadata.source_file", match=models.MatchValue(value=var)))
+
+            # Lookout 4: with_vectors=False for sub-40ms payload lookup, limit=1
+            hits, _ = q_client.scroll(
+                collection_name="conversational_rag",
+                scroll_filter=models.Filter(should=should_conditions),
+                limit=1,
+                with_payload=True,
+                with_vectors=False
+            )
+            if hits:
+                # Lookout 1: Write-Through Read from Qdrant Payload Cache on Container Cold-Start
+                hit_payload = hits[0].payload or {}
+                cached_ocr = hit_payload.get("visual_ocr_text") or hit_payload.get("pre_transcribed_markdown")
+                if cached_ocr and isinstance(cached_ocr, str) and len(cached_ocr.strip()) > 10:
+                    _GLOBAL_VISION_OCR_CACHE[f"{cat_norm}_{id_clean_dot}"] = cached_ocr
+                    _GLOBAL_VISION_OCR_CACHE[f"{cat_norm}_{id_clean_underscore}"] = cached_ocr
+                return True
+    except Exception as q_err:
+        logger.debug("Qdrant dynamic asset check notice: %s", q_err)
+
+    # B) Check Supabase / Local Asset Registry
     try:
         from app.multimodal_assets import build_asset_registry
         registry = build_asset_registry()
         target_vars = {
-            f"{cat_norm}_{id_clean}",
-            f"{cat_norm}_{id_clean.replace('.', '_')}",
-            f"{cat_norm}_{id_clean.replace('_', '.')}",
-            f"{target_cat}_{id_clean}".lower(),
-            f"{target_cat}_{id_clean.replace('.', '_')}".lower(),
+            f"{cat_norm}_{id_raw}",
+            f"{cat_norm}_{id_clean_dot}",
+            f"{cat_norm}_{id_clean_underscore}",
+            f"{target_cat}_{id_raw}".lower(),
+            f"{target_cat}_{id_clean_dot}".lower(),
+            f"{target_cat}_{id_clean_underscore}".lower(),
         }
         for r in registry:
             rec_ent = str(r.entity_id).lower()
             rec_src = str(r.source_file).lower()
             if any(v == rec_ent or v == rec_src or f"{v}.png" in rec_src for v in target_vars):
                 return True
-    except Exception:
-        pass
+    except Exception as reg_err:
+        logger.debug("Asset Registry check notice: %s", reg_err)
 
+    # --- STEP 4: Definitive Non-Existence Exit ---
+    # Return False ONLY IF 0 matching records were found in BOTH Qdrant Cloud and Asset Registry
     return False
 
 
@@ -9868,7 +9918,7 @@ def run_pipeline(
                     text_out = res.text if hasattr(res, "text") else str(res)
                     if text_out and len(text_out.strip()) > 10:
                         _GLOBAL_VISION_OCR_CACHE[cache_key] = text_out
-                        # Auto-save to disk & RAM cache
+                        # Auto-save to disk, RAM cache, and Qdrant Cloud point payload (Lookout 1)
                         try:
                             asset_kind = "figure" if "fig" in str(target_cat).lower() or "chart" in str(target_cat).lower() else "table"
                             c_file = os.path.join(os.getcwd(), "data_cache", "transcriptions", f"{asset_kind}_{target_id}.json")
@@ -9877,6 +9927,32 @@ def run_pipeline(
                                 json.dump({"asset_type": asset_kind, "asset_id": str(target_id), "image_path": resolved_img_path, "markdown_table": text_out}, f_c, indent=2, ensure_ascii=False)
                             schemas_mod = importlib.import_module("multimodal-rag-system.schemas_and_agent")
                             schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{target_id}".lower()] = text_out
+                            
+                            # Lookout 1: Write-through to Qdrant Cloud Point Payload
+                            try:
+                                q_c = get_qdrant_client()
+                                if q_c:
+                                    from qdrant_client import models
+                                    cand_vars = [f"{asset_kind}_{target_id}", f"{asset_kind}_{str(target_id).replace('.', '_')}", str(target_id)]
+                                    should_conds = [
+                                        models.FieldCondition(key="chunk_id", match=models.MatchValue(value=v)) for v in cand_vars
+                                    ] + [
+                                        models.FieldCondition(key="metadata.entity_id", match=models.MatchValue(value=v)) for v in cand_vars
+                                    ]
+                                    hits, _ = q_c.scroll(
+                                        collection_name="conversational_rag",
+                                        scroll_filter=models.Filter(should=should_conds),
+                                        limit=1,
+                                        with_vectors=False
+                                    )
+                                    if hits:
+                                        q_c.set_payload(
+                                            collection_name="conversational_rag",
+                                            payload={"visual_ocr_text": text_out, "has_pre_transcription": True},
+                                            points=[hits[0].id]
+                                        )
+                            except Exception:
+                                pass
                         except Exception:
                             pass
                         return text_out
@@ -9906,7 +9982,7 @@ def run_pipeline(
                     if resp.choices and resp.choices[0].message and resp.choices[0].message.content:
                         text_out = resp.choices[0].message.content
                         _GLOBAL_VISION_OCR_CACHE[cache_key] = text_out
-                        # Auto-save to disk & RAM cache
+                        # Auto-save to disk, RAM cache, and Qdrant Cloud point payload (Lookout 1)
                         try:
                             asset_kind = "figure" if "fig" in str(target_cat).lower() or "chart" in str(target_cat).lower() else "table"
                             c_file = os.path.join(os.getcwd(), "data_cache", "transcriptions", f"{asset_kind}_{target_id}.json")
@@ -9915,6 +9991,32 @@ def run_pipeline(
                                 json.dump({"asset_type": asset_kind, "asset_id": str(target_id), "image_path": resolved_img_path, "markdown_table": text_out}, f_c, indent=2, ensure_ascii=False)
                             schemas_mod = importlib.import_module("multimodal-rag-system.schemas_and_agent")
                             schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{target_id}".lower()] = text_out
+                            
+                            # Lookout 1: Write-through to Qdrant Cloud Point Payload
+                            try:
+                                q_c = get_qdrant_client()
+                                if q_c:
+                                    from qdrant_client import models
+                                    cand_vars = [f"{asset_kind}_{target_id}", f"{asset_kind}_{str(target_id).replace('.', '_')}", str(target_id)]
+                                    should_conds = [
+                                        models.FieldCondition(key="chunk_id", match=models.MatchValue(value=v)) for v in cand_vars
+                                    ] + [
+                                        models.FieldCondition(key="metadata.entity_id", match=models.MatchValue(value=v)) for v in cand_vars
+                                    ]
+                                    hits, _ = q_c.scroll(
+                                        collection_name="conversational_rag",
+                                        scroll_filter=models.Filter(should=should_conds),
+                                        limit=1,
+                                        with_vectors=False
+                                    )
+                                    if hits:
+                                        q_c.set_payload(
+                                            collection_name="conversational_rag",
+                                            payload={"visual_ocr_text": text_out, "has_pre_transcription": True},
+                                            points=[hits[0].id]
+                                        )
+                            except Exception:
+                                pass
                         except Exception:
                             pass
                         return text_out
