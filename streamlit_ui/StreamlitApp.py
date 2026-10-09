@@ -9716,6 +9716,10 @@ def run_pipeline(
                 except Exception as res_err:
                     logger.debug("Asset resolution note: %s", res_err)
             
+            if resolved_img_path and not str(resolved_img_path).startswith("http"):
+                from app.multimodal_assets import get_supabase_asset_url
+                resolved_img_path = get_supabase_asset_url(resolved_img_path)
+            
             st.session_state["LAST_ACTIVE_TARGET_CAT"] = target_cat
             st.session_state["LAST_ACTIVE_TARGET_ID"] = target_id
             if resolved_img_path:
@@ -9984,15 +9988,19 @@ def run_pipeline(
                 api_key = os.getenv("OPENROUTER_API_KEY")
                 if api_key:
                     client_or = OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1", max_retries=1)
-                    with open(resolved_img_path, "rb") as f_img:
-                        b64_img = base64.b64encode(f_img.read()).decode("utf-8")
+                    if str(resolved_img_path).startswith("http"):
+                        img_payload = {"type": "image_url", "image_url": {"url": str(resolved_img_path)}}
+                    else:
+                        with open(resolved_img_path, "rb") as f_img:
+                            b64_img = base64.b64encode(f_img.read()).decode("utf-8")
+                        img_payload = {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_img}"}}
                     resp = client_or.chat.completions.create(
                         model="google/gemini-2.5-flash",
                         messages=[{
                             "role": "user",
                             "content": [
                                 {"type": "text", "text": prompt},
-                                {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_img}"}}
+                                img_payload
                             ]
                         }],
                         timeout=3.0
@@ -10098,6 +10106,40 @@ def run_pipeline(
         pre_fetched_vision_data=pre_fetched_vision_data,
         last_resolved_vision_path=resolved_img_path
     )
+
+    # Sub-20ms Direct Fast-Path Exit for Narrative Visual Queries (Bypasses LLM Pydantic Schema Retries)
+    is_explicit_table_req = any(k in user_query.lower() for k in ["extract table", "csv", "dataframe", "rows", "columns", "json data", "table format"])
+    if target_cat and target_id and pre_fetched_vision_data and not is_explicit_table_req:
+        logger.info("⚡ [Sub-20ms Fast-Path Exit] Narrative visual query for %s %s satisfied directly from pre-transcribed store!", target_cat, target_id)
+        
+        fb_path = resolved_img_path
+        if fb_path and not str(fb_path).startswith("http"):
+            from app.multimodal_assets import get_supabase_asset_url
+            fb_path = get_supabase_asset_url(fb_path) or fb_path
+            
+        class FastPathMockResult:
+            def __init__(self, output: ChartTableData):
+                self.output = output
+                self.usage = type('Usage', (), {'input_tokens': 0, 'output_tokens': 0, 'total_tokens': 0})()
+            def new_messages(self):
+                return []
+
+        fast_vis_data = ChartTableData(
+            source_routing_trail="Pre-transcribed visual store fast-path exit",
+            text_reasoning=f"### Visual Extraction Summary for {target_cat} {target_id}\n\n{pre_fetched_vision_data}",
+            extracted_table=[],
+            visual_asset_path=fb_path,
+            image_path=fb_path
+        )
+        agent_result = FastPathMockResult(fast_vis_data)
+        fast_timings = {"total_pipeline_ms": round((time.time() - start_time) * 1000, 3), "fast_path_visual_exit": True}
+        
+        if text_stream_callback and callable(text_stream_callback):
+            text_stream_callback(fast_vis_data.text_reasoning)
+            
+        SemanticCacheManager.put(user_query, (fast_vis_data.text_reasoning, [], fast_timings, None, agent_result))
+        _dispatch_early_return_telemetry(fast_vis_data.text_reasoning, [], tag="fast-path-visual")
+        return fast_vis_data.text_reasoning, [], fast_timings, None, agent_result
 
     # 2. Run the Pydantic AI agent
     try:

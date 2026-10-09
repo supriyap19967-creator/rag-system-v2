@@ -751,6 +751,9 @@ def preview_csv(path: str, max_rows: int = 20) -> list[list[str]]:
 SUPABASE_URL = os.getenv("SUPABASE_URL", "https://furnlyvcinfdoctxtkiu.supabase.co").rstrip("/")
 SUPABASE_BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "rag").strip("/")
 
+import functools
+
+@functools.lru_cache(maxsize=1000)
 def get_supabase_asset_url(path_or_url: str) -> str:
     path_str = str(path_or_url or "").strip(" '\"`").replace("\\", "/")
     if not path_str:
@@ -772,9 +775,13 @@ def get_supabase_asset_url(path_or_url: str) -> str:
     ]
     path_lower = path_str.lower()
     for sub in known_subfolders:
-        if sub.lower() in path_lower:
-            idx = path_lower.find(sub.lower())
-            rel_path = path_str[idx:].lstrip("/")
+        sub_lower = sub.lower()
+        if path_lower.startswith(sub_lower):
+            clean_rel = path_str
+            return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_NAME}/{clean_rel}"
+        elif f"/{sub_lower}/" in path_lower:
+            idx = path_lower.find(f"/{sub_lower}/")
+            rel_path = path_str[idx + 1:].lstrip("/")
             return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_NAME}/{rel_path}"
 
     filename = Path(path_str).name
