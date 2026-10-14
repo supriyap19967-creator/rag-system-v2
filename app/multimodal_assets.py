@@ -834,6 +834,22 @@ def _get_supabase_conf() -> tuple[str, str]:
 
 import functools
 
+VALID_DATASET_ASSET_MANIFEST = {
+    "1", "1.1", "1.2", "2", "2.1", "2.2", "2.3", "2.4", "2.5", "3", "3.1", "3.2", "3.3", "3.4", "3.5", "3.6", "3.7", "3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14",
+    "4", "4.1", "4.2", "4.3", "4.4", "4.5", "4.6", "4.7", "4.8", "4.9", "4.10", "4.11", "5", "5.1", "5.2", "5.3", "5.4", "5.5", "5.6",
+    "6.1", "6.2", "6.3", "6.4", "6.5", "6.6", "6.7", "7.1", "7.2", "7.3", "7.4", "7.5", "7.6", "7.7", "7.8", "7.9", "7.10", "7.11",
+    "8.1", "8.2", "8.3", "8.4", "98.1", "b3.1.1", "b3.3.1", "s3.1", "s4.1", "s4.2", "b7.1.1", "b8.3.1",
+    "figure_1.1", "figure_1.2", "figure_2.1", "figure_2.2", "figure_2.3", "figure_2.4", "figure_2.5", "figure_3.1", "figure_3.2", "figure_3.3", "figure_3.4", "figure_3.5", "figure_3.6", "figure_3.7", "figure_3.8", "figure_3.9", "figure_3.10", "figure_3.11", "figure_3.12", "figure_3.13", "figure_3.14",
+    "figure_4.1", "figure_4.2", "figure_4.3", "figure_4.4", "figure_4.5", "figure_4.6", "figure_4.7", "figure_4.8", "figure_4.9", "figure_4.10", "figure_4.11", "figure_5.1", "figure_5.2", "figure_5.3", "figure_5.4", "figure_5.5", "figure_5.6",
+    "figure_6.1", "figure_6.2", "figure_6.3", "figure_6.4", "figure_6.5", "figure_6.6", "figure_6.7", "figure_7.1", "figure_7.2", "figure_7.3", "figure_7.4", "figure_7.5", "figure_7.6", "figure_7.7", "figure_7.8", "figure_7.9", "figure_7.10", "figure_7.11",
+    "figure_8.1", "figure_8.2", "figure_8.3", "figure_8.4", "table_1.1", "table_2.1", "table_2.2", "table_3.1", "table_4.1", "table_4.2", "table_8.1",
+    "figure_1_1", "figure_1_2", "figure_2_1", "figure_2_2", "figure_2_3", "figure_2_4", "figure_2_5", "figure_3_1", "figure_3_2", "figure_3_3", "figure_3_4", "figure_3_5", "figure_3_6", "figure_3_7", "figure_3_8", "figure_3_9", "figure_3_10", "figure_3_11", "figure_3_12", "figure_3_13", "figure_3_14",
+    "figure_4_1", "figure_4_2", "figure_4_3", "figure_4_4", "figure_4_5", "figure_4_6", "figure_4_7", "figure_4_8", "figure_4_9", "figure_4_10", "figure_4_11", "figure_5_1", "figure_5_2", "figure_5_3", "figure_5_4", "figure_5_5", "figure_5_6",
+    "figure_6_1", "figure_6_2", "figure_6_3", "figure_6_4", "figure_6_5", "figure_6_6", "figure_6_7", "figure_7_1", "figure_7_2", "figure_7_3", "figure_7_4", "figure_7_5", "figure_7_6", "figure_7_7", "figure_7_8", "figure_7_9", "figure_7_10", "figure_7_11",
+    "figure_8_1", "figure_8_2", "figure_8_3", "figure_8_4", "table_1_1", "table_2_1", "table_2_2", "table_3_1", "table_4_1", "table_4_2", "table_8_1"
+}
+
+
 @functools.lru_cache(maxsize=1000)
 def get_supabase_asset_url(path_or_url: str) -> str:
     path_str = str(path_or_url or "").strip(" '\"`").replace("\\", "/")
@@ -842,20 +858,14 @@ def get_supabase_asset_url(path_or_url: str) -> str:
     
     supa_url, supa_bucket = _get_supabase_conf()
 
-    # Rewrite dead placeholder domain (furnlyvcinfdoctxtkiu.supabase.co) or normalize URLs without valid extensions
+    # Rewrite dead placeholder domain (furnlyvcinfdoctxtkiu.supabase.co) or unwrap existing Supabase storage URLs for normalization
     if path_str.startswith("http://") or path_str.startswith("https://"):
         m_sub = re.search(r"/storage/v1/object/public/[^/]+/(.+)$", path_str, re.IGNORECASE)
         has_ext = Path(urllib.parse.unquote(path_str)).suffix.lower() in IMAGE_EXTENSIONS | TABLE_EXTENSIONS | PDF_EXTENSIONS
-        if "furnlyvcinfdoctxtkiu.supabase.co" in path_str.lower() or not has_ext:
-            if m_sub:
-                path_str = m_sub.group(1).lstrip("/")
-            else:
-                path_str = path_str.split("/")[-1]
-        elif supa_url and "furnlyvcinfdoctxtkiu.supabase.co" not in supa_url.lower() and urllib.parse.urlparse(supa_url).netloc.lower() not in path_str.lower() and ".supabase.co" in path_str.lower():
-            if m_sub:
-                path_str = m_sub.group(1).lstrip("/")
-            else:
-                path_str = path_str.split("/")[-1]
+        if m_sub:
+            path_str = m_sub.group(1).lstrip("/")
+        elif "furnlyvcinfdoctxtkiu.supabase.co" in path_str.lower() or not has_ext or ".supabase.co" in path_str.lower():
+            path_str = path_str.split("/")[-1]
         else:
             return path_str
 
@@ -885,12 +895,34 @@ def get_supabase_asset_url(path_or_url: str) -> str:
         "table_31": "assets/extracted_tables/page_154_Table_3.1.csv",
         "table_3_2": "assets/extracted_tables/page154_table2.csv",
         "table_32": "assets/extracted_tables/page154_table2.csv",
+        "table_4_1": "assets/extracted_tables/page_207_Table_4.1.csv",
+        "table_41": "assets/extracted_tables/page_207_Table_4.1.csv",
+        "table_4.1": "assets/extracted_tables/page_207_Table_4.1.csv",
+        "table_4_2": "assets/extracted_tables/page_208_Table_4.2.csv",
+        "table_42": "assets/extracted_tables/page_208_Table_4.2.csv",
+        "table_4.2": "assets/extracted_tables/page_208_Table_4.2.csv",
     }
     for k, v in sequential_mappings.items():
-        if k in norm_id.lower().replace(".", "_") or k in filename.lower():
+        if norm_id and (k == norm_id.lower().replace(".", "_") or k == norm_id.lower()):
+            return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{v}"
+        if k == filename.lower() or k in filename.lower():
             return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{v}"
 
-    # Standard normalized registry matching for all other visual and tabular assets (e.g. Figure 4.1, Figure 5.1, etc.)
+    # Universal Case-Insensitive Figure Normalization
+    if norm_id:
+        norm_lower = norm_id.lower()
+        if norm_lower.startswith(("figure_", "fig_")):
+            fig_num = re.sub(r"^(figure_|fig_)", "", norm_lower).replace("_", ".").strip()
+            return f"{supa_url}/storage/v1/object/public/{supa_bucket}/extracted_charts/figure_{fig_num}.png"
+        elif norm_lower.startswith(("table_", "tab_")):
+            tab_num = re.sub(r"^(table_|tab_)", "", norm_lower).replace("_", ".").strip()
+            # If standard known table, default to assets/extracted_tables/
+            for k, v in sequential_mappings.items():
+                if f"table_{tab_num}".replace(".", "_") in k:
+                    return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{v}"
+            return f"{supa_url}/storage/v1/object/public/{supa_bucket}/assets/extracted_tables/table_{tab_num}.csv"
+
+    # Standard normalized registry matching for all other visual and tabular assets
     try:
         registry = build_asset_registry()
         sorted_records = sorted(registry, key=lambda r: 0 if ("extracted_charts" in r.relative_path or "extracted_tables" in r.relative_path) else 1)
@@ -910,12 +942,16 @@ def get_supabase_asset_url(path_or_url: str) -> str:
         sub_lower = sub.lower()
         if path_lower.startswith(sub_lower):
             clean_rel = path_str
+            if clean_rel.lower().startswith("extracted_charts/figure_"):
+                clean_rel = re.sub(r"^extracted_charts/figure_", "extracted_charts/figure_", clean_rel, flags=re.IGNORECASE)
             if not Path(clean_rel).suffix:
                 clean_rel = f"{clean_rel}.png"
             return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{clean_rel}"
         elif f"/{sub_lower}/" in path_lower:
             idx = path_lower.find(f"/{sub_lower}/")
             rel_path = path_str[idx + 1:].lstrip("/")
+            if rel_path.lower().startswith("extracted_charts/figure_"):
+                rel_path = re.sub(r"^extracted_charts/figure_", "extracted_charts/figure_", rel_path, flags=re.IGNORECASE)
             if not Path(rel_path).suffix:
                 rel_path = f"{rel_path}.png"
             return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{rel_path}"
@@ -928,7 +964,11 @@ def get_supabase_asset_url(path_or_url: str) -> str:
         elif "image" in clean_lower:
             clean_rel = f"assets/extracted_images/{clean_rel}"
         else:
+            if clean_lower.startswith("figure_") or clean_lower.startswith("figure"):
+                clean_rel = re.sub(r"^figure[_\s]*", "figure_", clean_rel, flags=re.IGNORECASE)
             clean_rel = f"extracted_charts/{clean_rel}"
+    if clean_rel.lower().startswith("extracted_charts/figure_"):
+        clean_rel = re.sub(r"^extracted_charts/figure_", "extracted_charts/figure_", clean_rel, flags=re.IGNORECASE)
     if not Path(clean_rel).suffix:
         clean_rel = f"{clean_rel}.png"
 
@@ -938,7 +978,7 @@ def _resolve_existing_image_path(input_path: str) -> str | None:
     if not input_path:
         return None
     if str(input_path).startswith("http://") or str(input_path).startswith("https://"):
-        return str(input_path)
+        return get_supabase_asset_url(str(input_path))
 
     # 1. Direct local path check (if file exists locally and is not a LFS pointer)
     if os.path.exists(input_path) and os.path.isfile(input_path) and not input_path.endswith(".raw.png") and os.path.getsize(input_path) > 1000:

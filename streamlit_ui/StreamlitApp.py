@@ -4269,10 +4269,8 @@ def _resolve_existing_image_path(value: object) -> str:
         return ""
     raw_path = raw_path.strip(" '\"`").replace("\\", "/")
     if raw_path.startswith("http://") or raw_path.startswith("https://"):
-        if "furnlyvcinfdoctxtkiu.supabase.co" in raw_path:
-            from app.multimodal_assets import get_supabase_asset_url
-            return get_supabase_asset_url(raw_path) or raw_path
-        return raw_path
+        from app.multimodal_assets import get_supabase_asset_url
+        return get_supabase_asset_url(raw_path) or raw_path
     
     # Convert Windows prefix to Streamlit Cloud / Hugging Face mount points if running on Linux
     if not os.path.exists(raw_path) and "recovered-rag-project" in raw_path:
@@ -6466,9 +6464,8 @@ def is_target_asset_existing(target_cat: str, target_id: str) -> bool:
             should_conditions = []
             for var in candidate_keys:
                 should_conditions.append(models.FieldCondition(key="chunk_id", match=models.MatchValue(value=var)))
+                should_conditions.append(models.FieldCondition(key="entity_id", match=models.MatchValue(value=var)))
                 should_conditions.append(models.FieldCondition(key="source_file", match=models.MatchValue(value=var)))
-                should_conditions.append(models.FieldCondition(key="metadata.entity_id", match=models.MatchValue(value=var)))
-                should_conditions.append(models.FieldCondition(key="metadata.source_file", match=models.MatchValue(value=var)))
 
             # Lookout 4: with_vectors=False for sub-40ms payload lookup, limit=1
             hits, _ = q_client.scroll(
@@ -9771,13 +9768,17 @@ def run_pipeline(
                                 models.FieldCondition(key="metadata.asset_type", match=models.MatchValue(value=asset_kind))
                             ]
                             filter_conds = [
+                                models.FieldCondition(key="entity_id", match=models.MatchValue(value=id_raw)),
+                                models.FieldCondition(key="entity_id", match=models.MatchValue(value=id_clean)),
+                                models.FieldCondition(key="entity_id", match=models.MatchValue(value=f"{asset_kind}_{id_clean}")),
+                                models.FieldCondition(key="entity_id", match=models.MatchValue(value=f"{asset_kind}_{id_clean_dot}")),
+                                models.FieldCondition(key="chunk_id", match=models.MatchValue(value=id_raw)),
+                                models.FieldCondition(key="chunk_id", match=models.MatchValue(value=id_clean)),
+                                models.FieldCondition(key="chunk_id", match=models.MatchValue(value=f"{asset_kind}_{id_clean}")),
+                                models.FieldCondition(key="chunk_id", match=models.MatchValue(value=f"{asset_kind}_{id_clean_dot}")),
                                 models.FieldCondition(key="metadata.asset_id", match=models.MatchValue(value=id_raw)),
                                 models.FieldCondition(key="metadata.asset_id", match=models.MatchValue(value=id_clean)),
                                 models.FieldCondition(key="metadata.asset_id", match=models.MatchValue(value=id_clean_dot)),
-                                models.FieldCondition(key="entity_id", match=models.MatchValue(value=id_raw)),
-                                models.FieldCondition(key="entity_id", match=models.MatchValue(value=id_clean)),
-                                models.FieldCondition(key="chunk_id", match=models.MatchValue(value=id_raw)),
-                                models.FieldCondition(key="chunk_id", match=models.MatchValue(value=id_clean)),
                             ]
                             scroll_res, _ = client.scroll(
                                 collection_name=COLLECTION_NAME,

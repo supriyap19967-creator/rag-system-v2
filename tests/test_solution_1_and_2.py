@@ -70,10 +70,51 @@ class TestSolution1And2(unittest.TestCase):
         if b64 is not None:
             self.assertTrue(b64.startswith("data:image/png;base64,"))
 
+    def test_case_insensitive_figure_and_table_resolution(self):
+        # 1. Figure 7.1 in various cases
+        for q in ["Figure 7.1", "figure 7.1", "FIGURE 7.1", "Figure_7.1.png", "extracted_charts/Figure_7.1.png"]:
+            url = get_supabase_asset_url(q)
+            self.assertIn("extracted_charts/figure_7.1.png", url, f"Failed for {q}")
+
+        # 2. Figures 7.2, 4.3, 3.1 in various cases
+        for target in ["7.2", "4.3", "3.1"]:
+            url_cap = get_supabase_asset_url(f"Figure_{target}.png")
+            url_low = get_supabase_asset_url(f"figure {target}")
+            self.assertIn(f"extracted_charts/figure_{target}.png", url_cap)
+            self.assertIn(f"extracted_charts/figure_{target}.png", url_low)
+
+        # 3. Tables in various cases
+        url_t = get_supabase_asset_url("Table 4.1")
+        self.assertIn("assets/extracted_tables/page_207_Table_4.1.csv", url_t)
+
+        url_t3 = get_supabase_asset_url("table 3.1")
+        self.assertIn("assets/extracted_tables/page_154_Table_3.1.csv", url_t3)
+
+        # 4. Previously broken capitalized HTTP URLs
+        broken_url = "https://lurnlyvcinfdoctxtkiu.supabase.co/storage/v1/object/public/rag/extracted_charts/Figure_7.1.png"
+        fixed_url = get_supabase_asset_url(broken_url)
+        self.assertIn("extracted_charts/figure_7.1.png", fixed_url)
+
     def test_supabase_asset_base64_guards_csv(self):
         from app.multimodal_assets import get_supabase_asset_base64
         b64 = get_supabase_asset_base64("page_154_Table_3.1.csv")
         self.assertIsNone(b64)
+
+    def test_cloud_manifest_existing_asset_detection(self):
+        from streamlit_ui.StreamlitApp import is_target_asset_existing
+        # Positive checks (irrespective of case)
+        self.assertTrue(is_target_asset_existing("Figure", "7.1"))
+        self.assertTrue(is_target_asset_existing("figure", "7.1"))
+        self.assertTrue(is_target_asset_existing("FIGURE", "7.1"))
+        self.assertTrue(is_target_asset_existing("Figure", "7.2"))
+        self.assertTrue(is_target_asset_existing("Figure", "4.3"))
+        self.assertTrue(is_target_asset_existing("Figure", "3.1"))
+        self.assertTrue(is_target_asset_existing("Table", "3.1"))
+        self.assertTrue(is_target_asset_existing("table", "4.1"))
+
+        # Negative checks (non-existent assets)
+        self.assertFalse(is_target_asset_existing("Table", "6.1"))
+        self.assertFalse(is_target_asset_existing("Figure", "9.9"))
 
 
 if __name__ == "__main__":

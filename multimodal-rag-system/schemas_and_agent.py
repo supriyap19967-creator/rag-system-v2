@@ -1596,15 +1596,17 @@ def parse_target_asset(query: str) -> tuple[str | None, str | None]:
 
 
 def is_target_asset_existing(target_cat: str, target_id: str) -> bool:
-    """Check if a requested target figure/table exists anywhere in disk transcriptions or asset registry."""
+    """Check if a requested target figure/table exists anywhere in disk transcriptions, asset registry, or cloud dataset manifest."""
     if not target_cat or not target_id:
         return True
     
-    cat_norm = "table" if "tab" in target_cat.lower() else "figure"
-    id_clean = target_id.strip().lower()
+    cat_norm = "table" if "tab" in str(target_cat).lower() else "figure"
+    id_clean = str(target_id).strip().lower()
+    id_clean_dot = id_clean.replace('_', '.')
+    id_clean_underscore = id_clean.replace('.', '_')
     
     # Check 1: Disk transcriptions
-    for var in [id_clean, id_clean.replace('.', '_'), id_clean.replace('_', '.')]:
+    for var in [id_clean, id_clean_dot, id_clean_underscore]:
         f1 = PROJECT_ROOT / "data_cache" / "transcriptions" / f"{cat_norm}_{var}.json"
         if f1.exists():
             return True
@@ -1615,15 +1617,33 @@ def is_target_asset_existing(target_cat: str, target_id: str) -> bool:
         registry = build_asset_registry()
         target_vars = {
             f"{cat_norm}_{id_clean}",
-            f"{cat_norm}_{id_clean.replace('.', '_')}",
-            f"{cat_norm}_{id_clean.replace('_', '.')}",
+            f"{cat_norm}_{id_clean_dot}",
+            f"{cat_norm}_{id_clean_underscore}",
             f"{target_cat}_{id_clean}".lower(),
-            f"{target_cat}_{id_clean.replace('.', '_')}".lower(),
+            f"{target_cat}_{id_clean_dot}".lower(),
+            f"{target_cat}_{id_clean_underscore}".lower(),
         }
         for r in registry:
             rec_ent = str(r.entity_id).lower()
             rec_src = str(r.source_file).lower()
             if any(v == rec_ent or v == rec_src or f"{v}.png" in rec_src for v in target_vars):
+                return True
+    except Exception:
+        pass
+
+    # Check 3: Cloud Dataset Manifest Fallback (for Cloud & Container environments without local disks)
+    try:
+        from app.multimodal_assets import VALID_DATASET_ASSET_MANIFEST
+        candidate_keys = [
+            f"{cat_norm}_{id_clean}",
+            f"{cat_norm}_{id_clean_dot}",
+            f"{cat_norm}_{id_clean_underscore}",
+            id_clean,
+            id_clean_dot,
+            id_clean_underscore
+        ]
+        for k in candidate_keys:
+            if k in VALID_DATASET_ASSET_MANIFEST:
                 return True
     except Exception:
         pass
