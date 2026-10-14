@@ -4266,22 +4266,6 @@ def _resolve_existing_image_path(value: object) -> str:
             from app.multimodal_assets import build_asset_registry, normalize_entity_id
             norm_id = normalize_entity_id(filename)
             
-            sequential_mappings = {
-                "img_04_02": "page_208_Figure_4.2",
-                "figure_4_2": "page_208_Figure_4.2",
-                "figure_42": "page_208_Figure_4.2",
-                "table_2_1": "page111_table1",
-                "table_21": "page111_table1",
-                "table_3_1": "page154_table1",
-                "table_31": "page154_table1",
-                "table_3_2": "page154_table2",
-                "table_32": "page154_table2",
-            }
-            for k, v in sequential_mappings.items():
-                if k in norm_id:
-                    norm_id = v
-                    break
-
             # Helper to check matching by digits and category
             def match_by_digits_and_category(req_filename: str, candidate_filename: str) -> bool:
                 req_norm = req_filename.lower()
@@ -9921,6 +9905,7 @@ def run_pipeline(
                     logger.warning("Parallel tabular read notice: %s", csv_err)
                     return None
 
+            asset_type = asset_kind
             prompt = (
                 "### SYSTEM PROMPT: Complete Multi-Panel Visual Extraction & Analytical Summary Engine\n\n"
                 f"Extract information from this {asset_type} ({target_cat} {target_id}) enforcing these strict rules:\n\n"
@@ -9928,11 +9913,25 @@ def run_pipeline(
                 "2. SECTION 2: EXHAUSTIVE MULTI-PANEL DATA EXTRACTION TABLE (100% Dual-Panel Coverage for Panel A & B, real tick values, explicit Panel column)."
             )
 
+            # Ensure PIL Image.open receives a valid local file path
+            pil_image_path = None
+            if resolved_img_path and not str(resolved_img_path).startswith("http") and os.path.exists(resolved_img_path) and os.path.isfile(resolved_img_path):
+                pil_image_path = resolved_img_path
+            else:
+                from app.multimodal_assets import get_asset_record_fast, _resolve_existing_image_path
+                fast_rec_v = get_asset_record_fast(f"{target_cat}_{target_id}") or get_asset_record_fast(str(target_id))
+                if fast_rec_v and os.path.exists(fast_rec_v.absolute_path):
+                    pil_image_path = fast_rec_v.absolute_path
+                else:
+                    cand_local = _resolve_existing_image_path(f"{target_cat}_{target_id}.png") or _resolve_existing_image_path(f"{target_cat}_{target_id}")
+                    if cand_local and not str(cand_local).startswith("http") and os.path.exists(cand_local):
+                        pil_image_path = cand_local
+
             # Option A: Try Google GenAI Client if available
-            if vision_runner:
+            if vision_runner and pil_image_path:
                 try:
                     from PIL import Image
-                    img = Image.open(resolved_img_path)
+                    img = Image.open(pil_image_path)
                     res = vision_runner.models.generate_content(
                         model='gemini-2.5-flash',
                         contents=[img, prompt]
@@ -9988,12 +9987,14 @@ def run_pipeline(
                 api_key = os.getenv("OPENROUTER_API_KEY")
                 if api_key:
                     client_or = OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1", max_retries=1)
-                    if str(resolved_img_path).startswith("http"):
-                        img_payload = {"type": "image_url", "image_url": {"url": str(resolved_img_path)}}
-                    else:
-                        with open(resolved_img_path, "rb") as f_img:
+                    if pil_image_path and os.path.exists(pil_image_path):
+                        with open(pil_image_path, "rb") as f_img:
                             b64_img = base64.b64encode(f_img.read()).decode("utf-8")
                         img_payload = {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_img}"}}
+                    elif str(resolved_img_path).startswith("http"):
+                        img_payload = {"type": "image_url", "image_url": {"url": str(resolved_img_path)}}
+                    else:
+                        img_payload = None
                     resp = client_or.chat.completions.create(
                         model="google/gemini-2.5-flash",
                         messages=[{

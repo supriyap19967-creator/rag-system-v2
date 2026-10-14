@@ -748,8 +748,19 @@ def preview_csv(path: str, max_rows: int = 20) -> list[list[str]]:
     return rows[:max_rows]
 
 
-SUPABASE_URL = os.getenv("SUPABASE_URL", "https://furnlyvcinfdoctxtkiu.supabase.co").rstrip("/")
-SUPABASE_BUCKET_NAME = os.getenv("SUPABASE_BUCKET_NAME", "rag").strip("/")
+def _get_supabase_conf() -> tuple[str, str]:
+    url = os.getenv("SUPABASE_URL", "").strip().rstrip("/")
+    bucket = os.getenv("SUPABASE_BUCKET_NAME", "").strip("/")
+    if not url:
+        try:
+            import streamlit as st
+            if hasattr(st, "secrets"):
+                url = str(st.secrets.get("SUPABASE_URL", "")).strip().rstrip("/")
+                bucket = str(st.secrets.get("SUPABASE_BUCKET_NAME", "")).strip("/")
+        except Exception:
+            pass
+    return url, bucket or "rag"
+
 
 import functools
 
@@ -761,6 +772,10 @@ def get_supabase_asset_url(path_or_url: str) -> str:
     if path_str.startswith("http://") or path_str.startswith("https://"):
         return path_str
     
+    supa_url, supa_bucket = _get_supabase_conf()
+    if not supa_url:
+        return path_str
+
     marker = "recovered-rag-project/"
     if marker in path_str:
         path_str = path_str.split(marker, 1)[1]
@@ -778,38 +793,22 @@ def get_supabase_asset_url(path_or_url: str) -> str:
         sub_lower = sub.lower()
         if path_lower.startswith(sub_lower):
             clean_rel = path_str
-            return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_NAME}/{clean_rel}"
+            return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{clean_rel}"
         elif f"/{sub_lower}/" in path_lower:
             idx = path_lower.find(f"/{sub_lower}/")
             rel_path = path_str[idx + 1:].lstrip("/")
-            return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_NAME}/{rel_path}"
+            return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{rel_path}"
 
     filename = Path(path_str).name
     norm_id = normalize_entity_id(filename)
 
-    # Solution 2: Alias / Entity map to exact Supabase subfolder paths
-    sequential_mappings = {
-        "img_04_02": "extracted_charts/page_208_Figure_4.2.png",
-        "figure_4_2": "extracted_charts/page_208_Figure_4.2.png",
-        "figure_42": "extracted_charts/page_208_Figure_4.2.png",
-        "figure_4.2": "extracted_charts/page_208_Figure_4.2.png",
-        "table_2_1": "assets/extracted_tables/page111_table1.csv",
-        "table_21": "assets/extracted_tables/page111_table1.csv",
-        "table_3_1": "assets/extracted_tables/page_154_Table_3.1.csv",
-        "table_31": "assets/extracted_tables/page_154_Table_3.1.csv",
-        "table_3_2": "assets/extracted_tables/page154_table2.csv",
-        "table_32": "assets/extracted_tables/page154_table2.csv",
-    }
-    for k, v in sequential_mappings.items():
-        if k in norm_id.lower().replace(".", "_"):
-            return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_NAME}/{v}"
-
+    # Solution 2: Standard normalized registry matching for all visual and tabular assets
     try:
         registry = build_asset_registry()
         for record in registry:
             rec_rel = record.relative_path.replace("\\", "/").lstrip("/")
-            if norm_id and (norm_id in record.entity_id or record.entity_id in norm_id):
-                return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_NAME}/{rec_rel}"
+            if norm_id and (norm_id.lower() == record.entity_id.lower() or norm_id.lower() in record.entity_id.lower() or record.entity_id.lower() in norm_id.lower()):
+                return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{rec_rel}"
     except Exception:
         pass
 
@@ -823,7 +822,7 @@ def get_supabase_asset_url(path_or_url: str) -> str:
         else:
             clean_rel = f"extracted_charts/{clean_rel}"
 
-    return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET_NAME}/{clean_rel}"
+    return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{clean_rel}"
 
 def _resolve_existing_image_path(input_path: str) -> str | None:
     if not input_path:
@@ -856,23 +855,6 @@ def _resolve_existing_image_path(input_path: str) -> str | None:
                 candidate_path = p_dir / fn
                 if candidate_path.exists() and not fn.endswith(".raw.png"):
                     return str(candidate_path.resolve().as_posix())
-
-    # Custom sequential table mappings
-    sequential_mappings = {
-        "img_04_02": "page_208_Figure_4.2",
-        "figure_4_2": "page_208_Figure_4.2",
-        "figure_42": "page_208_Figure_4.2",
-        "table_2_1": "page111_table1",
-        "table_21": "page111_table1",
-        "table_3_1": "page154_table1",
-        "table_31": "page154_table1",
-        "table_3_2": "page154_table2",
-        "table_32": "page154_table2",
-    }
-    for k, v in sequential_mappings.items():
-        if k in norm_id.lower().replace(".", "_"):
-            norm_id = v
-            break
 
     # 3. Look inside allowed directories using candidate scoring
     best_match = None
