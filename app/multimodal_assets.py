@@ -296,17 +296,23 @@ def _as_list(value: object) -> list[str]:
 
 def _supabase_asset_url(value: str) -> str:
     """Build or accept a Supabase Storage URL for a visual asset."""
-
     raw = str(value or "").strip()
-    if not raw or not SUPABASE_URL:
+    if not raw:
+        return ""
+    supa_url, supa_bucket = _get_supabase_conf()
+    if not supa_url:
         return ""
     if raw.startswith(("http://", "https://")):
+        if "furnlyvcinfdoctxtkiu.supabase.co" in raw.lower() and supa_url != "https://furnlyvcinfdoctxtkiu.supabase.co":
+            m = re.search(r"/storage/v1/object/public/[^/]+/(.+)$", raw, re.IGNORECASE)
+            if m:
+                return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{m.group(1).lstrip('/')}"
         return raw
-    if not SUPABASE_BUCKET_NAME or raw.startswith(("/", "./", "../")):
+    if not supa_bucket or raw.startswith(("/", "./", "../")):
         return ""
     encoded_path = urllib.parse.quote(raw.lstrip("/"), safe="/%:@-._~")
-    encoded_bucket = urllib.parse.quote(SUPABASE_BUCKET_NAME, safe="")
-    return f"{SUPABASE_URL}/storage/v1/object/public/{encoded_bucket}/{encoded_path}"
+    encoded_bucket = urllib.parse.quote(supa_bucket, safe="")
+    return f"{supa_url}/storage/v1/object/public/{encoded_bucket}/{encoded_path}"
 
 
 def _materialize_supabase_asset(value: object) -> str:
@@ -315,7 +321,8 @@ def _materialize_supabase_asset(value: object) -> str:
     if not url:
         return ""
     parsed = urllib.parse.urlparse(url)
-    configured_host = urllib.parse.urlparse(SUPABASE_URL).netloc.lower()
+    supa_url, _ = _get_supabase_conf()
+    configured_host = urllib.parse.urlparse(supa_url).netloc.lower()
     if parsed.scheme not in {"http", "https"} or not configured_host or parsed.netloc.lower() != configured_host:
         return ""
     suffix = Path(urllib.parse.unquote(parsed.path)).suffix.lower()
@@ -771,10 +778,20 @@ def get_supabase_asset_url(path_or_url: str) -> str:
     path_str = str(path_or_url or "").strip(" '\"`").replace("\\", "/")
     if not path_str:
         return ""
-    if path_str.startswith("http://") or path_str.startswith("https://"):
-        return path_str
     
     supa_url, supa_bucket = _get_supabase_conf()
+
+    # Rewrite dead placeholder domain (furnlyvcinfdoctxtkiu.supabase.co) if present in full URLs
+    if path_str.startswith("http://") or path_str.startswith("https://"):
+        if "furnlyvcinfdoctxtkiu.supabase.co" in path_str.lower():
+            # Extract subpath after /storage/v1/object/public/<bucket>/ or /public/rag/
+            match = re.search(r"/storage/v1/object/public/[^/]+/(.+)$", path_str, re.IGNORECASE)
+            if match:
+                path_str = match.group(1).lstrip("/")
+            else:
+                path_str = path_str.split("furnlyvcinfdoctxtkiu.supabase.co")[-1].lstrip("/")
+        else:
+            return path_str
 
     marker = "recovered-rag-project/"
     if marker in path_str:

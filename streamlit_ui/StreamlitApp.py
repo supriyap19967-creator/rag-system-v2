@@ -1560,22 +1560,21 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
         "   - On the VERY FIRST user prompt of any newly initialized session (Turn 1), if an asset, figure, table, or document reference is queried, you MUST IMMEDIATELY trigger the visual extraction / pre-transcribed asset pipeline BEFORE generating a text response.\n"
         "   - Never return a standalone image or empty asset card without accompanying structured text extractions, regardless of whether the session is new or ongoing.\n"
         "2. UNIFORM RESPONSE SCHEMA (EVERY TURN):\n"
-        "   - Every response involving a visual asset—starting from Turn 1—MUST strictly return:\n"
-        "     a) Section 1: Executive Text Summary & Key Trend Narrative\n"
-        "     b) Section 2: Exhaustive Data Extraction Table (structured Markdown/JSON, no mock placeholders)\n"
-        "     c) Section 3: Reference Image & Source Trail\n"
+        "   - Your response is strictly typed by the 'ChartTableData' Pydantic model. You MUST populate its schema fields:\n"
+        "     a) 'text_reasoning': Section 1 - Executive Text Summary & Key Trend Narrative (prose, bullet points, and key takeaways in clean markdown; do NOT format raw markdown tables here).\n"
+        "     b) 'extracted_table': Section 2 - Exhaustive Data Extraction Table populated as a list of structured rows matching 'ChartTableRow' with keys: 'Series', 'Category', 'TargetValue'.\n"
+        "     c) 'visual_asset_path' and 'image_path': Section 3 - Exact image file path or Supabase URL.\n"
         "3. STATE HYDRATION FIX:\n"
         "   - Ensure the visual parsing context and asset parameters are fully hydrated into the LLM system prompt prior to generating the first completion payload.\n\n"
         "GUIDELINES FOR VISUAL ELEMENTS (COMPLETE MULTI-PANEL EXTRACTION & ANALYTICAL SUMMARY ENGINE):\n"
-        "1. SECTION 1: MANDATORY TEXT SUMMARY & TREND ANALYSIS (MUST appear FIRST inside 'text_reasoning'):\n"
+        "1. SECTION 1: MANDATORY TEXT SUMMARY & TREND ANALYSIS (MUST appear inside 'text_reasoning'):\n"
         "   (a) Executive Overview: State the exact Figure/Table ID, main title, and overall objective.\n"
         "   (b) Sub-Panel Trend Narrative: Detail Panel A Analysis (relationship, slope, trend direction, key takeaways) and Panel B Analysis (relationship, slope, trend direction, key takeaways).\n"
         "   (c) Cross-Panel Conclusion: Provide the final overarching analytical conclusion connecting both sub-charts.\n"
-        "2. SECTION 2: EXHAUSTIVE MULTI-PANEL DATA EXTRACTION TABLE:\n"
-        "   - 100% Dual-Panel Coverage: Extract ALL data points, trendlines, scatter points, and coordinates from BOTH Panel A and Panel B into a single structured table inside 'text_reasoning' AND populated into 'extracted_table' schema rows.\n"
-        "   - Explicit Panel Labeling: Use the first column (`Panel / Sub-Chart`) to clearly separate Panel A entries from Panel B entries.\n"
-        "   - Schema: `| Panel / Sub-Chart | Metric / Series Name | X-Axis Value | Y-Axis Value | Point Type | Context / Footnote |`.\n"
-        "3. CRITICAL EXTRACTION CONSTRAINTS: (1) NO SUMMARY TRUNCATION - Never omit Section 1 text narrative. (2) NO PANEL OMISSION - Extracting only Panel A and skipping Panel B is strictly forbidden; both sub-charts must be fully represented. (3) REAL VALUES ONLY - Read exact tick marks, numbers, and labels directly from the axes (e.g., $1,000, $3,000, $10,000). Never invent placeholder numbers like 10 or 20.\n"
+        "2. SECTION 2: EXHAUSTIVE MULTI-PANEL DATA EXTRACTION TABLE (Populated inside 'extracted_table'):\n"
+        "   - 100% Dual-Panel Coverage: Extract ALL data points, coordinates, and metrics from BOTH Panel A and Panel B directly into 'extracted_table' rows.\n"
+        "   - For each row, set: 'Series' (the metric name, panel label, or line/bar group), 'Category' (the X-axis domain, year, country, or group), and 'TargetValue' (exact numeric/metric value).\n"
+        "3. CRITICAL EXTRACTION CONSTRAINTS: (1) NO SUMMARY TRUNCATION - Never omit Section 1 text narrative in 'text_reasoning'. (2) NO PANEL OMISSION - Extracting only Panel A and skipping Panel B is strictly forbidden; both sub-charts must be fully represented. (3) REAL VALUES ONLY - Read exact tick marks, numbers, and labels directly from the axes (e.g., $1,000, $3,000, $10,000). Never invent placeholder numbers like 10 or 20.\n"
         "4. UNIVERSAL AXIS & VISUAL DATA DISAMBIGUATION MANDATE:\n"
         "   - STRICT X-AXIS VS Y-AXIS ROLE DEFINITIONS: The X-axis (Domain / Category / Independent Variable) ALWAYS represents domain categories, time periods, years (e.g., 2000 to 2014), entity names, countries, or age/income groups. The Y-axis (Range / Metric / Dependent Variable) ALWAYS represents measured numerical values, percentages, ratios, adoption scores, rates, or counts (e.g., 0.6, 1.2, 85%). For horizontal bar charts, categories printed vertically logically function as the X-axis (independent dimension) and numerical lengths horizontally logically function as the Y-axis (metric value).\n"
         "   - FORBIDDEN CROSS-AXIS RANGE BLENDING ('0.6 to 2014' BUG): NEVER blend, combine, or cross-span X-axis and Y-axis ranges into a single merged phrase (e.g., NEVER write 'from 0.6 to 2014' or 'range of 0.6 - 2014'). State X-axis domain ranges strictly in domain units (e.g., 'Years: 2000 to 2014') and Y-axis metric ranges strictly in metric units (e.g., 'Adoption Score: 0.6 to 1.2').\n"
@@ -4180,7 +4179,8 @@ def display_image_robustly(img_path: str):
         
         found_path = None
         if str(visual_asset_path).startswith("http://") or str(visual_asset_path).startswith("https://"):
-            found_path = visual_asset_path
+            from app.multimodal_assets import get_supabase_asset_url
+            found_path = get_supabase_asset_url(visual_asset_path) or visual_asset_path
         else:
             for path in possible_paths:
                 if str(path).startswith("http://") or str(path).startswith("https://"):
@@ -4242,6 +4242,9 @@ def _resolve_existing_image_path(value: object) -> str:
         return ""
     raw_path = raw_path.strip(" '\"`").replace("\\", "/")
     if raw_path.startswith("http://") or raw_path.startswith("https://"):
+        if "furnlyvcinfdoctxtkiu.supabase.co" in raw_path:
+            from app.multimodal_assets import get_supabase_asset_url
+            return get_supabase_asset_url(raw_path) or raw_path
         return raw_path
     
     # Convert Windows prefix to Streamlit Cloud / Hugging Face mount points if running on Linux
@@ -9284,13 +9287,8 @@ def render_enhanced_assistant_turn(
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
         render_kpi_cards(kpis)
 
-    # 4. Extracted Data Table (rendered conditionally for tabular queries or explicit extraction requests)
-    target_cat_q, _ = parse_target_asset(user_query)
-    is_table_query = (
-        (target_cat_q and "table" in target_cat_q.lower()) or 
-        any(kw in (user_query or "").lower() for kw in ["table", "csv", "dataframe", "tabular", "extract to table", "rows", "columns", "spreadsheet"])
-    )
-    if is_table_query and (table_text or (df is not None and not df.empty)):
+    # 4. Extracted Data Table (rendered whenever valid tabular data exists for figures, tables, or datasets)
+    if table_text or (df is not None and not df.empty):
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         if is_qualitative_diagram(df, table_text):
             render_qualitative_diagram_cards(df, table_text)
@@ -10173,14 +10171,7 @@ def run_pipeline(
                     capped_history = []
 
                 try:
-                    if allowed_tools.get("allow_pandas"):
-                        target_agent = multimodal_agent
-                    elif (target_cat and target_id) or query_intent == QueryIntent.VISUAL_SPECIFIC:
-                        target_agent = fast_fallback_agent if fast_fallback_agent is not None else multimodal_agent
-                    elif (top_chunks or pre_fetched_vision_data) and fast_fallback_agent is not None:
-                        target_agent = fast_fallback_agent
-                    else:
-                        target_agent = multimodal_agent
+                    target_agent = multimodal_agent if multimodal_agent is not None else fast_fallback_agent
                     future = _AGENT_EXECUTOR.submit(
                         target_agent.run_sync,
                         user_query,
@@ -10661,7 +10652,7 @@ def run_pipeline(
         elif isinstance(result, dict):
             resolved_img = result.get("image_path") or result.get("final_image_path")
 
-        if resolved_img and not str(resolved_img).startswith("http"):
+        if resolved_img:
             from app.multimodal_assets import get_supabase_asset_url
             norm_url = get_supabase_asset_url(resolved_img)
             if norm_url:
