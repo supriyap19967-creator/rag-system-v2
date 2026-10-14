@@ -2273,6 +2273,33 @@ def process_vision_element(
         if clean_path.exists():
             img_path = clean_path
 
+    # Fallback to Supabase Storage materialization if not found on local disk
+    if not img_path.exists() or str(visual_asset_path).startswith("http"):
+        from app.multimodal_assets import _materialize_supabase_asset, get_supabase_asset_url
+        cand_supa = get_supabase_asset_url(visual_asset_path) or get_supabase_asset_url(str(img_path))
+        if not cand_supa and target_cat and target_id:
+            cand_supa = get_supabase_asset_url(f"{target_cat}_{target_id}")
+        if cand_supa:
+            mat_file = _materialize_supabase_asset(cand_supa)
+            if mat_file and os.path.exists(mat_file):
+                logger.info(f"⚡ [Vision Tool] Materialized visual asset from Supabase: {mat_file}")
+                img_path = Path(mat_file)
+
+    # Handle tabular files directly with pandas if resolved to a table
+    if img_path.exists() and img_path.suffix.lower() in [".csv", ".xlsx"]:
+        try:
+            import pandas as pd
+            df = pd.read_csv(img_path) if img_path.suffix.lower() == ".csv" else pd.read_excel(img_path)
+            md_tbl = df.to_markdown(index=False)
+            VISION_TOOL_SUCCEEDED = True
+            return (
+                f"### SECTION 1: MANDATORY TEXT SUMMARY & TREND ANALYSIS\n"
+                f"Data extracted from table '{visual_asset_path}'. Contains {len(df)} rows and {len(df.columns)} columns.\n\n"
+                f"### SECTION 2: EXHAUSTIVE MULTI-PANEL DATA EXTRACTION TABLE\n\n{md_tbl}"
+            )
+        except Exception as e:
+            return f"Error reading table: {e}"
+
     if not img_path.exists():
         return f"Error: Target visual asset path '{visual_asset_path}' could not be resolved or does not exist on disk."
 
@@ -9911,19 +9938,29 @@ def run_pipeline(
                 "2. SECTION 2: EXHAUSTIVE MULTI-PANEL DATA EXTRACTION TABLE (100% Dual-Panel Coverage for Panel A & B, real tick values, explicit Panel column)."
             )
 
-            # Ensure PIL Image.open receives a valid local file path
+            # Ensure PIL Image.open receives a valid local file path (never a CSV)
             pil_image_path = None
             if resolved_img_path and not str(resolved_img_path).startswith("http") and os.path.exists(resolved_img_path) and os.path.isfile(resolved_img_path):
-                pil_image_path = resolved_img_path
+                if not str(resolved_img_path).lower().endswith((".csv", ".xlsx")):
+                    pil_image_path = resolved_img_path
             else:
                 from app.multimodal_assets import get_asset_record_fast, _resolve_existing_image_path
                 fast_rec_v = get_asset_record_fast(f"{target_cat}_{target_id}") or get_asset_record_fast(str(target_id))
-                if fast_rec_v and os.path.exists(fast_rec_v.absolute_path):
+                if fast_rec_v and os.path.exists(fast_rec_v.absolute_path) and not str(fast_rec_v.absolute_path).lower().endswith((".csv", ".xlsx")):
                     pil_image_path = fast_rec_v.absolute_path
                 else:
                     cand_local = _resolve_existing_image_path(f"{target_cat}_{target_id}.png") or _resolve_existing_image_path(f"{target_cat}_{target_id}")
-                    if cand_local and not str(cand_local).startswith("http") and os.path.exists(cand_local):
+                    if cand_local and not str(cand_local).startswith("http") and os.path.exists(cand_local) and not str(cand_local).lower().endswith((".csv", ".xlsx")):
                         pil_image_path = cand_local
+
+            # If not available on local disk, materialize from Supabase Storage
+            if not pil_image_path or not os.path.exists(pil_image_path):
+                from app.multimodal_assets import _materialize_supabase_asset, get_supabase_asset_url
+                cand_supa = get_supabase_asset_url(resolved_img_path) or get_supabase_asset_url(f"{target_cat}_{target_id}")
+                if cand_supa:
+                    mat_path = _materialize_supabase_asset(cand_supa)
+                    if mat_path and os.path.exists(mat_path) and not mat_path.lower().endswith((".csv", ".xlsx")):
+                        pil_image_path = mat_path
 
             # Option A: Try Google GenAI Client if available
             if vision_runner and pil_image_path:
@@ -9978,35 +10015,41 @@ def run_pipeline(
                 except Exception as v_err:
                     logger.warning("Parallel Vision OCR skipped/quota notice: %s", v_err)
 
-            # Option B Fallback: OpenRouter Vision API (uses OPENROUTER_API_KEY with max 1 retry & 3.0s timeout)
+            # Option B Fallback: OpenRouter Vision API (uses OPENROUTER_API_KEY with max 1 retry & 6.0s timeout)
             try:
-                import base64
                 from openai import OpenAI
+                from app.multimodal_assets import get_supabase_asset_base64
                 api_key = os.getenv("OPENROUTER_API_KEY")
                 if api_key:
                     client_or = OpenAI(api_key=api_key, base_url="https://openrouter.ai/api/v1", max_retries=1)
+                    img_data_url = None
                     if pil_image_path and os.path.exists(pil_image_path):
-                        with open(pil_image_path, "rb") as f_img:
-                            b64_img = base64.b64encode(f_img.read()).decode("utf-8")
-                        img_payload = {"type": "image_url", "image_url": {"url": f"data:image/png;base64,{b64_img}"}}
-                    elif str(resolved_img_path).startswith("http"):
-                        img_payload = {"type": "image_url", "image_url": {"url": str(resolved_img_path)}}
+                        img_data_url = get_supabase_asset_base64(pil_image_path)
+                    if not img_data_url and resolved_img_path:
+                        img_data_url = get_supabase_asset_base64(resolved_img_path)
+                    if not img_data_url:
+                        img_data_url = get_supabase_asset_base64(f"{target_cat}_{target_id}")
+
+                    if img_data_url:
+                        img_payload = {"type": "image_url", "image_url": {"url": img_data_url}}
                     else:
                         img_payload = None
-                    resp = client_or.chat.completions.create(
-                        model="google/gemini-2.5-flash",
-                        messages=[{
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": prompt},
-                                img_payload
-                            ]
-                        }],
-                        timeout=3.0
-                    )
-                    if resp.choices and resp.choices[0].message and resp.choices[0].message.content:
-                        text_out = resp.choices[0].message.content
-                        _GLOBAL_VISION_OCR_CACHE[cache_key] = text_out
+
+                    if img_payload:
+                        resp = client_or.chat.completions.create(
+                            model="google/gemini-2.5-flash",
+                            messages=[{
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": prompt},
+                                    img_payload
+                                ]
+                            }],
+                            timeout=6.0
+                        )
+                        if resp.choices and resp.choices[0].message and resp.choices[0].message.content:
+                            text_out = resp.choices[0].message.content
+                            _GLOBAL_VISION_OCR_CACHE[cache_key] = text_out
                         # Auto-save to disk, RAM cache, and Qdrant Cloud point payload (Lookout 1)
                         try:
                             asset_kind = "figure" if "fig" in str(target_cat).lower() or "chart" in str(target_cat).lower() else "table"
@@ -10370,7 +10413,8 @@ def run_pipeline(
                             if isinstance(meta, dict):
                                 cand = meta.get("image_path") or meta.get("figure_image_path") or meta.get("table_image_path") or meta.get("visual_asset_path")
                                 if cand and str(cand).startswith("http"):
-                                    supabase_url = str(cand)
+                                    from app.multimodal_assets import get_supabase_asset_url
+                                    supabase_url = get_supabase_asset_url(str(cand))
                                     break
                         if not supabase_url:
                             t_cat_check, t_id_check = parse_target_asset(user_query)

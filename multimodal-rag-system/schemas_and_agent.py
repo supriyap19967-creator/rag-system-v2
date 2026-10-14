@@ -1823,6 +1823,18 @@ def process_vision_element(
         if clean_path.exists():
             img_path = clean_path
 
+    # Fallback to Supabase Storage materialization if not found on local disk
+    if not img_path.exists() or str(visual_asset_path).startswith("http"):
+        from app.multimodal_assets import _materialize_supabase_asset, get_supabase_asset_url
+        cand_supa = get_supabase_asset_url(visual_asset_path) or get_supabase_asset_url(str(img_path))
+        if not cand_supa and target_cat and target_id:
+            cand_supa = get_supabase_asset_url(f"{target_cat}_{target_id}")
+        if cand_supa:
+            mat_file = _materialize_supabase_asset(cand_supa)
+            if mat_file and os.path.exists(mat_file):
+                logger.info(f"⚡ [Vision Tool] Materialized visual asset from Supabase: {mat_file}")
+                img_path = Path(mat_file)
+
     if not img_path.exists():
         fallback_path = getattr(ctx.deps, "last_resolved_vision_path", None)
         if not fallback_path or not os.path.exists(fallback_path):
@@ -1835,6 +1847,21 @@ def process_vision_element(
             logger.info(f"🔄 [Vision Tool Fallback] Resolved fallback image path from active session context: {fallback_path}")
             img_path = Path(fallback_path)
             visual_asset_path = str(fallback_path)
+
+    # Handle tabular files directly with pandas if resolved to a table
+    if img_path.exists() and img_path.suffix.lower() in [".csv", ".xlsx"]:
+        try:
+            import pandas as pd
+            df = pd.read_csv(img_path) if img_path.suffix.lower() == ".csv" else pd.read_excel(img_path)
+            md_tbl = df.to_markdown(index=False)
+            VISION_TOOL_SUCCEEDED = True
+            return (
+                f"### SECTION 1: MANDATORY TEXT SUMMARY & TREND ANALYSIS\n"
+                f"Data extracted from table '{visual_asset_path}'. Contains {len(df)} rows and {len(df.columns)} columns.\n\n"
+                f"### SECTION 2: EXHAUSTIVE MULTI-PANEL DATA EXTRACTION TABLE\n\n{md_tbl}"
+            )
+        except Exception as e:
+            return f"Error reading table: {e}"
 
     if not img_path.exists():
         return f"Error: Target visual asset path '{visual_asset_path}' could not be resolved or does not exist on disk."

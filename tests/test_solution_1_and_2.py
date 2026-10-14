@@ -35,5 +35,26 @@ class TestSolution1And2(unittest.TestCase):
         url = get_supabase_asset_url("/mount/src/rag-system-v2/assets/extracted_tables/page_154_Table_3.1.csv")
         self.assertIn("assets/extracted_tables/page_154_Table_3.1.csv", url)
 
+    def test_supabase_url_resolution_figure_4_1_no_extension(self):
+        url = get_supabase_asset_url("Figure_4.1")
+        self.assertIn("extracted_charts/figure_4.1.png", url)
+
+    def test_supabase_url_resolution_figure_4_1_dead_url_no_ext(self):
+        url = get_supabase_asset_url("https://furnlyvcinfdoctxtkiu.supabase.co/storage/v1/object/public/rag/extracted_charts/Figure_4.1")
+        self.assertIn("extracted_charts/figure_4.1.png", url)
+
+    def test_supabase_asset_base64_generation(self):
+        from app.multimodal_assets import get_supabase_asset_base64
+        b64 = get_supabase_asset_base64("Figure_4.1")
+        self.assertIsNotNone(b64)
+        self.assertTrue(b64.startswith("data:image/png;base64,"))
+        self.assertGreater(len(b64), 1000)
+
+    def test_supabase_asset_base64_guards_csv(self):
+        from app.multimodal_assets import get_supabase_asset_base64
+        b64 = get_supabase_asset_base64("page_154_Table_3.1.csv")
+        self.assertIsNone(b64)
+
+
 if __name__ == "__main__":
     unittest.main()

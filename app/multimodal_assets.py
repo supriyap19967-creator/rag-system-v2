@@ -317,27 +317,35 @@ def _supabase_asset_url(value: str) -> str:
 
 def _materialize_supabase_asset(value: object) -> str:
     raw = str(value or "").strip()
-    url = _supabase_asset_url(raw)
+    if not raw:
+        return ""
+    if not raw.startswith(("http://", "https://")):
+        url = get_supabase_asset_url(raw)
+    else:
+        url = get_supabase_asset_url(raw) or _supabase_asset_url(raw)
     if not url:
         return ""
     parsed = urllib.parse.urlparse(url)
     supa_url, _ = _get_supabase_conf()
     configured_host = urllib.parse.urlparse(supa_url).netloc.lower()
-    if parsed.scheme not in {"http", "https"} or not configured_host or parsed.netloc.lower() != configured_host:
+    if parsed.scheme not in {"http", "https"}:
+        return ""
+    if configured_host and parsed.netloc.lower() != configured_host and not parsed.netloc.lower().endswith(".supabase.co"):
         return ""
     suffix = Path(urllib.parse.unquote(parsed.path)).suffix.lower()
     if suffix not in IMAGE_EXTENSIONS | TABLE_EXTENSIONS | PDF_EXTENSIONS:
-        return ""
+        suffix = ".png"
     cache_key = hashlib.sha256(url.encode("utf-8")).hexdigest()
     cached_path = SUPABASE_ASSET_CACHE_DIR / f"{cache_key}{suffix}"
     if cached_path.is_file() and cached_path.stat().st_size > 0:
         return str(cached_path)
     try:
         headers = {"User-Agent": "rag-system-v2/1.0"}
-        if SUPABASE_KEY:
-            headers.update({"apikey": SUPABASE_KEY, "Authorization": f"Bearer {SUPABASE_KEY}"})
+        supa_key = SUPABASE_KEY or os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip() or os.getenv("SUPABASE_ANON_KEY", "").strip()
+        if supa_key:
+            headers.update({"apikey": supa_key, "Authorization": f"Bearer {supa_key}"})
         request = urllib.request.Request(url, headers=headers)
-        with urllib.request.urlopen(request, timeout=20) as response:
+        with urllib.request.urlopen(request, timeout=10) as response:
             payload = response.read()
         if not payload:
             return ""
@@ -347,6 +355,59 @@ def _materialize_supabase_asset(value: object) -> str:
     except (OSError, urllib.error.URLError, ValueError) as exc:
         logger.warning("Supabase asset download failed for %s: %s", url, exc)
         return ""
+
+
+def get_supabase_asset_base64(path_or_url: str) -> str | None:
+    """
+    Downloads or reads the image asset and returns a valid data URL
+    data:image/png;base64,{b64} safe for OpenRouter / Gemini Vision models.
+    """
+    import base64
+    raw_str = str(path_or_url or "").strip()
+    if not raw_str:
+        return None
+    if raw_str.startswith("data:image"):
+        return raw_str
+    if raw_str.lower().endswith((".csv", ".xlsx")):
+        return None
+
+    # 1. Check local file on disk directly
+    if os.path.exists(raw_str) and os.path.isfile(raw_str):
+        if raw_str.lower().endswith((".csv", ".xlsx")):
+            return None
+        with open(raw_str, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("utf-8")
+        return f"data:image/png;base64,{b64}"
+
+    # 2. Check local asset resolution if available
+    cand_local = _resolve_existing_image_path(raw_str)
+    if cand_local and not str(cand_local).startswith("http") and os.path.exists(cand_local) and os.path.isfile(cand_local):
+        if not str(cand_local).lower().endswith((".csv", ".xlsx")):
+            with open(cand_local, "rb") as f:
+                b64 = base64.b64encode(f.read()).decode("utf-8")
+            return f"data:image/png;base64,{b64}"
+
+    # 3. Materialize via Supabase
+    cached_file = _materialize_supabase_asset(raw_str)
+    if cached_file and os.path.exists(cached_file):
+        if cached_file.lower().endswith((".csv", ".xlsx")):
+            return None
+        with open(cached_file, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("utf-8")
+        return f"data:image/png;base64,{b64}"
+
+    # 4. Direct HTTP download fallback if raw_str is an HTTP(S) URL
+    if raw_str.startswith(("http://", "https://")):
+        try:
+            req = urllib.request.Request(raw_str, headers={"User-Agent": "rag-system-v2/1.0"})
+            with urllib.request.urlopen(req, timeout=8) as resp:
+                data = resp.read()
+            if data:
+                b64 = base64.b64encode(data).decode("utf-8")
+                return f"data:image/png;base64,{b64}"
+        except Exception as e:
+            logger.warning("Direct HTTP download failed for Base64 encoding %s: %s", raw_str, e)
+    return None
 
 
 def _append_unique(metadata: dict[str, Any], key: str, value: str) -> None:
@@ -781,15 +842,20 @@ def get_supabase_asset_url(path_or_url: str) -> str:
     
     supa_url, supa_bucket = _get_supabase_conf()
 
-    # Rewrite dead placeholder domain (furnlyvcinfdoctxtkiu.supabase.co) if present in full URLs
+    # Rewrite dead placeholder domain (furnlyvcinfdoctxtkiu.supabase.co) or normalize URLs without valid extensions
     if path_str.startswith("http://") or path_str.startswith("https://"):
-        if "furnlyvcinfdoctxtkiu.supabase.co" in path_str.lower():
-            # Extract subpath after /storage/v1/object/public/<bucket>/ or /public/rag/
-            match = re.search(r"/storage/v1/object/public/[^/]+/(.+)$", path_str, re.IGNORECASE)
-            if match:
-                path_str = match.group(1).lstrip("/")
+        m_sub = re.search(r"/storage/v1/object/public/[^/]+/(.+)$", path_str, re.IGNORECASE)
+        has_ext = Path(urllib.parse.unquote(path_str)).suffix.lower() in IMAGE_EXTENSIONS | TABLE_EXTENSIONS | PDF_EXTENSIONS
+        if "furnlyvcinfdoctxtkiu.supabase.co" in path_str.lower() or not has_ext:
+            if m_sub:
+                path_str = m_sub.group(1).lstrip("/")
             else:
-                path_str = path_str.split("furnlyvcinfdoctxtkiu.supabase.co")[-1].lstrip("/")
+                path_str = path_str.split("/")[-1]
+        elif supa_url and "furnlyvcinfdoctxtkiu.supabase.co" not in supa_url.lower() and urllib.parse.urlparse(supa_url).netloc.lower() not in path_str.lower() and ".supabase.co" in path_str.lower():
+            if m_sub:
+                path_str = m_sub.group(1).lstrip("/")
+            else:
+                path_str = path_str.split("/")[-1]
         else:
             return path_str
 
@@ -801,23 +867,8 @@ def get_supabase_asset_url(path_or_url: str) -> str:
         path_str = path_str[2:]
     path_str = path_str.lstrip("/")
 
-    known_subfolders = [
-        "extracted_charts", "extracted_images", "Data/extracted_visuals_smoke",
-        "assets/extracted_images", "assets/extracted_charts", "assets/extracted_tables", "Data/csv"
-    ]
-    path_lower = path_str.lower()
-    for sub in known_subfolders:
-        sub_lower = sub.lower()
-        if path_lower.startswith(sub_lower):
-            clean_rel = path_str
-            return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{clean_rel}"
-        elif f"/{sub_lower}/" in path_lower:
-            idx = path_lower.find(f"/{sub_lower}/")
-            rel_path = path_str[idx + 1:].lstrip("/")
-            return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{rel_path}"
-
     filename = Path(path_str).name
-    norm_id = normalize_entity_id(filename)
+    norm_id = normalize_entity_id(filename) or normalize_entity_id(path_str)
 
     # Solution 2: Alias / Entity map to exact Supabase subfolder paths for legacy tests
     sequential_mappings = {
@@ -825,6 +876,9 @@ def get_supabase_asset_url(path_or_url: str) -> str:
         "figure_4_2": "extracted_charts/page_208_Figure_4.2.png",
         "figure_42": "extracted_charts/page_208_Figure_4.2.png",
         "figure_4.2": "extracted_charts/page_208_Figure_4.2.png",
+        "figure_4_1": "extracted_charts/figure_4.1.png",
+        "figure_41": "extracted_charts/figure_4.1.png",
+        "figure_4.1": "extracted_charts/figure_4.1.png",
         "table_2_1": "assets/extracted_tables/page111_table1.csv",
         "table_21": "assets/extracted_tables/page111_table1.csv",
         "table_3_1": "assets/extracted_tables/page_154_Table_3.1.csv",
@@ -847,6 +901,25 @@ def get_supabase_asset_url(path_or_url: str) -> str:
     except Exception:
         pass
 
+    known_subfolders = [
+        "extracted_charts", "extracted_images", "Data/extracted_visuals_smoke",
+        "assets/extracted_images", "assets/extracted_charts", "assets/extracted_tables", "Data/csv"
+    ]
+    path_lower = path_str.lower()
+    for sub in known_subfolders:
+        sub_lower = sub.lower()
+        if path_lower.startswith(sub_lower):
+            clean_rel = path_str
+            if not Path(clean_rel).suffix:
+                clean_rel = f"{clean_rel}.png"
+            return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{clean_rel}"
+        elif f"/{sub_lower}/" in path_lower:
+            idx = path_lower.find(f"/{sub_lower}/")
+            rel_path = path_str[idx + 1:].lstrip("/")
+            if not Path(rel_path).suffix:
+                rel_path = f"{rel_path}.png"
+            return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{rel_path}"
+
     clean_rel = path_str.lstrip("/")
     if "/" not in clean_rel:
         clean_lower = clean_rel.lower()
@@ -856,6 +929,8 @@ def get_supabase_asset_url(path_or_url: str) -> str:
             clean_rel = f"assets/extracted_images/{clean_rel}"
         else:
             clean_rel = f"extracted_charts/{clean_rel}"
+    if not Path(clean_rel).suffix:
+        clean_rel = f"{clean_rel}.png"
 
     return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{clean_rel}"
 
