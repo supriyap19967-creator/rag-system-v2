@@ -32,5 +32,7 @@ jobs:
         GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || 'dummy_key_for_testing' }}
         GOOGLE_API_KEY: ${{ secrets.GEMINI_API_KEY || 'dummy_key_for_testing' }}
         OPENROUTER_API_KEY: 'dummy_key_for_testing'
+        SUPABASE_URL: 'https://lurnlyvcinfdoctxtkiu.supabase.co'
+        SUPABASE_BUCKET_NAME: 'rag'
       run: |
         PYTHONPATH=. pytest

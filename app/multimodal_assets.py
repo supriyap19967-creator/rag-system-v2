@@ -828,7 +828,7 @@ def _get_supabase_conf() -> tuple[str, str]:
         except Exception:
             pass
     if not url:
-        url = "https://furnlyvcinfdoctxtkiu.supabase.co"
+        url = "https://lurnlyvcinfdoctxtkiu.supabase.co"
     return url, bucket or "rag"
 
 
