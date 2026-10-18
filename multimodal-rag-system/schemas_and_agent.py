@@ -56,15 +56,17 @@ def load_disk_transcriptions_to_memory() -> Dict[str, str]:
     ]
     transcriptions_dir = next((d for d in possible_dirs if d.exists()), None)
     if transcriptions_dir and transcriptions_dir.exists():
+        from app.agents.vision_prompts import is_cache_fingerprint_valid
         for json_file in transcriptions_dir.glob("*.json"):
             try:
+                stem = json_file.stem.lower()
+                kind = "figure" if "fig" in stem or "chart" in stem else "table"
                 with open(json_file, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    if data and "markdown_table" in data:
-                        tb = data["markdown_table"]
+                    if data and is_cache_fingerprint_valid(data, kind):
+                        tb = data.get("markdown_table") or data.get("content") or ""
                         if tb and ("|" in tb or "SECTION" in tb) and not any(err in tb.lower() for err in ["i'm sorry", "cannot extract", "no data", "too blurry"]):
                             clean_text = sanitize_axis_cross_blending_text(tb)
-                            stem = json_file.stem.lower()
                             _IN_MEMORY_TRANSCRIPTION_CACHE[stem] = clean_text
                             _IN_MEMORY_TRANSCRIPTION_CACHE[stem.replace(".", "_")] = clean_text
                             _IN_MEMORY_TRANSCRIPTION_CACHE[stem.replace("_", ".")] = clean_text
@@ -1903,15 +1905,18 @@ def process_vision_element(
 
                 disk_file = PROJECT_ROOT / "data_cache" / "transcriptions" / f"{kind}_{var}.json"
                 if disk_file.exists():
+                    from app.agents.vision_prompts import is_cache_fingerprint_valid
                     with open(disk_file, "r", encoding="utf-8") as f_disk:
                         d_data = json.load(f_disk)
-                        if d_data and "markdown_table" in d_data:
-                            tb_text = d_data["markdown_table"]
+                        if d_data and is_cache_fingerprint_valid(d_data, kind):
+                            tb_text = d_data.get("markdown_table") or d_data.get("full_content") or ""
                             if tb_text and "|" in tb_text and not any(err in tb_text.lower() for err in ["i'm sorry", "cannot extract", "no data", "too blurry"]):
                                 _IN_MEMORY_TRANSCRIPTION_CACHE[cache_key] = tb_text
-                                logger.info(f"⚡ Instant disk transcription hit in visual tool for {kind}_{var}!")
+                                logger.info(f"⚡ Instant verified disk transcription hit in visual tool for {kind}_{var}!")
                                 VISION_TOOL_SUCCEEDED = True
                                 return tb_text
+                        else:
+                            logger.info(f"🔄 [Fingerprint Invalidation] Disk entry for {kind}_{var} outdated/unverified. Re-extracting with current prompt.")
     except Exception as disk_exc:
         logger.warning(f"Disk transcription lookup warning in tool: {disk_exc}")
 
@@ -1947,21 +1952,9 @@ def process_vision_element(
             encoded_string = base64.b64encode(buf.getvalue()).decode('utf-8')
         encoded_string = encoded_string.replace('\n', '').replace('\r', '').strip()
         
-        structured_prompt = (
-            "### SYSTEM PROMPT: Complete Multi-Panel Visual Extraction & Analytical Summary Engine\n\n"
-            "You are a precise data extraction system. For any given image/figure asset, you MUST strictly output a single structured payload with the following mandatory sections:\n\n"
-            f"User extraction instructions: {extraction_instructions}\n\n"
-            "1. SECTION 1: MANDATORY TEXT SUMMARY & TREND ANALYSIS\n"
-            "   - Executive Overview (Title, Figure/Table ID, Core Objective)\n"
-            "   - Key Trends Narrative (Itemized key findings/groups, sub-panel trend analysis)\n"
-            "   - Conclusion (1-2 sentences summarizing core analytical takeaways)\n\n"
-            "2. SECTION 2: EXHAUSTIVE MULTI-PANEL DATA EXTRACTION TABLE\n"
-            "   - Format: Clean Markdown Table with populated headers and populated rows ONLY. No trailing empty pipes ('||' or '| |').\n"
-            "   - Columns: Mandatory mapping of [Panel / Sub-Chart, Category / Label, Data Value, Units, Conditions / Errors].\n"
-            "   - Rule: Do NOT return fallback, dummy, or mockup data (e.g., 'Series 1', 'Category 1', 'Unspecified Series 1', '10', '20'). If specific quantitative coordinates are ambiguous or dense (e.g., scatter plots), extract visible trendline boundaries, key outlier points, or explicit sample coordinates directly from the axes.\n\n"
-            "3. SECTION 3: SOURCE TRAIL\n"
-            "   - Pipeline source metadata string (e.g., Figure ID, Page number, Document source).\n"
-        )
+        from app.agents.vision_prompts import get_extraction_prompt, get_pipeline_fingerprint
+        prompt_asset_kind = kind if 'kind' in locals() and kind else ("table" if "tab" in str(visual_asset_path).lower() else "figure")
+        structured_prompt = get_extraction_prompt(prompt_asset_kind, target_cat or "", target_id or "")
         
         messages = [
             {
@@ -2033,11 +2026,15 @@ def process_vision_element(
                     if kind_save and id_save:
                         cache_file = PROJECT_ROOT / "data_cache" / "transcriptions" / f"{kind_save}_{id_save}.json"
                         cache_file.parent.mkdir(parents=True, exist_ok=True)
+                        fp_save = get_pipeline_fingerprint(kind_save)
                         payload_save = {
                             "asset_type": kind_save,
                             "asset_id": id_save,
+                            "fingerprint": fp_save,
+                            "prompt_hash": fp_save,
                             "image_path": str(img_path),
-                            "markdown_table": raw_content
+                            "markdown_table": raw_content,
+                            "full_content": raw_content
                         }
                         with open(cache_file, "w", encoding="utf-8") as f_save:
                             json.dump(payload_save, f_save, indent=2, ensure_ascii=False)

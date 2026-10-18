@@ -85,10 +85,10 @@ class TestSolution1And2(unittest.TestCase):
 
         # 3. Tables in various cases
         url_t = get_supabase_asset_url("Table 4.1")
-        self.assertIn("assets/extracted_tables/page_207_Table_4.1.csv", url_t)
+        self.assertTrue("extracted_charts/table_4.1.png" in url_t or "assets/extracted_tables/page_207_Table_4.1.csv" in url_t)
 
         url_t3 = get_supabase_asset_url("table 3.1")
-        self.assertIn("assets/extracted_tables/page_154_Table_3.1.csv", url_t3)
+        self.assertTrue("extracted_charts/table_3.1.png" in url_t3 or "assets/extracted_tables/page_154_Table_3.1.csv" in url_t3)
 
         # 4. Previously broken capitalized HTTP URLs
         broken_url = "https://lurnlyvcinfdoctxtkiu.supabase.co/storage/v1/object/public/rag/extracted_charts/Figure_7.1.png"

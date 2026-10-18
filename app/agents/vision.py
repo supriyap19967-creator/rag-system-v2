@@ -99,21 +99,9 @@ def analyze_image_with_vlm(ctx: RunContext[Any], image_path: str, query: str) ->
             encoded_string = base64.b64encode(buf.getvalue()).decode('utf-8')
         encoded_string = encoded_string.replace('\n', '').replace('\r', '').strip()
         
-        structured_prompt = (
-            "### SYSTEM PROMPT: Complete Multi-Panel Visual Extraction & Analytical Summary Engine\n\n"
-            "You are a precise data extraction system. For any given image/figure asset, you MUST strictly output a single structured payload with the following mandatory sections:\n\n"
-            f"User instructions: {query}\n\n"
-            "1. SECTION 1: MANDATORY TEXT SUMMARY & TREND ANALYSIS\n"
-            "   - Executive Overview (Title, Figure/Table ID, Core Objective)\n"
-            "   - Key Trends Narrative (Itemized key findings/groups, sub-panel trend analysis)\n"
-            "   - Conclusion (1-2 sentences summarizing core analytical takeaways)\n\n"
-            "2. SECTION 2: EXHAUSTIVE MULTI-PANEL DATA EXTRACTION TABLE\n"
-            "   - Format: Clean Markdown Table with populated headers and populated rows ONLY. No trailing empty pipes ('||' or '| |').\n"
-            "   - Columns: Mandatory mapping of [Panel / Sub-Chart, Category / Label, Data Value, Units, Conditions / Errors].\n"
-            "   - Rule: Do NOT return fallback, dummy, or mockup data (e.g., 'Series 1', 'Category 1', 'Unspecified Series 1', '10', '20'). If specific quantitative coordinates are ambiguous or dense (e.g., scatter plots), extract visible trendline boundaries, key outlier points, or explicit sample coordinates directly from the axes.\n\n"
-            "3. SECTION 3: SOURCE TRAIL\n"
-            "   - Pipeline source metadata string (e.g., Figure ID, Page number, Document source).\n"
-        )
+        from app.agents.vision_prompts import get_extraction_prompt
+        prompt_asset_kind = "table" if ("tab" in str(image_path).lower() or "tab" in str(query).lower()) else "figure"
+        structured_prompt = get_extraction_prompt(prompt_asset_kind)
         
         messages = [
             {

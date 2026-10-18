@@ -889,46 +889,59 @@ def get_supabase_asset_url(path_or_url: str) -> str:
         "figure_4_1": "extracted_charts/figure_4.1.png",
         "figure_41": "extracted_charts/figure_4.1.png",
         "figure_4.1": "extracted_charts/figure_4.1.png",
-        "table_2_1": "assets/extracted_tables/page111_table1.csv",
-        "table_21": "assets/extracted_tables/page111_table1.csv",
-        "table_3_1": "assets/extracted_tables/page_154_Table_3.1.csv",
-        "table_31": "assets/extracted_tables/page_154_Table_3.1.csv",
-        "table_3_2": "assets/extracted_tables/page154_table2.csv",
-        "table_32": "assets/extracted_tables/page154_table2.csv",
-        "table_4_1": "assets/extracted_tables/page_207_Table_4.1.csv",
-        "table_41": "assets/extracted_tables/page_207_Table_4.1.csv",
-        "table_4.1": "assets/extracted_tables/page_207_Table_4.1.csv",
-        "table_4_2": "assets/extracted_tables/page_208_Table_4.2.csv",
-        "table_42": "assets/extracted_tables/page_208_Table_4.2.csv",
-        "table_4.2": "assets/extracted_tables/page_208_Table_4.2.csv",
+        "table_2_1": "extracted_charts/table_2.1.png",
+        "table_21": "extracted_charts/table_2.1.png",
+        "table_2.1": "extracted_charts/table_2.1.png",
+        "table_2_2": "extracted_charts/table_2.2.png",
+        "table_2.2": "extracted_charts/table_2.2.png",
+        "table_3_1": "extracted_charts/table_3.1.png",
+        "table_31": "extracted_charts/table_3.1.png",
+        "table_3.1": "extracted_charts/table_3.1.png",
+        "table_3_2": "extracted_charts/table_3.2.png",
+        "table_32": "extracted_charts/table_3.2.png",
+        "table_4_1": "extracted_charts/table_4.1.png",
+        "table_41": "extracted_charts/table_4.1.png",
+        "table_4.1": "extracted_charts/table_4.1.png",
+        "table_4_2": "extracted_charts/table_4.2.png",
+        "table_42": "extracted_charts/table_4.2.png",
+        "table_4.2": "extracted_charts/table_4.2.png",
+        "table_8_1": "extracted_charts/table_8.1.png",
+        "table_81": "extracted_charts/table_8.1.png",
+        "table_8.1": "extracted_charts/table_8.1.png",
     }
-    for k, v in sequential_mappings.items():
-        if norm_id and (k == norm_id.lower().replace(".", "_") or k == norm_id.lower()):
-            return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{v}"
-        if k == filename.lower() or k in filename.lower():
-            return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{v}"
+    is_csv_request = path_str.lower().endswith(".csv") or filename.lower().endswith(".csv")
+    if not is_csv_request:
+        for k, v in sequential_mappings.items():
+            if norm_id and (k == norm_id.lower().replace(".", "_") or k == norm_id.lower()):
+                return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{v}"
+            if k == filename.lower() or k in filename.lower():
+                return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{v}"
 
-    # Universal Case-Insensitive Figure Normalization
-    if norm_id:
-        norm_lower = norm_id.lower()
-        if norm_lower.startswith(("figure_", "fig_")):
-            fig_num = re.sub(r"^(figure_|fig_)", "", norm_lower).replace("_", ".").strip()
-            return f"{supa_url}/storage/v1/object/public/{supa_bucket}/extracted_charts/figure_{fig_num}.png"
-        elif norm_lower.startswith(("table_", "tab_")):
-            tab_num = re.sub(r"^(table_|tab_)", "", norm_lower).replace("_", ".").strip()
-            # If standard known table, default to assets/extracted_tables/
-            for k, v in sequential_mappings.items():
-                if f"table_{tab_num}".replace(".", "_") in k:
-                    return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{v}"
-            return f"{supa_url}/storage/v1/object/public/{supa_bucket}/assets/extracted_tables/table_{tab_num}.csv"
+        # Universal Case-Insensitive Figure & Table Normalization
+        if norm_id:
+            norm_lower = norm_id.lower()
+            if norm_lower.startswith(("figure_", "fig_")):
+                fig_num = re.sub(r"^(figure_|fig_)", "", norm_lower).replace("_", ".").strip()
+                return f"{supa_url}/storage/v1/object/public/{supa_bucket}/extracted_charts/figure_{fig_num}.png"
+            elif norm_lower.startswith(("table_", "tab_")):
+                tab_num = re.sub(r"^(table_|tab_)", "", norm_lower).replace("_", ".").strip()
+                for k, v in sequential_mappings.items():
+                    if f"table_{tab_num}".replace(".", "_") in k:
+                        return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{v}"
+                return f"{supa_url}/storage/v1/object/public/{supa_bucket}/extracted_charts/table_{tab_num}.png"
 
     # Standard normalized registry matching for all other visual and tabular assets
     try:
         registry = build_asset_registry()
-        sorted_records = sorted(registry, key=lambda r: 0 if ("extracted_charts" in r.relative_path or "extracted_tables" in r.relative_path) else 1)
-        for record in sorted_records:
+        for record in registry:
+            if is_csv_request and record.file_extension not in CSV_EXTENSIONS and not record.relative_path.lower().endswith(".csv"):
+                continue
+            if not is_csv_request and record.file_extension not in IMAGE_EXTENSIONS:
+                continue
             rec_rel = record.relative_path.replace("\\", "/").lstrip("/")
-            if norm_id and (norm_id.lower() == record.entity_id.lower() or norm_id.lower() in record.entity_id.lower() or record.entity_id.lower() in norm_id.lower()):
+            if filename.lower() == record.source_file.lower() or filename.lower() == Path(rec_rel).name.lower():
+                return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{rec_rel}"
+            if norm_id and norm_id.lower() == record.entity_id.lower():
                 return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{rec_rel}"
     except Exception:
         pass
@@ -959,8 +972,10 @@ def get_supabase_asset_url(path_or_url: str) -> str:
     clean_rel = path_str.lstrip("/")
     if "/" not in clean_rel:
         clean_lower = clean_rel.lower()
-        if clean_lower.endswith(".csv") or "table" in clean_lower or "tab" in clean_lower:
+        if clean_lower.endswith(".csv"):
             clean_rel = f"assets/extracted_tables/{clean_rel}"
+        elif "table" in clean_lower or "tab" in clean_lower:
+            clean_rel = f"extracted_charts/{clean_rel}"
         elif "image" in clean_lower:
             clean_rel = f"assets/extracted_images/{clean_rel}"
         else:

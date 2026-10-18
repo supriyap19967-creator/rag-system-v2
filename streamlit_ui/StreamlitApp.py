@@ -8552,11 +8552,13 @@ def resolve_single_figure_path(query_text: str, agent_result: any, source_chunks
         num_dot = raw_num.replace("_", ".")
         num_under = raw_num.replace(".", "_")
         
-        # 1. First pass: look for exact target figure number match (e.g. 4.2 or 4_2)
+        # 1. First pass: look for exact target figure/table number match (e.g. 4.2 or 4_2)
         for path in search_candidates:
             p_lower = path.lower()
             if (f"figure_{num_under}" in p_lower or f"figure_{num_dot}" in p_lower or 
                 f"figure {num_dot}" in p_lower or f"fig_{num_under}" in p_lower or 
+                f"table_{num_under}" in p_lower or f"table_{num_dot}" in p_lower or 
+                f"table {num_dot}" in p_lower or f"tab_{num_under}" in p_lower or 
                 f"_{num_under}." in p_lower or f"_{num_dot}." in p_lower or 
                 f"_{num_under}_" in p_lower or f"_{num_dot}_" in p_lower):
                 return path
@@ -9476,7 +9478,10 @@ class SemanticCacheManager:
         numbers = re.findall(r"\b\d{2,4}\b", query)
         nums_key = "_".join(sorted(numbers)) if numbers else "none"
         asset_key = f"{target_cat}_{target_id}" if (target_cat and target_id) else "no_asset"
-        return f"{q_norm}::asset={asset_key}::nums={nums_key}"
+        from app.agents.vision_prompts import get_pipeline_fingerprint
+        asset_kind = "figure" if target_cat and ("fig" in str(target_cat).lower() or "chart" in str(target_cat).lower()) else ("table" if target_cat and "tab" in str(target_cat).lower() else "none")
+        fp = get_pipeline_fingerprint(asset_kind) if asset_kind in ("figure", "table") else "none"
+        return f"{q_norm}::asset={asset_key}::fp={fp}::nums={nums_key}"
 
     @classmethod
     def get(cls, query: str) -> tuple | None:
@@ -9697,6 +9702,9 @@ def run_pipeline(
     top_chunks = None
     pre_fetched_vision_data = None
     resolved_img_path = None
+    target_cat = None
+    target_id = None
+    asset_kind = None
     try:
         target_cat, target_id = parse_target_asset(user_query)
         if not (target_cat and target_id):
@@ -9711,6 +9719,7 @@ def run_pipeline(
                 logger.info("🔄 [Follow-up Memory Hydrated] Hydrated active session asset: %s %s (%s)", target_cat, target_id, resolved_img_path)
 
         if target_cat and target_id:
+            asset_kind = "figure" if ("fig" in str(target_cat).lower() or "chart" in str(target_cat).lower()) else "table"
             if st.session_state.get("LAST_ACTIVE_TARGET_ID") and st.session_state.get("LAST_ACTIVE_TARGET_ID") != target_id:
                 st.session_state["LAST_ACTIVE_IMAGE_PATH"] = None
             if not resolved_img_path:
@@ -9739,26 +9748,35 @@ def run_pipeline(
                 # 4. Direct Fast-Path Return for Visual Queries (RAM -> Disk -> Qdrant Cloud Payload)
                 if target_cat and target_id:
                     from app.multimodal_assets import get_asset_record_fast
+                    from app.agents.vision_prompts import get_pipeline_fingerprint, is_cache_fingerprint_valid
                     fast_rec = get_asset_record_fast(f"{target_cat}_{target_id}") or get_asset_record_fast(str(target_id))
                     asset_kind = "figure" if "fig" in str(target_cat).lower() or "chart" in str(target_cat).lower() else "table"
                     id_clean = str(target_id).replace('.', '_')
                     id_raw = str(target_id)
-                    cache_key = f"{asset_kind}_{id_clean}".lower()
+                    current_fp = get_pipeline_fingerprint(asset_kind)
+                    cache_key = f"{asset_kind}_{id_clean}_{current_fp}".lower()
                     
                     # Tier 1: Check In-Memory RAM Cache (0.1ms)
                     transcription_ram_cache = getattr(schemas_mod, "_IN_MEMORY_TRANSCRIPTION_CACHE", {})
                     fast_text = transcription_ram_cache.get(cache_key) or _GLOBAL_VISION_OCR_CACHE.get(cache_key)
                     
-                    # Tier 2: Check Local Disk JSON Cache (1ms)
+                    # Tier 2: Check Local Disk JSON Cache (1ms) with SHA-256 Fingerprint Validation
                     if not fast_text:
-                        disk_cache_file = os.path.join(os.getcwd(), "data_cache", "transcriptions", f"{asset_kind}_{id_clean}.json")
-                        if os.path.exists(disk_cache_file):
-                            try:
-                                with open(disk_cache_file, "r", encoding="utf-8") as f_disk:
-                                    disk_data = json.load(f_disk)
-                                    fast_text = disk_data.get("markdown_table")
-                            except Exception:
-                                pass
+                        for cand in [id_clean, id_raw]:
+                            disk_cache_file = os.path.join(os.getcwd(), "data_cache", "transcriptions", f"{asset_kind}_{cand}.json")
+                            if os.path.exists(disk_cache_file):
+                                try:
+                                    with open(disk_cache_file, "r", encoding="utf-8") as f_disk:
+                                        disk_data = json.load(f_disk)
+                                        if is_cache_fingerprint_valid(disk_data, asset_kind):
+                                            fast_text = disk_data.get("markdown_table") or disk_data.get("full_content")
+                                            if fast_text:
+                                                _GLOBAL_VISION_OCR_CACHE[cache_key] = fast_text
+                                                break
+                                        else:
+                                            logger.info("🔄 [Fast-Path Cache Invalidation] Fingerprint mismatch for %s %s. Bypassing stale cache.", asset_kind, cand)
+                                except Exception:
+                                    pass
                     
                     # Tier 3: Qdrant Cloud Payload Filtered Fast-Path (~15ms)
                     if not fast_text and client:
@@ -9789,13 +9807,15 @@ def run_pipeline(
                             if scroll_res:
                                 for pt in scroll_res:
                                     p = pt.payload or {}
-                                    candidate_text = p.get("content") or p.get("text") or p.get("caption_text") or p.get("markdown_table")
+                                    if not is_cache_fingerprint_valid(p, asset_kind):
+                                        continue
+                                    candidate_text = p.get("visual_ocr_text") or p.get("content") or p.get("text") or p.get("caption_text") or p.get("markdown_table")
                                     if candidate_text and len(candidate_text.strip()) > 10:
                                         fast_text = candidate_text
                                         # Hydrate RAM cache for 10-minute fast-path hit next time
                                         if hasattr(schemas_mod, "_IN_MEMORY_TRANSCRIPTION_CACHE"):
                                             schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[cache_key] = fast_text
-                                            schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{id_raw}".lower()] = fast_text
+                                            schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{id_raw}_{current_fp}".lower()] = fast_text
                                         _GLOBAL_VISION_OCR_CACHE[cache_key] = fast_text
                                         logger.info("⚡ [Qdrant Cloud Payload Fast-Path] Hydrated RAM cache for %s_%s (~15ms)", target_cat, target_id)
                                         break
@@ -9895,13 +9915,15 @@ def run_pipeline(
             if not (resolved_img_path and (str(resolved_img_path).startswith("http") or os.path.exists(resolved_img_path))):
                 return None
 
-            cache_key = f"{resolved_img_path}_{target_cat}_{target_id}"
+            asset_kind = "figure" if "fig" in str(target_cat).lower() or "chart" in str(target_cat).lower() else "table"
+            from app.agents.vision_prompts import get_pipeline_fingerprint, is_cache_fingerprint_valid, get_extraction_prompt
+            current_fp = get_pipeline_fingerprint(asset_kind)
+            cache_key = f"{resolved_img_path}_{target_cat}_{target_id}_{current_fp}"
             if cache_key in _GLOBAL_VISION_OCR_CACHE:
                 logger.info("⚡ Returning instant session-cached Vision OCR extraction for %s!", cache_key)
                 return _GLOBAL_VISION_OCR_CACHE[cache_key]
 
-            # Check pre-computed disk JSON cache (0.001s instant lookup)
-            asset_kind = "figure" if "fig" in str(target_cat).lower() or "chart" in str(target_cat).lower() else "table"
+            # Check pre-computed disk JSON cache (0.001s instant lookup) with SHA-256 fingerprint validation
             id_candidates = [str(target_id), str(target_id).replace('.', '_'), str(target_id).replace('_', '.')]
             for cand in id_candidates:
                 disk_cache_file = os.path.join(os.getcwd(), "data_cache", "transcriptions", f"{asset_kind}_{cand}.json")
@@ -9909,13 +9931,15 @@ def run_pipeline(
                     try:
                         with open(disk_cache_file, "r", encoding="utf-8") as f_disk:
                             disk_data = json.load(f_disk)
-                            if disk_data and "markdown_table" in disk_data:
-                                text_out = disk_data["markdown_table"]
+                            if is_cache_fingerprint_valid(disk_data, asset_kind):
+                                text_out = disk_data.get("markdown_table") or disk_data.get("full_content")
                                 # Ensure disk transcription is a valid markdown table and not a Vision LLM refusal string
                                 if text_out and "|" in text_out and not any(err in text_out.lower() for err in ["i'm sorry", "cannot extract", "no data", "too blurry"]):
-                                    logger.info("⚡ Returning instant pre-computed disk OCR transcription for %s_%s!", asset_kind, cand)
+                                    logger.info("⚡ Returning verified pre-computed disk OCR transcription for %s_%s (fp: %s)!", asset_kind, cand, current_fp)
                                     _GLOBAL_VISION_OCR_CACHE[cache_key] = text_out
                                     return text_out
+                            else:
+                                logger.info("🔄 [Disk Cache Invalidation] Disk entry for %s_%s has invalid/missing fingerprint. Will re-extract with updated prompt.", asset_kind, cand)
                     except Exception as disk_err:
                         logger.warning("Disk cache read notice: %s", disk_err)
 
@@ -9931,13 +9955,7 @@ def run_pipeline(
                     logger.warning("Parallel tabular read notice: %s", csv_err)
                     return None
 
-            asset_type = asset_kind
-            prompt = (
-                "### SYSTEM PROMPT: Complete Multi-Panel Visual Extraction & Analytical Summary Engine\n\n"
-                f"Extract information from this {asset_type} ({target_cat} {target_id}) enforcing these strict rules:\n\n"
-                "1. SECTION 1: MANDATORY TEXT SUMMARY & TREND ANALYSIS (Executive Overview, Panel A/B Trend Narrative, Cross-Panel Conclusion).\n"
-                "2. SECTION 2: EXHAUSTIVE MULTI-PANEL DATA EXTRACTION TABLE (100% Dual-Panel Coverage for Panel A & B, real tick values, explicit Panel column)."
-            )
+            prompt = get_extraction_prompt(asset_kind, target_cat, target_id)
 
             # Ensure PIL Image.open receives a valid local file path (never a CSV)
             pil_image_path = None
@@ -9975,17 +9993,26 @@ def run_pipeline(
                     text_out = res.text if hasattr(res, "text") else str(res)
                     if text_out and len(text_out.strip()) > 10:
                         _GLOBAL_VISION_OCR_CACHE[cache_key] = text_out
-                        # Auto-save to disk, RAM cache, and Qdrant Cloud point payload (Lookout 1)
+                        # Auto-save to disk, RAM cache, and Qdrant Cloud point payload with fingerprint
                         try:
-                            asset_kind = "figure" if "fig" in str(target_cat).lower() or "chart" in str(target_cat).lower() else "table"
+                            payload_to_save = {
+                                "asset_type": asset_kind,
+                                "asset_id": str(target_id),
+                                "fingerprint": current_fp,
+                                "prompt_hash": current_fp,
+                                "image_path": resolved_img_path,
+                                "markdown_table": text_out,
+                                "full_content": text_out
+                            }
                             c_file = os.path.join(os.getcwd(), "data_cache", "transcriptions", f"{asset_kind}_{target_id}.json")
                             os.makedirs(os.path.dirname(c_file), exist_ok=True)
                             with open(c_file, "w", encoding="utf-8") as f_c:
-                                json.dump({"asset_type": asset_kind, "asset_id": str(target_id), "image_path": resolved_img_path, "markdown_table": text_out}, f_c, indent=2, ensure_ascii=False)
+                                json.dump(payload_to_save, f_c, indent=2, ensure_ascii=False)
                             schemas_mod = importlib.import_module("multimodal-rag-system.schemas_and_agent")
+                            schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{target_id}_{current_fp}".lower()] = text_out
                             schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{target_id}".lower()] = text_out
                             
-                            # Lookout 1: Write-through to Qdrant Cloud Point Payload
+                            # Write-through to Qdrant Cloud Point Payload
                             try:
                                 q_c = get_qdrant_client()
                                 if q_c:
@@ -10005,7 +10032,12 @@ def run_pipeline(
                                     if hits:
                                         q_c.set_payload(
                                             collection_name="conversational_rag",
-                                            payload={"visual_ocr_text": text_out, "has_pre_transcription": True},
+                                            payload={
+                                                "visual_ocr_text": text_out,
+                                                "has_pre_transcription": True,
+                                                "fingerprint": current_fp,
+                                                "prompt_hash": current_fp
+                                            },
                                             points=[hits[0].id]
                                         )
                             except Exception:
@@ -10051,17 +10083,26 @@ def run_pipeline(
                         if resp.choices and resp.choices[0].message and resp.choices[0].message.content:
                             text_out = resp.choices[0].message.content
                             _GLOBAL_VISION_OCR_CACHE[cache_key] = text_out
-                        # Auto-save to disk, RAM cache, and Qdrant Cloud point payload (Lookout 1)
+                        # Auto-save to disk, RAM cache, and Qdrant Cloud point payload with fingerprint
                         try:
-                            asset_kind = "figure" if "fig" in str(target_cat).lower() or "chart" in str(target_cat).lower() else "table"
+                            payload_to_save = {
+                                "asset_type": asset_kind,
+                                "asset_id": str(target_id),
+                                "fingerprint": current_fp,
+                                "prompt_hash": current_fp,
+                                "image_path": resolved_img_path,
+                                "markdown_table": text_out,
+                                "full_content": text_out
+                            }
                             c_file = os.path.join(os.getcwd(), "data_cache", "transcriptions", f"{asset_kind}_{target_id}.json")
                             os.makedirs(os.path.dirname(c_file), exist_ok=True)
                             with open(c_file, "w", encoding="utf-8") as f_c:
-                                json.dump({"asset_type": asset_kind, "asset_id": str(target_id), "image_path": resolved_img_path, "markdown_table": text_out}, f_c, indent=2, ensure_ascii=False)
+                                json.dump(payload_to_save, f_c, indent=2, ensure_ascii=False)
                             schemas_mod = importlib.import_module("multimodal-rag-system.schemas_and_agent")
+                            schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{target_id}_{current_fp}".lower()] = text_out
                             schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{target_id}".lower()] = text_out
                             
-                            # Lookout 1: Write-through to Qdrant Cloud Point Payload
+                            # Write-through to Qdrant Cloud Point Payload
                             try:
                                 q_c = get_qdrant_client()
                                 if q_c:
@@ -10081,7 +10122,12 @@ def run_pipeline(
                                     if hits:
                                         q_c.set_payload(
                                             collection_name="conversational_rag",
-                                            payload={"visual_ocr_text": text_out, "has_pre_transcription": True},
+                                            payload={
+                                                "visual_ocr_text": text_out,
+                                                "has_pre_transcription": True,
+                                                "fingerprint": current_fp,
+                                                "prompt_hash": current_fp
+                                            },
                                             points=[hits[0].id]
                                         )
                             except Exception:
@@ -10114,6 +10160,7 @@ def run_pipeline(
             # Fallback state hydration synchronously on Turn 1 cold start
             if not pre_fetched_vision_data and target_cat and target_id:
                 asset_kind = "figure" if "fig" in str(target_cat).lower() or "chart" in str(target_cat).lower() else "table"
+                from app.agents.vision_prompts import is_cache_fingerprint_valid
                 id_candidates = [str(target_id), str(target_id).replace('.', '_'), str(target_id).replace('_', '.')]
                 for cand in id_candidates:
                     disk_cache_file = os.path.join(os.getcwd(), "data_cache", "transcriptions", f"{asset_kind}_{cand}.json")
@@ -10121,11 +10168,11 @@ def run_pipeline(
                         try:
                             with open(disk_cache_file, "r", encoding="utf-8") as f_disk:
                                 disk_data = json.load(f_disk)
-                                if disk_data and "markdown_table" in disk_data:
-                                    text_out = disk_data["markdown_table"]
+                                if is_cache_fingerprint_valid(disk_data, asset_kind):
+                                    text_out = disk_data.get("markdown_table") or disk_data.get("full_content")
                                     if text_out and "|" in text_out and not any(err in text_out.lower() for err in ["i'm sorry", "cannot extract", "no data", "too blurry"]):
                                         pre_fetched_vision_data = text_out
-                                        logger.info("⚡ [Turn 1 Cold-Start Hydration] Synchronously hydrated pre-computed disk OCR transcription for %s_%s!", asset_kind, cand)
+                                        logger.info("⚡ [Turn 1 Cold-Start Hydration] Synchronously hydrated verified disk OCR transcription for %s_%s!", asset_kind, cand)
                                         break
                         except Exception as disk_err:
                             logger.warning("Disk cache cold-start read notice: %s", disk_err)
@@ -10151,9 +10198,14 @@ def run_pipeline(
     )
 
     # Sub-20ms Direct Fast-Path Exit for Narrative Visual Queries (Bypasses LLM Pydantic Schema Retries)
+    if not asset_kind and target_cat:
+        asset_kind = "figure" if ("fig" in str(target_cat).lower() or "chart" in str(target_cat).lower()) else "table"
     is_explicit_table_req = any(k in user_query.lower() for k in ["extract table", "csv", "dataframe", "rows", "columns", "json data", "table format"])
-    if target_cat and target_id and pre_fetched_vision_data and not is_explicit_table_req:
-        logger.info("⚡ [Sub-20ms Fast-Path Exit] Narrative visual query for %s %s satisfied directly from pre-transcribed store!", target_cat, target_id)
+    should_fast_path_exit = (target_cat and target_id and pre_fetched_vision_data) and (
+        asset_kind == "table" or not is_explicit_table_req
+    )
+    if should_fast_path_exit:
+        logger.info("⚡ [Sub-20ms Fast-Path Exit] Visual query for %s %s satisfied directly from pre-transcribed store!", target_cat, target_id)
         
         fb_path = resolved_img_path
         if fb_path and not str(fb_path).startswith("http"):
@@ -10163,14 +10215,23 @@ def run_pipeline(
         class FastPathMockResult:
             def __init__(self, output: ChartTableData):
                 self.output = output
+                self.data = output
                 self.usage = type('Usage', (), {'input_tokens': 0, 'output_tokens': 0, 'total_tokens': 0})()
             def new_messages(self):
                 return []
 
+        extracted_rows = []
+        try:
+            parsed_rows = parse_markdown_table_to_dicts(pre_fetched_vision_data)
+            if parsed_rows:
+                extracted_rows = [ChartTableRow(**r) for r in parsed_rows]
+        except Exception:
+            extracted_rows = []
+
         fast_vis_data = ChartTableData(
             source_routing_trail="Pre-transcribed visual store fast-path exit",
             text_reasoning=f"### Visual Extraction Summary for {target_cat} {target_id}\n\n{pre_fetched_vision_data}",
-            extracted_table=[],
+            extracted_table=extracted_rows,
             visual_asset_path=fb_path,
             image_path=fb_path
         )
@@ -10180,9 +10241,9 @@ def run_pipeline(
         if text_stream_callback and callable(text_stream_callback):
             text_stream_callback(fast_vis_data.text_reasoning)
             
-        SemanticCacheManager.put(user_query, (fast_vis_data.text_reasoning, [], fast_timings, None, agent_result))
+        SemanticCacheManager.put(user_query, (fast_vis_data.text_reasoning, [], fast_timings, fb_path, agent_result))
         _dispatch_early_return_telemetry(fast_vis_data.text_reasoning, [], tag="fast-path-visual")
-        return fast_vis_data.text_reasoning, [], fast_timings, None, agent_result
+        return fast_vis_data.text_reasoning, [], fast_timings, fb_path, agent_result
 
     # 2. Run the Pydantic AI agent
     try:
@@ -10387,9 +10448,10 @@ def run_pipeline(
                                                 if os.path.exists(d_file):
                                                     with open(d_file, "r", encoding="utf-8") as f_disk:
                                                         d_data = json.load(f_disk)
-                                                        if d_data and "markdown_table" in d_data:
-                                                            raw_markdown = d_data["markdown_table"]
-                                                            logger.info(f"⚡ [Post-Agent Interceptor] Retrieved disk transcription table for {a_kind}_{cand}!")
+                                                        from app.agents.vision_prompts import is_cache_fingerprint_valid
+                                                        if d_data and is_cache_fingerprint_valid(d_data, a_kind):
+                                                            raw_markdown = d_data.get("markdown_table") or d_data.get("full_content") or ""
+                                                            logger.info(f"⚡ [Post-Agent Interceptor] Retrieved verified disk transcription table for {a_kind}_{cand}!")
                                                             break
                                     except Exception as disk_fetch_err:
                                         logger.warning("Disk transcription fetch notice in interceptor: %s", disk_fetch_err)
