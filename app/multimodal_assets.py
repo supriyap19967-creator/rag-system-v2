@@ -933,6 +933,7 @@ def get_supabase_asset_url(path_or_url: str) -> str:
     # Standard normalized registry matching for all other visual and tabular assets
     try:
         registry = build_asset_registry()
+        # Pass 1: Exact filename match has highest precedence across the entire registry
         for record in registry:
             if is_csv_request and record.file_extension not in CSV_EXTENSIONS and not record.relative_path.lower().endswith(".csv"):
                 continue
@@ -941,6 +942,14 @@ def get_supabase_asset_url(path_or_url: str) -> str:
             rec_rel = record.relative_path.replace("\\", "/").lstrip("/")
             if filename.lower() == record.source_file.lower() or filename.lower() == Path(rec_rel).name.lower():
                 return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{rec_rel}"
+
+        # Pass 2: Fallback to entity_id match only if no exact filename match exists
+        for record in registry:
+            if is_csv_request and record.file_extension not in CSV_EXTENSIONS and not record.relative_path.lower().endswith(".csv"):
+                continue
+            if not is_csv_request and record.file_extension not in IMAGE_EXTENSIONS:
+                continue
+            rec_rel = record.relative_path.replace("\\", "/").lstrip("/")
             if norm_id and norm_id.lower() == record.entity_id.lower():
                 return f"{supa_url}/storage/v1/object/public/{supa_bucket}/{rec_rel}"
     except Exception:
