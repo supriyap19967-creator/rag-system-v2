@@ -5105,7 +5105,14 @@ def _exact_asset_priority(item: dict[str, Any]) -> tuple[int, int, int]:
     return (0 if image_path else 1, 0 if contains_chart else 1, 1 if is_full_page_fallback else 0)
 
 
+_INDEXES_ENSURED = False
+
+
 def ensure_entity_payload_indexes(client: QdrantClient) -> None:
+    global _INDEXES_ENSURED
+    if _INDEXES_ENSURED:
+        return
+    _INDEXES_ENSURED = True
     for field_name in (*INDEXED_ENTITY_PAYLOAD_FIELDS, *ASSET_PAYLOAD_FIELDS):
         try:
             client.create_payload_index(
@@ -9724,16 +9731,21 @@ def run_pipeline(
                 st.session_state["LAST_ACTIVE_IMAGE_PATH"] = None
             if not resolved_img_path:
                 try:
-                    from app.multimodal_assets import _resolve_existing_image_path
+                    from app.multimodal_assets import _resolve_existing_image_path, get_supabase_asset_url
                     resolved_img_path = _resolve_existing_image_path(f"{target_cat}_{target_id}.png")
                     if not resolved_img_path:
                         resolved_img_path = _resolve_existing_image_path(f"{target_cat}_{target_id}")
+                    if not resolved_img_path:
+                        resolved_img_path = get_supabase_asset_url(f"{target_cat}_{target_id}")
                 except Exception as res_err:
                     logger.debug("Asset resolution note: %s", res_err)
             
             if resolved_img_path and not str(resolved_img_path).startswith("http"):
                 from app.multimodal_assets import get_supabase_asset_url
-                resolved_img_path = get_supabase_asset_url(resolved_img_path)
+                resolved_img_path = get_supabase_asset_url(resolved_img_path) or resolved_img_path
+            elif not resolved_img_path:
+                from app.multimodal_assets import get_supabase_asset_url
+                resolved_img_path = get_supabase_asset_url(f"{target_cat}_{target_id}")
             
             st.session_state["LAST_ACTIVE_TARGET_CAT"] = target_cat
             st.session_state["LAST_ACTIVE_TARGET_ID"] = target_id
@@ -9809,14 +9821,21 @@ def run_pipeline(
                                     p = pt.payload or {}
                                     if not is_cache_fingerprint_valid(p, asset_kind):
                                         continue
-                                    candidate_text = p.get("visual_ocr_text") or p.get("content") or p.get("text") or p.get("caption_text") or p.get("markdown_table")
-                                    if candidate_text and len(candidate_text.strip()) > 10:
-                                        fast_text = candidate_text
+                                    candidate_text = (
+                                        p.get("visual_ocr_text")
+                                        or p.get("markdown_table")
+                                        or p.get("executive_narrative")
+                                        or p.get("page_content")
+                                        or p.get("content")
+                                    )
+                                    if candidate_text and len(str(candidate_text).strip()) > 10:
+                                        fast_text = str(candidate_text)
                                         # Hydrate RAM cache for 10-minute fast-path hit next time
                                         if hasattr(schemas_mod, "_IN_MEMORY_TRANSCRIPTION_CACHE"):
                                             schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[cache_key] = fast_text
                                             schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{id_raw}_{current_fp}".lower()] = fast_text
                                         _GLOBAL_VISION_OCR_CACHE[cache_key] = fast_text
+                                        _GLOBAL_VISION_OCR_CACHE[f"{resolved_img_path}_{target_cat}_{target_id}_{current_fp}"] = fast_text
                                         logger.info("⚡ [Qdrant Cloud Payload Fast-Path] Hydrated RAM cache for %s_%s (~15ms)", target_cat, target_id)
                                         break
                         except Exception as q_payload_err:
@@ -9825,13 +9844,20 @@ def run_pipeline(
                     if fast_text:
                         from app.multimodal_assets import get_supabase_asset_url
                         img_path = (fast_rec.absolute_path if fast_rec else None) or resolved_img_path or ""
-                        supabase_https_url = get_supabase_asset_url(f"{target_cat}_{target_id}") or img_path
+                        supabase_https_url = p.get("image_url") or get_supabase_asset_url(f"{target_cat}_{target_id}") or img_path
                         fast_payload = {
                             "content": fast_text,
                             "page_content": fast_text,
+                            "visual_ocr_text": p.get("visual_ocr_text") or fast_text,
+                            "markdown_table": p.get("markdown_table"),
+                            "executive_narrative": p.get("executive_narrative"),
+                            "fingerprint": p.get("fingerprint") or current_fp,
+                            "image_url": supabase_https_url,
                             "metadata": {
                                 "asset_type": asset_kind,
                                 "asset_id": str(target_id),
+                                "fingerprint": p.get("fingerprint") or current_fp,
+                                "image_url": supabase_https_url,
                                 "image_path": supabase_https_url,
                                 "figure_image_path": supabase_https_url,
                                 "table_image_path": supabase_https_url,
@@ -9923,6 +9949,13 @@ def run_pipeline(
                 logger.info("⚡ Returning instant session-cached Vision OCR extraction for %s!", cache_key)
                 return _GLOBAL_VISION_OCR_CACHE[cache_key]
 
+            # Check session cache with alternate key as well
+            id_clean = str(target_id).replace('.', '_')
+            alt_cache_key = f"{asset_kind}_{id_clean}_{current_fp}".lower()
+            if alt_cache_key in _GLOBAL_VISION_OCR_CACHE:
+                logger.info("⚡ Returning instant session-cached Vision OCR extraction for %s!", alt_cache_key)
+                return _GLOBAL_VISION_OCR_CACHE[alt_cache_key]
+
             # Check pre-computed disk JSON cache (0.001s instant lookup) with SHA-256 fingerprint validation
             id_candidates = [str(target_id), str(target_id).replace('.', '_'), str(target_id).replace('_', '.')]
             for cand in id_candidates:
@@ -9937,11 +9970,61 @@ def run_pipeline(
                                 if text_out and "|" in text_out and not any(err in text_out.lower() for err in ["i'm sorry", "cannot extract", "no data", "too blurry"]):
                                     logger.info("⚡ Returning verified pre-computed disk OCR transcription for %s_%s (fp: %s)!", asset_kind, cand, current_fp)
                                     _GLOBAL_VISION_OCR_CACHE[cache_key] = text_out
+                                    _GLOBAL_VISION_OCR_CACHE[alt_cache_key] = text_out
                                     return text_out
                             else:
                                 logger.info("🔄 [Disk Cache Invalidation] Disk entry for %s_%s has invalid/missing fingerprint. Will re-extract with updated prompt.", asset_kind, cand)
                     except Exception as disk_err:
                         logger.warning("Disk cache read notice: %s", disk_err)
+
+            # Direct Qdrant Cloud Payload lookup (~15ms) for Streamlit Cloud (bypassing disk dependency)
+            if client:
+                try:
+                    from qdrant_client import models
+                    id_raw = str(target_id)
+                    id_clean_dot = id_raw.replace('_', '.')
+                    must_conds = [
+                        models.FieldCondition(key="metadata.asset_type", match=models.MatchValue(value=asset_kind))
+                    ]
+                    filter_conds = [
+                        models.FieldCondition(key="entity_id", match=models.MatchValue(value=id_raw)),
+                        models.FieldCondition(key="entity_id", match=models.MatchValue(value=id_clean)),
+                        models.FieldCondition(key="entity_id", match=models.MatchValue(value=f"{asset_kind}_{id_clean}")),
+                        models.FieldCondition(key="entity_id", match=models.MatchValue(value=f"{asset_kind}_{id_clean_dot}")),
+                        models.FieldCondition(key="chunk_id", match=models.MatchValue(value=id_raw)),
+                        models.FieldCondition(key="chunk_id", match=models.MatchValue(value=id_clean)),
+                        models.FieldCondition(key="chunk_id", match=models.MatchValue(value=f"{asset_kind}_{id_clean}")),
+                        models.FieldCondition(key="chunk_id", match=models.MatchValue(value=f"{asset_kind}_{id_clean_dot}")),
+                        models.FieldCondition(key="metadata.asset_id", match=models.MatchValue(value=id_raw)),
+                        models.FieldCondition(key="metadata.asset_id", match=models.MatchValue(value=id_clean)),
+                        models.FieldCondition(key="metadata.asset_id", match=models.MatchValue(value=id_clean_dot)),
+                    ]
+                    scroll_res, _ = client.scroll(
+                        collection_name=COLLECTION_NAME,
+                        scroll_filter=models.Filter(must=must_conds, should=filter_conds),
+                        limit=5,
+                        with_payload=True
+                    )
+                    if scroll_res:
+                        for pt in scroll_res:
+                            p_hit = pt.payload or {}
+                            if not is_cache_fingerprint_valid(p_hit, asset_kind):
+                                continue
+                            candidate_hit = (
+                                p_hit.get("visual_ocr_text")
+                                or p_hit.get("markdown_table")
+                                or p_hit.get("executive_narrative")
+                                or p_hit.get("page_content")
+                                or p_hit.get("content")
+                            )
+                            if candidate_hit and len(str(candidate_hit).strip()) > 10:
+                                cand_hit_str = str(candidate_hit)
+                                _GLOBAL_VISION_OCR_CACHE[cache_key] = cand_hit_str
+                                _GLOBAL_VISION_OCR_CACHE[alt_cache_key] = cand_hit_str
+                                logger.info("⚡ [_fetch_vision] Hydrated verified extraction from Qdrant Cloud payload for %s_%s (~15ms)!", asset_kind, target_id)
+                                return cand_hit_str
+                except Exception as q_cloud_err:
+                    logger.debug("Qdrant cloud lookup in _fetch_vision notice: %s", q_cloud_err)
 
             # Check if resolved path is tabular CSV / Excel file directly
             if resolved_img_path.lower().endswith((".csv", ".xlsx")):
@@ -9992,58 +10075,16 @@ def run_pipeline(
                     )
                     text_out = res.text if hasattr(res, "text") else str(res)
                     if text_out and len(text_out.strip()) > 10:
+                        # Solution D: In-memory session cache only; Qdrant Cloud remains immutable read-only
                         _GLOBAL_VISION_OCR_CACHE[cache_key] = text_out
-                        # Auto-save to disk, RAM cache, and Qdrant Cloud point payload with fingerprint
+                        _GLOBAL_VISION_OCR_CACHE[f"{asset_kind}_{str(target_id).replace('.', '_')}_{current_fp}".lower()] = text_out
                         try:
-                            payload_to_save = {
-                                "asset_type": asset_kind,
-                                "asset_id": str(target_id),
-                                "fingerprint": current_fp,
-                                "prompt_hash": current_fp,
-                                "image_path": resolved_img_path,
-                                "markdown_table": text_out,
-                                "full_content": text_out
-                            }
-                            c_file = os.path.join(os.getcwd(), "data_cache", "transcriptions", f"{asset_kind}_{target_id}.json")
-                            os.makedirs(os.path.dirname(c_file), exist_ok=True)
-                            with open(c_file, "w", encoding="utf-8") as f_c:
-                                json.dump(payload_to_save, f_c, indent=2, ensure_ascii=False)
                             schemas_mod = importlib.import_module("multimodal-rag-system.schemas_and_agent")
                             schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{target_id}_{current_fp}".lower()] = text_out
                             schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{target_id}".lower()] = text_out
-                            
-                            # Write-through to Qdrant Cloud Point Payload
-                            try:
-                                q_c = get_qdrant_client()
-                                if q_c:
-                                    from qdrant_client import models
-                                    cand_vars = [f"{asset_kind}_{target_id}", f"{asset_kind}_{str(target_id).replace('.', '_')}", str(target_id)]
-                                    should_conds = [
-                                        models.FieldCondition(key="chunk_id", match=models.MatchValue(value=v)) for v in cand_vars
-                                    ] + [
-                                        models.FieldCondition(key="metadata.entity_id", match=models.MatchValue(value=v)) for v in cand_vars
-                                    ]
-                                    hits, _ = q_c.scroll(
-                                        collection_name="conversational_rag",
-                                        scroll_filter=models.Filter(should=should_conds),
-                                        limit=1,
-                                        with_vectors=False
-                                    )
-                                    if hits:
-                                        q_c.set_payload(
-                                            collection_name="conversational_rag",
-                                            payload={
-                                                "visual_ocr_text": text_out,
-                                                "has_pre_transcription": True,
-                                                "fingerprint": current_fp,
-                                                "prompt_hash": current_fp
-                                            },
-                                            points=[hits[0].id]
-                                        )
-                            except Exception:
-                                pass
                         except Exception:
                             pass
+                        logger.info("🛡️ [Solution D Read-Only Safety] Cached live vision extraction in-memory for session (%s_%s). Qdrant Cloud remains immutable.", asset_kind, target_id)
                         return text_out
                 except Exception as v_err:
                     logger.warning("Parallel Vision OCR skipped/quota notice: %s", v_err)
@@ -10082,59 +10123,17 @@ def run_pipeline(
                         )
                         if resp.choices and resp.choices[0].message and resp.choices[0].message.content:
                             text_out = resp.choices[0].message.content
+                            # Solution D: In-memory session cache only; Qdrant Cloud remains immutable read-only
                             _GLOBAL_VISION_OCR_CACHE[cache_key] = text_out
-                        # Auto-save to disk, RAM cache, and Qdrant Cloud point payload with fingerprint
-                        try:
-                            payload_to_save = {
-                                "asset_type": asset_kind,
-                                "asset_id": str(target_id),
-                                "fingerprint": current_fp,
-                                "prompt_hash": current_fp,
-                                "image_path": resolved_img_path,
-                                "markdown_table": text_out,
-                                "full_content": text_out
-                            }
-                            c_file = os.path.join(os.getcwd(), "data_cache", "transcriptions", f"{asset_kind}_{target_id}.json")
-                            os.makedirs(os.path.dirname(c_file), exist_ok=True)
-                            with open(c_file, "w", encoding="utf-8") as f_c:
-                                json.dump(payload_to_save, f_c, indent=2, ensure_ascii=False)
-                            schemas_mod = importlib.import_module("multimodal-rag-system.schemas_and_agent")
-                            schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{target_id}_{current_fp}".lower()] = text_out
-                            schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{target_id}".lower()] = text_out
-                            
-                            # Write-through to Qdrant Cloud Point Payload
+                            _GLOBAL_VISION_OCR_CACHE[f"{asset_kind}_{str(target_id).replace('.', '_')}_{current_fp}".lower()] = text_out
                             try:
-                                q_c = get_qdrant_client()
-                                if q_c:
-                                    from qdrant_client import models
-                                    cand_vars = [f"{asset_kind}_{target_id}", f"{asset_kind}_{str(target_id).replace('.', '_')}", str(target_id)]
-                                    should_conds = [
-                                        models.FieldCondition(key="chunk_id", match=models.MatchValue(value=v)) for v in cand_vars
-                                    ] + [
-                                        models.FieldCondition(key="metadata.entity_id", match=models.MatchValue(value=v)) for v in cand_vars
-                                    ]
-                                    hits, _ = q_c.scroll(
-                                        collection_name="conversational_rag",
-                                        scroll_filter=models.Filter(should=should_conds),
-                                        limit=1,
-                                        with_vectors=False
-                                    )
-                                    if hits:
-                                        q_c.set_payload(
-                                            collection_name="conversational_rag",
-                                            payload={
-                                                "visual_ocr_text": text_out,
-                                                "has_pre_transcription": True,
-                                                "fingerprint": current_fp,
-                                                "prompt_hash": current_fp
-                                            },
-                                            points=[hits[0].id]
-                                        )
+                                schemas_mod = importlib.import_module("multimodal-rag-system.schemas_and_agent")
+                                schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{target_id}_{current_fp}".lower()] = text_out
+                                schemas_mod._IN_MEMORY_TRANSCRIPTION_CACHE[f"{asset_kind}_{target_id}".lower()] = text_out
                             except Exception:
                                 pass
-                        except Exception:
-                            pass
-                        return text_out
+                            logger.info("🛡️ [Solution D Read-Only Safety] Cached live vision extraction in-memory for session (%s_%s). Qdrant Cloud remains immutable.", asset_kind, target_id)
+                            return text_out
             except Exception as or_err:
                 logger.warning("Parallel OpenRouter Vision OCR notice: %s", or_err)
 
@@ -10158,6 +10157,26 @@ def run_pipeline(
                     pre_fetched_vision_data = None
 
             # Fallback state hydration synchronously on Turn 1 cold start
+            if not pre_fetched_vision_data:
+                # 1. Directly read from Qdrant Cloud payload when top_chunks are present
+                if top_chunks and len(top_chunks) > 0:
+                    for ch in top_chunks:
+                        ch_payload = ch if isinstance(ch, dict) else (getattr(ch, "payload", None) or {})
+                        candidate = (
+                            ch_payload.get("visual_ocr_text")
+                            or ch_payload.get("markdown_table")
+                            or ch_payload.get("executive_narrative")
+                            or ch_payload.get("page_content")
+                            or ch_payload.get("content")
+                        )
+                        if candidate and len(str(candidate).strip()) > 10:
+                            asset_k = asset_kind or ("figure" if ("fig" in str(target_cat).lower() or "chart" in str(target_cat).lower()) else "table")
+                            from app.agents.vision_prompts import is_cache_fingerprint_valid
+                            if is_cache_fingerprint_valid(ch_payload, asset_k) or "|" in str(candidate):
+                                pre_fetched_vision_data = str(candidate)
+                                logger.info("⚡ [Turn-1 Qdrant Payload Hydration] Successfully hydrated pre_fetched_vision_data directly from Qdrant Cloud top_chunks!")
+                                break
+
             if not pre_fetched_vision_data and target_cat and target_id:
                 asset_kind = "figure" if "fig" in str(target_cat).lower() or "chart" in str(target_cat).lower() else "table"
                 from app.agents.vision_prompts import is_cache_fingerprint_valid
@@ -10208,9 +10227,18 @@ def run_pipeline(
         logger.info("⚡ [Sub-20ms Fast-Path Exit] Visual query for %s %s satisfied directly from pre-transcribed store!", target_cat, target_id)
         
         fb_path = resolved_img_path
+        if top_chunks and len(top_chunks) > 0:
+            ch_p = top_chunks[0] if isinstance(top_chunks[0], dict) else (getattr(top_chunks[0], "payload", None) or {})
+            cloud_img = ch_p.get("image_url") or (ch_p.get("metadata") or {}).get("image_url") or ch_p.get("image_path")
+            if cloud_img and (str(cloud_img).startswith("http://") or str(cloud_img).startswith("https://")):
+                fb_path = str(cloud_img)
+
         if fb_path and not str(fb_path).startswith("http"):
             from app.multimodal_assets import get_supabase_asset_url
             fb_path = get_supabase_asset_url(fb_path) or fb_path
+        if not fb_path or not str(fb_path).startswith("http"):
+            from app.multimodal_assets import get_supabase_asset_url
+            fb_path = get_supabase_asset_url(f"{target_cat}_{target_id}") or fb_path
             
         class FastPathMockResult:
             def __init__(self, output: ChartTableData):
@@ -10974,10 +11002,16 @@ def main() -> None:
         if not found_image:
             t_cat_f, t_id_f = parse_target_asset(user_query)
             if t_cat_f and t_id_f:
-                from app.multimodal_assets import get_asset_record_fast
-                rec_fast = get_asset_record_fast(f"{t_cat_f}_{t_id_f}")
-                if rec_fast and os.path.exists(rec_fast.absolute_path):
-                    found_image = rec_fast.absolute_path.replace("\\", "/")
+                from app.multimodal_assets import get_asset_record_fast, get_supabase_asset_url
+                supa_url_cand = get_supabase_asset_url(f"{t_cat_f}_{t_id_f}")
+                if supa_url_cand and (str(supa_url_cand).startswith("http://") or str(supa_url_cand).startswith("https://")):
+                    found_image = str(supa_url_cand)
+                else:
+                    rec_fast = get_asset_record_fast(f"{t_cat_f}_{t_id_f}")
+                    if rec_fast and os.path.exists(rec_fast.absolute_path):
+                        found_image = rec_fast.absolute_path.replace("\\", "/")
+                    elif rec_fast:
+                        found_image = get_supabase_asset_url(rec_fast.absolute_path) or None
 
         if not found_image:
             # Search for direct match or fuzzy page_* / figure_* match
