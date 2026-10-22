@@ -9037,11 +9037,12 @@ def is_qualitative_diagram_data(df: pd.DataFrame, table_text: str = "") -> bool:
     where numerical values are absent or purely descriptive.
     """
     if df is not None and not df.empty:
-        all_text = " ".join(df.astype(str).values.flatten()).lower()
+        # Production-grade: Safely cast all non-null cells to str, eliminating any float/NaN type mismatches
+        all_text = " ".join(str(val) for val in df.to_numpy().ravel() if pd.notna(val)).lower()
         num_matches = re.findall(r"\b\d+(?:\.\d+)?%?\b", all_text)
         if len(num_matches) < 2:
             return True
-        cols_lower = [c.lower() for c in df.columns]
+        cols_lower = [str(c).lower() for c in df.columns]
         if any(kw in cols_lower for kw in ["node", "diagram", "policy instrument", "flowchart"]) or (
             "summary" in cols_lower and not any(k in cols_lower for k in ["data value", "targetvalue", "value", "metric", "share"])
         ):
@@ -9100,7 +9101,7 @@ def render_quantitative_table_with_search(df: pd.DataFrame, key_suffix: str = "0
     filtered_df = df
     if search_query and search_query.strip():
         q = search_query.strip().lower()
-        mask = df.astype(str).apply(lambda row: row.str.lower().str.contains(q).any(), axis=1)
+        mask = df.fillna("").astype(str).apply(lambda row: row.str.lower().str.contains(q, na=False).any(), axis=1)
         filtered_df = df[mask]
         st.caption(f"Showing {len(filtered_df)} of {len(df)} matching rows")
 
