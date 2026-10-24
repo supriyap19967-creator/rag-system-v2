@@ -1656,6 +1656,9 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
         "  2. KEY-VALUE CARDS: Use bold text category headers and bullet points for all metrics.\n"
         "  3. METRIC HUMANIZATION: Convert massive numbers into readable formats (e.g. '$2.84 Trillion' alongside the exact number) and round floats to 2 decimal places.\n"
         "  4. COMBINED ENTITY LAYOUT: Group metrics cleanly by Entity or Year (e.g., **📊 India (2019 Snapshot)**).\n"
+        "- STRICT ENTITY GROUNDING FOR DIRECT LOOKUPS: When the user asks for a specific country or entity (e.g., 'What was India's GDP in 2022?'), you MUST focus strictly and solely on the queried entity (India). NEVER switch the primary topic, header, title, or snapshot card to another country from conversation history (such as China or the United States). NEVER feature or prepend unsolicited comparison countries. If the query asks for India, output ONLY India's data card (e.g. '📊 India (2022 Snapshot)'). Historical entities from prior turns must not replace or overshadow the subject of the current turn.\n"
+        "- NO HIGHEST METRIC / TOTAL DATA RECORDS FOR CSV: For CSV queries, do NOT output 'highest metric', 'lowest metric', or 'total data records' in your narrative unless the user explicitly requested a ranking or full dataset statistical breakdown. When answering single-entity or specific multi-entity queries, report only the requested values without unsolicited highest/lowest metric cards or dataset-wide totals.\n"
+        "- MISSING DATA HANDLING (ZERO RANDOM TABLES): If the requested year or country data is not available in the CSV dataset (e.g. future years like 2025/2026, missing indicators, or unlisted countries), state clearly: 'Data for [Country/Year] is not available in the CSV dataset.' Leave 'extracted_table' as an empty list ([]). Never dump random CSV rows, placeholder tables, or unrelated metrics.\n"
         "- TEXT REASONING COMPLETENESS RULE: Ensure the 'text_reasoning' field of your output schema is comprehensive, detailed, and covers all requested aspects of the query, explaining concepts, trends, and growth conditions thoroughly.\n"
         "- COMPACT HORIZONTAL-VERTICAL WRAP-UP RULE: When presenting extracted information from charts, diagrams, or tables (especially when there are multiple metrics or data points for an entity or country, e.g. Ghana): DO NOT list them vertically one after another in a tall list. Instead, format and wrap all values for each entity horizontally into a single compact wrap-up line (e.g. `**Ghana**: Value 1 (x) • Value 2 (y) • Value 3 (z)...` or inline bullet wrap-up) so that all values are shown completely without missing any, providing a balanced horizontal and vertical layout that avoids excessive vertical scrolling.\n"
         "- TEXT RESPONSE STRUCTURE RULE: For all text-based answers, you MUST structure your response into a clean layout. Use bold headings for key thematic sections, followed by logical horizontal wrap-up lists or clean bullet points. Do NOT write long paragraphs or dense blocks of text.\n"
@@ -1668,7 +1671,7 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
 
         "- Prioritize answering the query precisely and step-by-step using tools.\n"
         "- For queries targeting CSV/DataFrame/tabular datasets (such as mathematical computations, statistical trends, row filtering, or aggregations on GDP/CO2 variables), you MUST call `query_pandas_dataframe` only and return the final answer inside the 'text_reasoning' field formatted as a key-value card (do NOT return table format) and ALWAYS leave 'extracted_table' as an empty list ([]). You MUST retrieve the exact unit or metric from the 'Indicator Name' column of the dataframe (e.g., 't CO2e/capita' or 'current US$') and include it in your formatted output rather than hardcoding assumptions like 'kilotons' or 'dollars'. Do NOT call `query_qdrant_vector_search` or `process_vision_element` for queries that can be answered directly using the DataFrames.\n"
-        "- For comparison, ranking, or statistical queries targeting multiple countries or years, you MUST append a brief 1-2 sentence analytical summary to the final output sentence, comparing the values (e.g., identifying which country/year has the highest or lowest GDP/emissions, and highlighting the difference or trend direction).\n"
+        "- For comparison or ranking queries where the user EXPLICITLY asks to compare multiple countries or find the highest/lowest, append a brief 1-2 sentence analytical summary comparing only those queried entities. For single-entity lookup queries (e.g. 'What was India's GDP in 2022?'), do NOT add comparisons or highest-metric summaries from other unasked countries.\n"
         "- If any tool returns an error message or fails (such as vision runner quota exhaustion or execution failures), "
         "DO NOT retry calling the same tool or keep calling tools in a loop. Immediately summarize the failure inside "
         "your 'text_reasoning' field, leave 'extracted_table' as an empty list ([]), and complete the run.\n"
@@ -7305,10 +7308,18 @@ def _render_history() -> None:
                         if img_path and (str(img_path).startswith("http") or os.path.exists(img_path)):
                             hist_img = img_path
 
+                prev_user_q = ""
+                for p_idx in range(idx - 1, -1, -1):
+                    if st.session_state.messages[p_idx].get("role") == "user":
+                        prev_user_q = st.session_state.messages[p_idx].get("content", "")
+                        break
+
                 render_enhanced_assistant_turn(
                     narrative_text=narrative_text or content,
                     table_text=table_text,
                     image_path=hist_img,
+                    user_query=prev_user_q,
+                    sources=message.get("sources", []),
                     key_suffix=f"hist_{idx}"
                 )
             else:
@@ -8986,7 +8997,28 @@ def format_answer_with_collapsible_table(answer: str) -> tuple[str, str | None]:
     Puts the full extracted table inside a collapsible container so the user 
     gets instant summary insights without vertical scrolling, preserving 100% of table data.
     """
-    if not answer or "|" not in answer:
+    if not answer:
+        return answer, None
+
+    unavailable_phrases = (
+        "not available in the csv dataset",
+        "not available in the dataset",
+        "data for requested year",
+        "is not available in source",
+        "requested value is unavailable",
+        "no data is available",
+        "data is unavailable",
+        "not found in the dataset",
+        "no data found",
+        "is unavailable in source documents",
+        "is unavailable in source",
+    )
+    if any(p in answer.lower() for p in unavailable_phrases):
+        lines = answer.split("\n")
+        non_table_lines = [l for l in lines if not l.strip().startswith("|") and "### Extracted Table Data" not in l]
+        return "\n".join(non_table_lines).strip(), None
+
+    if "|" not in answer:
         return answer, None
 
     lines = answer.split("\n")
@@ -9376,18 +9408,50 @@ def render_enhanced_assistant_turn(
     Renders assistant response across full container width from left to right:
     1. Visual Asset Image (optional expandable container at top)
     2. Executive Text Narrative (full width left-to-right)
-    3. KPI Summary Highlight Cards
+    3. KPI Summary Highlight Cards (suppressed for CSV queries and unavailable data)
     4. Extracted Data Table (100% fully visible, full width left-to-right, zero vertical scrolling)
     5. Executive PDF / HTML & Excel Briefing Exporters
     """
-    df = None
-    if table_text:
-        parsed_rows = parse_markdown_table_to_dicts(table_text)
-        if parsed_rows:
-            df = pd.DataFrame(parsed_rows)
-            df = clean_dataframe_for_table_rendering(df)
+    q_lower = (user_query or "").lower()
+    n_lower = (narrative_text or "").lower()
 
-    kpis = extract_kpis_from_table_text_or_df(table_text, df) if (table_text or (df is not None and not df.empty)) else {}
+    # Detect if this turn relates to a CSV dataset question
+    is_csv = (
+        "[csv data]" in n_lower or
+        "[csv]" in n_lower or
+        any(k in q_lower for k in ("gdp", "co2", "emission", "indicator", "incomegroup", "csv", "dataframe", "dataset")) or
+        (bool(sources) and any("csv" in str(s.get("source", "")).lower() or "csv" in str(s.get("metadata", {}).get("source", "")).lower() for s in sources if isinstance(s, dict)))
+    )
+
+    # Detect if requested data is unavailable
+    unavailable_phrases = (
+        "not available in the csv dataset",
+        "not available in the dataset",
+        "data for requested year",
+        "is not available in source",
+        "requested value is unavailable",
+        "no data is available",
+        "data is unavailable",
+        "not found in the dataset",
+        "no data found",
+        "is unavailable in source documents",
+        "is unavailable in source",
+    )
+    is_data_unavailable = any(p in n_lower for p in unavailable_phrases)
+
+    if is_data_unavailable:
+        table_text = None
+        df = None
+        kpis = {}
+    else:
+        df = None
+        if table_text:
+            parsed_rows = parse_markdown_table_to_dicts(table_text)
+            if parsed_rows:
+                df = pd.DataFrame(parsed_rows)
+                df = clean_dataframe_for_table_rendering(df)
+
+        kpis = extract_kpis_from_table_text_or_df(table_text, df) if (table_text or (df is not None and not df.empty)) else {}
 
     # 1. Visual Asset Image (fully visible inline container)
     if image_path and (str(image_path).startswith("http") or os.path.exists(image_path)):
@@ -9399,13 +9463,13 @@ def render_enhanced_assistant_turn(
     if narrative_text:
         st.markdown(narrative_text)
 
-    # 3. KPI Summary Highlight Cards
-    if kpis:
+    # 3. KPI Summary Highlight Cards (suppressed for CSV queries and unavailable data)
+    if kpis and not is_csv and not is_data_unavailable:
         st.markdown("<div style='height: 10px;'></div>", unsafe_allow_html=True)
         render_kpi_cards(kpis)
 
-    # 4. Extracted Data Table (rendered whenever valid tabular data exists for figures, tables, or datasets)
-    if table_text or (df is not None and not df.empty):
+    # 4. Extracted Data Table (rendered whenever valid tabular data exists and data is not unavailable)
+    if not is_data_unavailable and (table_text or (df is not None and not df.empty)):
         st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
         if is_qualitative_diagram(df, table_text):
             render_qualitative_diagram_cards(df, table_text)
@@ -9417,11 +9481,11 @@ def render_enhanced_assistant_turn(
             st.markdown(table_text)
 
     # 5. Executive Briefing Report Exporter Download Buttons (HTML/PDF & Excel .xlsx)
-    if narrative_text or table_text:
+    if narrative_text or (not is_data_unavailable and table_text):
         report_html = generate_executive_briefing_report_html(
             query=user_query or "Briefing Analysis",
             narrative_text=narrative_text or "",
-            table_text=table_text,
+            table_text=table_text if not is_data_unavailable else None,
             image_path=image_path,
             sources=sources,
             session_id=st.session_state.get("session_id", "Session")
@@ -9429,8 +9493,8 @@ def render_enhanced_assistant_turn(
         report_excel = generate_executive_briefing_report_excel(
             query=user_query or "Briefing Analysis",
             narrative_text=narrative_text or "",
-            table_text=table_text,
-            df=df,
+            table_text=table_text if not is_data_unavailable else None,
+            df=df if not is_data_unavailable else None,
             sources=sources,
             session_id=st.session_state.get("session_id", "Session")
         )
@@ -10785,17 +10849,38 @@ def run_pipeline(
 
             
         # 4. Append extracted table if present and not blocked
-        if not result.output.extracted_table and answer_text:
-            parsed_rows = parse_markdown_table_to_dicts(answer_text)
-            if parsed_rows:
-                result.output.extracted_table = [ChartTableRow(**r) for r in parsed_rows]
+        ans_lower = (result.output.text_reasoning or "").lower()
+        unavailable_phrases = (
+            "not available in the csv dataset",
+            "not available in the dataset",
+            "data for requested year",
+            "is not available in source",
+            "requested value is unavailable",
+            "no data is available",
+            "data is unavailable",
+            "not found in the dataset",
+            "no data found",
+            "is unavailable in source documents",
+            "is unavailable in source",
+        )
+        is_missing_data = any(p in ans_lower for p in unavailable_phrases)
+        if is_missing_data:
+            result.output.extracted_table = []
+            if "### Extracted Table Data" in answer_text:
+                answer_text = answer_text.split("### Extracted Table Data")[0].strip()
 
-        has_table_data = getattr(result.output, "has_table_data", True)
-        if has_table_data and result.output.extracted_table and "SECTION 2" not in answer_text and "|" not in answer_text:
-            answer_text += "\n\n### Extracted Table Data\n"
-            df_temp = pd.DataFrame([to_dict(row) for row in result.output.extracted_table])
-            df_clean = clean_dataframe_for_table_rendering(df_temp)
-            answer_text += df_clean.to_markdown(index=False)
+        if not is_missing_data:
+            if not result.output.extracted_table and answer_text:
+                parsed_rows = parse_markdown_table_to_dicts(answer_text)
+                if parsed_rows:
+                    result.output.extracted_table = [ChartTableRow(**r) for r in parsed_rows]
+
+            has_table_data = getattr(result.output, "has_table_data", True)
+            if has_table_data and result.output.extracted_table and "SECTION 2" not in answer_text and "|" not in answer_text:
+                answer_text += "\n\n### Extracted Table Data\n"
+                df_temp = pd.DataFrame([to_dict(row) for row in result.output.extracted_table])
+                df_clean = clean_dataframe_for_table_rendering(df_temp)
+                answer_text += df_clean.to_markdown(index=False)
 
         # Ensure answer_text ALWAYS has Section 1 Executive Text Summary Narrative FIRST before Extracted Table
         answer_text = ensure_text_summary_narrative_first(answer_text, result.output.extracted_table)
@@ -11190,6 +11275,8 @@ def main() -> None:
                 narrative_text=narrative_text or answer,
                 table_text=table_text,
                 image_path=active_img,
+                user_query=user_query,
+                sources=sources,
                 key_suffix="active_turn"
             )
             if is_visual_request and not active_img and sources:
