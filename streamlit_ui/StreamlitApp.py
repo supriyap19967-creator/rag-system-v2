@@ -231,7 +231,8 @@ class SystemPipelinesDeps:
         co2_metadata_df: pd.DataFrame | None = None,
         retrieved_chunks: list[Any] | None = None,
         pre_fetched_vision_data: str | None = None,
-        last_resolved_vision_path: str | None = None
+        last_resolved_vision_path: str | None = None,
+        resolved_temporal_year: str | None = None
     ):
         self.image_folder_path = image_folder_path
         self.session_signature = f"{session_user}_{uuid.uuid4().hex[:6].upper()}"
@@ -246,6 +247,7 @@ class SystemPipelinesDeps:
         self.retrieved_chunks = retrieved_chunks or []
         self.pre_fetched_vision_data = pre_fetched_vision_data
         self.last_resolved_vision_path = last_resolved_vision_path
+        self.resolved_temporal_year = resolved_temporal_year
         self.vision_element_processed = bool(pre_fetched_vision_data)
         self.last_vision_raw_content = pre_fetched_vision_data or ""
 
@@ -515,11 +517,62 @@ def parse_markdown_table_to_dicts(text: str) -> list[dict[str, Any]]:
     return data_rows
 
 
+def humanize_scientific_notation(text: str) -> str:
+    """
+    Finds raw scientific notation numbers (e.g., 4.10185e+13, 2.7292e+13, 5.9066e+07)
+    and formats them into rounded human-readable figures with decimal points (e.g. 41.019 Trillion, 59.066 Million).
+    """
+    if not text or not isinstance(text, str):
+        return text
+
+    import re
+
+    def repl(match):
+        raw_num = match.group(0)
+        try:
+            val = float(raw_num)
+        except Exception:
+            return raw_num
+            
+        abs_v = abs(val)
+        if abs_v >= 1e12:
+            return f"{val / 1e12:.3f} Trillion"
+        elif abs_v >= 1e9:
+            return f"{val / 1e9:.3f} Billion"
+        elif abs_v >= 1e6:
+            return f"{val / 1e6:.3f} Million"
+        elif abs_v >= 1e3:
+            return f"{val:,.2f}"
+        else:
+            return f"{val:.3f}"
+    
+    return re.sub(r"\b\d+(?:\.\d+)?[eE][\+\-]?\d+\b", repl, text)
+
+
+def is_single_formatted_number(raw_seq: str) -> bool:
+    """
+    Returns True if the comma sequence is actually a single large formatted number with
+    standard thousands separation or South Asian grouping, rather than a list of data points.
+    """
+    if not raw_seq or not isinstance(raw_seq, str):
+        return False
+    import re
+    s = raw_seq.strip().rstrip('.')
+    # Standard 3-digit comma groups (e.g., 3,346,107,287,730.93)
+    if re.match(r"^\d{1,3}(?:,\d{3})+(?:\.\d+)?$", s):
+        return True
+    # South Asian numbering format (e.g., 33,46,107.00)
+    if re.match(r"^\d{1,2}(?:,\d{2})*,\d{3}(?:\.\d+)?$", s):
+        return True
+    return False
+
+
 def clean_raw_number_dumps(text: str) -> str:
     """
     Detects long unlabelled sequences of raw numbers (5+ numbers) in extracted text
     (e.g., scatter plot points, organizational ranges) and converts them into
     clean statistical summaries (Count, Min, Max, Median).
+    Preserves single large formatted numbers (e.g. GDP currency figures).
     """
     if not text or not isinstance(text, str):
         return text
@@ -535,6 +588,8 @@ def clean_raw_number_dumps(text: str) -> str:
 
     def replacer(match):
         raw_seq = match.group(1).rstrip('.')
+        if is_single_formatted_number(raw_seq):
+            return match.group(0)
         nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", raw_seq)]
         if len(nums) >= 5:
             min_val = min(nums)
@@ -553,7 +608,9 @@ def clean_raw_number_dumps(text: str) -> str:
     
     loose_pattern = re.compile(r"(\d+(?:\.\d+)?(?:\s*,\s*\d+(?:\.\d+)?){4,})")
     def loose_replacer(match):
-        raw_seq = match.group(1)
+        raw_seq = match.group(1).rstrip('.')
+        if is_single_formatted_number(raw_seq):
+            return match.group(0)
         nums = [float(n) for n in re.findall(r"\d+(?:\.\d+)?", raw_seq)]
         if len(nums) >= 5:
             min_val = min(nums)
@@ -567,6 +624,7 @@ def clean_raw_number_dumps(text: str) -> str:
         return match.group(0)
 
     cleaned = loose_pattern.sub(loose_replacer, cleaned)
+    cleaned = humanize_scientific_notation(cleaned)
     cleaned = re.sub(r"[ \t]+", " ", cleaned)
     cleaned = re.sub(r" \.", ".", cleaned)
     return cleaned.strip()
@@ -845,6 +903,7 @@ def format_compact_horizontal_wrapup(text: str) -> str:
     
     text = clean_stray_markdown_stars(text)
     text = clean_raw_number_dumps(text)
+    text = humanize_scientific_notation(text)
     
     import re
     lines = text.split("\n")
@@ -1587,6 +1646,10 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
 
         "GENERAL GUIDELINES:\n"
         "- DECIMAL PRECISION RULE: When extracting numeric values or floats from charts, tables, or text chunks, do NOT perform any custom rounding or arbitrary truncation. Extract the exact value visible or, if rounding is required, round to match the source precision (or round to 2 decimal places using standard round-half-up math, checking carefully for last-digit differences like 17.43 vs 17.44). Double check the final digits against the visual graphic and text chunks to ensure absolute alignment.\n"
+        "- SCIENTIFIC NOTATION BAN & NUMERIC ROUNDING MANDATE: NEVER display raw scientific notation (such as `$4.10185e+13`, `2.729217e+13`, or `5.9066e+07`) in user-facing responses. ALWAYS convert large values into rounded, human-readable economic figures with clean decimals up to points (2 to 3 decimal places): For >= 1 Trillion ($10^12), express in Trillions rounded to 2-3 decimal places (e.g. '$41.019 Trillion' or '$41.02 Trillion', '$27.292 Trillion', '$3.346 Trillion'); for >= 1 Billion ($10^9), express in Billions rounded to 2-3 decimal places (e.g. '$4.345 Billion' or '$6.445 Billion'); for >= 1 Million ($10^6), express in Millions rounded to 2-3 decimal places (e.g. '$59.07 Million'). When stating exact figures alongside rounded figures, format them with standard comma thousands separators: e.g. '$3.346 Trillion USD ($3,346,107,287,730.93)'.\n"
+        "- FOLLOW-UP TEMPORAL RESOLUTION ('SAME YEAR' MANDATE): When a user prompt is a follow-up referring to 'same year', 'in that year', 'that period', or asks 'what about [Country] in the same year?': 1. You MUST resolve the year strictly from the immediately preceding turn in conversation history (e.g. if the user previously asked 'tell me about indias GDP in 2020?', then 'what was GDP of china in same year?' refers strictly to the year 2020). NEVER default to another year (like 2022 or 2023). 2. Address typos in country names gracefully (e.g. 'chine' -> 'China'). 3. Call `query_pandas_dataframe` using that exact resolved year.\n"
+        "- NO CODE INTROSPECTION OR DATAFRAME MECHANICS IN ANSWERS: Never explain internal DataFrame mechanics, column names, or filtering steps in your response (e.g. NEVER write 'China's GDP in 2022 was retrieved by filtering the gdp_df for China in the Country Name column...'). State the factual answer directly, concisely, and conversationally.\n"
+        "- FOLLOW-UP SUB-CLUSTER SUMMARIZATION RULE: When the user asks to 'summarize above questions', 'summarize above', 'recap the above questions', or 'summarize our discussion': 1. Scope: Synthesize ONLY the immediate preceding cluster of related follow-up Q&As (the last 2 to 4 turns). Do NOT summarize the entire session or older unrelated turns. 2. Zero Tool Execution: Do NOT call `query_qdrant_vector_search` or `process_vision_element`. Rely strictly on the immediate `message_history`. 3. Format: Deliver a structured, high-density bulleted summary highlighting the specific countries/metrics compared, the exact figures retrieved (formatted with rounded decimal points and scale), and the final takeaway or comparison conclusion.\n"
         "- PANDAS CODE EXECUTION ORDER OF OPERATIONS: You MUST write your Pandas code in this exact order: 1. Filter out regional aggregates (e.g. World, EU, High income, etc.) using `~df['Country Name'].isin(...)`; 2. Cast columns to numeric using `pd.to_numeric(df[col], errors='coerce')`; 3. Perform calculations/aggregations; 4. Sort numerically using `sort_values` on raw numbers; 5. Slice head(N); 6. Format as strings last.\n"
         "- DIRECT LOOKUP FORMATTING RULES: For any Direct Lookup Queries (single/multiple entities/metrics/files), retrieve the requested records and format the output as a clean text-based Data Card inside 'text_reasoning':\n"
         "  1. NO MARKDOWN TABLES: Do not use Markdown table syntax (|---|).\n"
@@ -1611,6 +1674,9 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
         "your 'text_reasoning' field, leave 'extracted_table' as an empty list ([]), and complete the run.\n"
         "- Do not exceed 5 tool calls total."
     )
+    if ctx.deps and getattr(ctx.deps, "resolved_temporal_year", None):
+        prompt += f"\n\n[RESOLVED TEMPORAL CONTEXT: The user's query refers to the year {ctx.deps.resolved_temporal_year} from the prior turn. When querying pandas or answering, query and output data strictly for year '{ctx.deps.resolved_temporal_year}']\n"
+
     if ctx.deps and getattr(ctx.deps, "retrieved_chunks", None):
         top_3 = ctx.deps.retrieved_chunks[:3]
         clean_snippets = []
@@ -1691,7 +1757,8 @@ def query_pandas_dataframe(ctx: RunContext[SystemPipelinesDeps], python_code: st
         "WLD", "HIC", "LIC", "MIC", "UMC", "LMC", "LMY", "EAS", "ECS", "LCN",
         "MEA", "NAC", "SAS", "SSF", "OED", "EMU", "EUU", "ARB", "IDA", "IBD",
         "IDB", "HIP", "LDC", "FCS", "PST", "PRE", "EAR", "LTE", "SST", "OSS",
-        "CSS", "PSS", "Z4", "Z7", "TLA", "TSA", "TEA", "TEC", "TMN", "TSS"
+        "CSS", "PSS", "Z4", "Z7", "TLA", "TSA", "TEA", "TEC", "TMN", "TSS",
+        "IBT", "IDX", "CEB", "EAP", "ECA", "AFE", "AFW"
     }
     NON_COUNTRY_NAMES = {
         "world", "high income", "low income", "middle income", "upper middle income",
@@ -1702,37 +1769,47 @@ def query_pandas_dataframe(ctx: RunContext[SystemPipelinesDeps], python_code: st
         "heavily indebted poor countries (hipc)", "least developed countries: un classification",
         "fragile and conflict affected situations", "post-demographic dividend",
         "pre-demographic dividend", "early-demographic dividend", "late-demographic dividend",
-        "small states", "other small states", "caribbean small states", "pacific island small states"
+        "small states", "other small states", "caribbean small states", "pacific island small states",
+        "ida & ibrd total", "ibrd only", "ida total", "ida only", "ida blend"
     }
 
     def filter_country_only(df_in: pd.DataFrame) -> pd.DataFrame:
         if df_in is None or not isinstance(df_in, pd.DataFrame):
             return df_in
         res = df_in.copy()
+        if "Region" in res.columns:
+            res = res[res["Region"].notna() & (res["Region"].astype(str).str.strip().ne(""))]
         if "Country Code" in res.columns:
             res = res[~res["Country Code"].astype(str).str.upper().isin(NON_COUNTRY_CODES)]
         if "Country Name" in res.columns:
             res = res[~res["Country Name"].astype(str).str.lower().str.strip().isin(NON_COUNTRY_NAMES)]
         return res
 
-    # Auto-merge IncomeGroup into local execution dataframes
-    if gdp_df_local is not None and gdp_meta_local is not None and "IncomeGroup" not in gdp_df_local.columns:
+    # Auto-merge IncomeGroup and Region from metadata into local execution dataframes
+    if gdp_df_local is not None and gdp_meta_local is not None:
         try:
-            if "Country Code" in gdp_meta_local.columns and "IncomeGroup" in gdp_meta_local.columns:
-                gdp_df_local = gdp_df_local.merge(gdp_meta_local[["Country Code", "IncomeGroup"]], on="Country Code", how="left")
+            cols_to_merge = [c for c in ["Country Code", "IncomeGroup", "Region"] if c in gdp_meta_local.columns and c not in gdp_df_local.columns]
+            if "Country Code" not in cols_to_merge and "Country Code" in gdp_meta_local.columns:
+                cols_to_merge.append("Country Code")
+            if len(cols_to_merge) > 1:
+                gdp_df_local = gdp_df_local.merge(gdp_meta_local[cols_to_merge], on="Country Code", how="left")
         except Exception:
             pass
 
-    if co2_df_local is not None and co2_meta_local is not None and "IncomeGroup" not in co2_df_local.columns:
+    if co2_df_local is not None and co2_meta_local is not None:
         try:
-            if "Country Code" in co2_meta_local.columns and "IncomeGroup" in co2_meta_local.columns:
-                co2_df_local = co2_df_local.merge(co2_meta_local[["Country Code", "IncomeGroup"]], on="Country Code", how="left")
+            cols_to_merge = [c for c in ["Country Code", "IncomeGroup", "Region"] if c in co2_meta_local.columns and c not in co2_df_local.columns]
+            if "Country Code" not in cols_to_merge and "Country Code" in co2_meta_local.columns:
+                cols_to_merge.append("Country Code")
+            if len(cols_to_merge) > 1:
+                co2_df_local = co2_df_local.merge(co2_meta_local[cols_to_merge], on="Country Code", how="left")
         except Exception:
             pass
 
     # If query logic references country or top/ranking, apply filter_country_only to local datasets
-    clean_code_check = python_code.lower()
-    is_country_query = any(k in clean_code_check for k in ("country", "countries", "top", "highest", "lowest", "largest", "rank"))
+    clean_code_check = (python_code or "").lower()
+    intent_check = (query_intent or "").lower()
+    is_country_query = any(k in clean_code_check or k in intent_check for k in ("country", "countries", "top", "highest", "lowest", "largest", "smallest", "rank", "max", "min"))
     
     gdp_clean = filter_country_only(gdp_df_local) if is_country_query and gdp_df_local is not None else gdp_df_local
     co2_clean = filter_country_only(co2_df_local) if is_country_query and co2_df_local is not None else co2_df_local
@@ -1780,7 +1857,9 @@ def query_pandas_dataframe(ctx: RunContext[SystemPipelinesDeps], python_code: st
                 eval_res = eval(clean_code, {}, locs)
                 if eval_res is not None:
                     if isinstance(eval_res, (pd.DataFrame, pd.Series)):
-                        print(eval_res.to_markdown())
+                        print(eval_res.to_markdown(floatfmt=",.2f"))
+                    elif isinstance(eval_res, (float, int, np.floating)):
+                        print(f"{eval_res:,.2f}")
                     else:
                         print(eval_res)
             except Exception:
@@ -1793,7 +1872,9 @@ def query_pandas_dataframe(ctx: RunContext[SystemPipelinesDeps], python_code: st
                         eval_res = eval(compile(expr_node, filename="<ast>", mode="eval"), {}, locs)
                         if eval_res is not None:
                             if isinstance(eval_res, (pd.DataFrame, pd.Series)):
-                                print(eval_res.to_markdown())
+                                print(eval_res.to_markdown(floatfmt=",.2f"))
+                            elif isinstance(eval_res, (float, int, np.floating)):
+                                print(f"{eval_res:,.2f}")
                             else:
                                 print(eval_res)
                     else:
@@ -1813,7 +1894,9 @@ def query_pandas_dataframe(ctx: RunContext[SystemPipelinesDeps], python_code: st
         res_val = locs.get("result", locs.get("ans", locs.get("res", None)))
         if res_val is not None:
             if isinstance(res_val, (pd.DataFrame, pd.Series)):
-                output = res_val.to_markdown()
+                output = res_val.to_markdown(floatfmt=",.2f")
+            elif isinstance(res_val, (float, int, np.floating)):
+                output = f"{res_val:,.2f}"
             else:
                 output = str(res_val)
         else:
@@ -9706,6 +9789,34 @@ def run_pipeline(
     query_intent, allowed_tools = classify_query_intent(user_query)
     logger.info("🎯 [Pillar 1 Intent Router] Query: '%s' -> Intent: %s (Allowed: %s)", user_query[:50], query_intent.value, allowed_tools)
 
+    # Track and resolve temporal follow-ups ("same year", "that year")
+    import re
+    year_in_query = re.search(r"\b(19\d\d|20\d\d)\b", user_query)
+    if year_in_query:
+        st.session_state["LAST_ACTIVE_YEAR"] = year_in_query.group(1)
+
+    is_temporal_followup = bool(re.search(r"\b(?:same\s+year|that\s+year|in\s+that\s+year|that\s+same\s+year|same\s+period)\b", user_query, re.IGNORECASE))
+    resolved_temporal_year = None
+    if is_temporal_followup:
+        resolved_temporal_year = st.session_state.get("LAST_ACTIVE_YEAR")
+        if not resolved_temporal_year:
+            for msg in reversed(st.session_state.get("messages", [])):
+                c = str(msg.get("content") or "")
+                ym = re.search(r"\b(19\d\d|20\d\d)\b", c)
+                if ym:
+                    resolved_temporal_year = ym.group(1)
+                    st.session_state["LAST_ACTIVE_YEAR"] = resolved_temporal_year
+                    break
+        if resolved_temporal_year:
+            logger.info("📅 [Temporal Followup Resolved] 'same year' resolved to %s from session context", resolved_temporal_year)
+
+    # Scoped Follow-Up Sub-Cluster Summarization ("summarize above questions")
+    is_cluster_summary_req = bool(re.search(r"\b(?:summarize|recap|summary\s+of)\s+(?:above|recent|these|the\s+above)\b", user_query, re.IGNORECASE))
+    if is_cluster_summary_req:
+        query_intent = QueryIntent.CONVERSATIONAL
+        allowed_tools = {"allow_pandas": False, "allow_qdrant": False, "allow_vision": False}
+        logger.info("📋 [Follow-up Cluster Summarization] Scoped to immediate recent Q&A turns without external vector search.")
+
     # Option B: Parallel Async Pre-execution of Qdrant Text Chunks + Gemini Vision OCR
     top_chunks = None
     pre_fetched_vision_data = None
@@ -10214,7 +10325,8 @@ def run_pipeline(
         co2_metadata_df=co2_metadata_df,
         retrieved_chunks=top_chunks,
         pre_fetched_vision_data=pre_fetched_vision_data,
-        last_resolved_vision_path=resolved_img_path
+        last_resolved_vision_path=resolved_img_path,
+        resolved_temporal_year=resolved_temporal_year
     )
 
     # Sub-20ms Direct Fast-Path Exit for Narrative Visual Queries (Bypasses LLM Pydantic Schema Retries)
