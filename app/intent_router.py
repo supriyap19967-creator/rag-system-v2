@@ -13,6 +13,7 @@ class QueryIntent(str, Enum):
     TEXT_ONLY = "TEXT_ONLY"
     VISUAL_SPECIFIC = "VISUAL_SPECIFIC"
     HYBRID_MULTIMODAL = "HYBRID_MULTIMODAL"
+    CONVERSATIONAL = "CONVERSATIONAL"
 
 
 # Country / Entity indicators that target tabular CSV datasets
