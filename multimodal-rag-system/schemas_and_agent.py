@@ -165,7 +165,10 @@ class SystemPipelinesDeps:
         co2_metadata_df: pd.DataFrame | None = None,
         retrieved_chunks: list[Any] | None = None,
         pre_fetched_vision_data: str | None = None,
-        last_resolved_vision_path: str | None = None
+        last_resolved_vision_path: str | None = None,
+        resolved_temporal_year: str | None = None,
+        query_intent: Any = None,
+        allowed_tools: dict[str, bool] | None = None
     ):
         self.image_folder_path = image_folder_path
         self.session_signature = f"{session_user}_{uuid.uuid4().hex[:6].upper()}"
@@ -180,6 +183,9 @@ class SystemPipelinesDeps:
         self.retrieved_chunks = retrieved_chunks or []
         self.pre_fetched_vision_data = pre_fetched_vision_data
         self.last_resolved_vision_path = last_resolved_vision_path
+        self.resolved_temporal_year = resolved_temporal_year
+        self.query_intent = query_intent
+        self.allowed_tools = allowed_tools or {}
         self.vision_element_processed = bool(pre_fetched_vision_data)
 
     @property

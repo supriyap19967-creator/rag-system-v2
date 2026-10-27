@@ -232,7 +232,9 @@ class SystemPipelinesDeps:
         retrieved_chunks: list[Any] | None = None,
         pre_fetched_vision_data: str | None = None,
         last_resolved_vision_path: str | None = None,
-        resolved_temporal_year: str | None = None
+        resolved_temporal_year: str | None = None,
+        query_intent: Any = None,
+        allowed_tools: dict[str, bool] | None = None
     ):
         self.image_folder_path = image_folder_path
         self.session_signature = f"{session_user}_{uuid.uuid4().hex[:6].upper()}"
@@ -248,6 +250,8 @@ class SystemPipelinesDeps:
         self.pre_fetched_vision_data = pre_fetched_vision_data
         self.last_resolved_vision_path = last_resolved_vision_path
         self.resolved_temporal_year = resolved_temporal_year
+        self.query_intent = query_intent
+        self.allowed_tools = allowed_tools or {}
         self.vision_element_processed = bool(pre_fetched_vision_data)
         self.last_vision_raw_content = pre_fetched_vision_data or ""
 
@@ -1568,36 +1572,47 @@ def validate_result(ctx: RunContext[SystemPipelinesDeps], result: ChartTableData
             else:
                 val_logger.warning("❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.")
 
-    # Ensure visual_asset_path and image_path are populated if we have image information
-    visual_path = getattr(result, "visual_asset_path", None) or getattr(result, "image_path", None)
-    if not visual_path:
-        try:
-            target_cat, target_id = parse_target_asset(ctx.deps.user_query)
-            if target_cat and target_id:
-                from app.multimodal_assets import build_asset_registry, normalize_entity_id
-                norm_id = normalize_entity_id(f"{target_cat}_{target_id}")
-                registry = build_asset_registry()
-                for record in registry:
-                    if record.entity_id == norm_id:
-                        visual_path = record.absolute_path
+    # Strict Modality Isolation: Do NOT inject image paths into text-only or CSV queries!
+    cur_intent = getattr(ctx.deps, "query_intent", None)
+    intent_str = str(getattr(cur_intent, "value", cur_intent) or "")
+    has_explicit_asset = bool(parse_target_asset(ctx.deps.user_query)[0])
+    is_visual_turn = intent_str in ("VISUAL_SPECIFIC", "HYBRID_MULTIMODAL") or has_explicit_asset
+
+    if not is_visual_turn:
+        result = result.model_copy(update={
+            "visual_asset_path": None,
+            "image_path": None,
+        })
+    else:
+        visual_path = getattr(result, "visual_asset_path", None) or getattr(result, "image_path", None)
+        if not visual_path:
+            try:
+                target_cat, target_id = parse_target_asset(ctx.deps.user_query)
+                if target_cat and target_id:
+                    from app.multimodal_assets import build_asset_registry, normalize_entity_id
+                    norm_id = normalize_entity_id(f"{target_cat}_{target_id}")
+                    registry = build_asset_registry()
+                    for record in registry:
+                        if record.entity_id == norm_id:
+                            visual_path = record.absolute_path
+                            break
+            except Exception:
+                pass
+        if not visual_path and getattr(ctx.deps, "retrieved_chunks", None):
+            for chunk in ctx.deps.retrieved_chunks:
+                metadata = dict(chunk.get("metadata") or {})
+                for key in ("image_path", "figure_image_path", "chart_image_path", "table_image_path", "visual_asset_path"):
+                    val = str(metadata.get(key) or chunk.get(key) or "").strip()
+                    if val:
+                        visual_path = val
                         break
-        except Exception:
-            pass
-    if not visual_path and getattr(ctx.deps, "retrieved_chunks", None):
-        for chunk in ctx.deps.retrieved_chunks:
-            metadata = dict(chunk.get("metadata") or {})
-            for key in ("image_path", "figure_image_path", "chart_image_path", "table_image_path", "visual_asset_path"):
-                val = str(metadata.get(key) or chunk.get(key) or "").strip()
-                if val:
-                    visual_path = val
+                if visual_path:
                     break
-            if visual_path:
-                break
-    
-    result = result.model_copy(update={
-        "visual_asset_path": visual_path or result.visual_asset_path,
-        "image_path": visual_path or result.image_path,
-    })
+        
+        result = result.model_copy(update={
+            "visual_asset_path": visual_path or result.visual_asset_path,
+            "image_path": visual_path or result.image_path,
+        })
                 
     return result
 
@@ -1680,6 +1695,29 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
     if ctx.deps and getattr(ctx.deps, "resolved_temporal_year", None):
         prompt += f"\n\n[RESOLVED TEMPORAL CONTEXT: The user's query refers to the year {ctx.deps.resolved_temporal_year} from the prior turn. When querying pandas or answering, query and output data strictly for year '{ctx.deps.resolved_temporal_year}']\n"
 
+    cur_intent = getattr(ctx.deps, "query_intent", None)
+    if cur_intent:
+        intent_str = str(getattr(cur_intent, "value", cur_intent) or "")
+        if intent_str == "TEXT_ONLY":
+            prompt += (
+                "\n\n[LOCKED MODALITY: TEXT_ONLY - The user inquiry is a conceptual/policy text question. "
+                "Synthesize your answer solely from retrieved Qdrant document text chunks. "
+                "You are strictly forbidden from calling process_vision_element or query_pandas_dataframe. "
+                "Set 'visual_asset_path' and 'image_path' to null in your output.]\n"
+            )
+        elif intent_str == "CSV_ONLY":
+            prompt += (
+                "\n\n[LOCKED MODALITY: CSV_ONLY - The user inquiry is a tabular/data calculation question. "
+                "Answer strictly using query_pandas_dataframe. "
+                "You are strictly forbidden from calling process_vision_element or query_qdrant_vector_search. "
+                "Set 'visual_asset_path' and 'image_path' to null in your output.]\n"
+            )
+        elif intent_str == "VISUAL_SPECIFIC":
+            prompt += (
+                "\n\n[LOCKED MODALITY: VISUAL_SPECIFIC - The user inquiry explicitly targets a figure/chart/table. "
+                "Extract visual data points and populate 'visual_asset_path' and 'image_path'.]\n"
+            )
+
     if ctx.deps and getattr(ctx.deps, "retrieved_chunks", None):
         top_3 = ctx.deps.retrieved_chunks[:3]
         clean_snippets = []
@@ -1717,6 +1755,7 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
 
 
 @multimodal_agent.tool
+@fast_fallback_agent.tool
 def query_pandas_dataframe(ctx: RunContext[SystemPipelinesDeps], python_code: str, query_intent: str) -> str:
     """
     Call this tool for mathematical calculations, statistical aggregations, groupby operations,
@@ -1741,6 +1780,14 @@ def query_pandas_dataframe(ctx: RunContext[SystemPipelinesDeps], python_code: st
     6. Multi-Condition Filtering (GDP + CO2):
        - Merge `gdp_df` and `co2_df` on 'Country Code' with suffixes `('_gdp', '_co2')` and apply boolean indexing.
     """
+    # MODALITY ISOLATION GUARD: Block pandas execution for non-tabular turns
+    cur_intent = getattr(ctx.deps, "query_intent", None)
+    cur_allowed = getattr(ctx.deps, "allowed_tools", {}) or {}
+    intent_val = str(getattr(cur_intent, "value", cur_intent) or "")
+    if cur_intent and (intent_val in ("TEXT_ONLY", "VISUAL_SPECIFIC") and not cur_allowed.get("allow_pandas", False)):
+        logger.warning(f"[BLOCKED] [TOOL GUARD] query_pandas_dataframe blocked for {intent_val} query")
+        return f"PANDAS_TOOL_BLOCKED: The current inquiry is a document text/visual inquiry ({intent_val}). Do NOT query pandas. Answer using document text or visual extraction."
+
     import io
     import pandas as pd
     import numpy as np
@@ -1929,12 +1976,20 @@ def query_pandas_dataframe(ctx: RunContext[SystemPipelinesDeps], python_code: st
 
 
 @multimodal_agent.tool
+@fast_fallback_agent.tool
 def query_qdrant_vector_search(ctx: RunContext[SystemPipelinesDeps], semantic_query: str, target_collection: str = "conversational_rag") -> str:
     """
     Call this tool for natural language inquiries, contextual knowledge lookups,
     and text chunk extraction from the document collection.
     Use 'conversational_rag' as the target_collection name.
     """
+    # MODALITY ISOLATION GUARD: Block vector search for CSV_ONLY turns
+    cur_intent = getattr(ctx.deps, "query_intent", None)
+    cur_allowed = getattr(ctx.deps, "allowed_tools", {}) or {}
+    intent_val = str(getattr(cur_intent, "value", cur_intent) or "")
+    if cur_intent and (intent_val == "CSV_ONLY" and not cur_allowed.get("allow_qdrant", True)):
+        logger.warning("[BLOCKED] [TOOL GUARD] query_qdrant_vector_search blocked for CSV_ONLY query")
+        return "QDRANT_TOOL_BLOCKED: The current inquiry is a tabular CSV data question. Do NOT call vector search. Answer using query_pandas_dataframe." 
     logger.info("═"*60)
     logger.info("🔍 ENTERING CONTEXT SECURITY BOUNDARY (Qdrant Pipeline)")
     logger.info(f"   ↳ Active Request Signature: {ctx.deps.session_signature}")
@@ -2168,6 +2223,7 @@ def query_qdrant_vector_search(ctx: RunContext[SystemPipelinesDeps], semantic_qu
 
 
 @multimodal_agent.tool
+@fast_fallback_agent.tool
 def process_vision_element(
     ctx: RunContext[SystemPipelinesDeps], 
     visual_asset_path: str, 
@@ -2196,6 +2252,14 @@ def process_vision_element(
     logger.info(f"   ↳ Active Request Signature: {ctx.deps.session_signature}")
     logger.info(f"   ↳ Isolated File Path Context: {ctx.deps.image_folder_path}")
     logger.info("═"*60)
+
+    # MODALITY ISOLATION GUARD: Block vision processing for non-visual turns
+    cur_intent = getattr(ctx.deps, "query_intent", None)
+    cur_allowed = getattr(ctx.deps, "allowed_tools", {}) or {}
+    intent_val = str(getattr(cur_intent, "value", cur_intent) or "")
+    if cur_intent and (intent_val in ("TEXT_ONLY", "CSV_ONLY") or not cur_allowed.get("allow_vision", True)):
+        logger.warning(f"[BLOCKED] [TOOL GUARD] process_vision_element blocked for {intent_val} query")
+        return f"VISION_TOOL_BLOCKED: The current inquiry is a {intent_val} query. You are strictly forbidden from calling process_vision_element. Answer using retrieved document text or pandas data."
 
     visual_asset_path = os.path.normpath(visual_asset_path.replace("\\\\", "\\"))
 
@@ -9853,6 +9917,12 @@ def run_pipeline(
     query_intent, allowed_tools = classify_query_intent(user_query)
     logger.info("🎯 [Pillar 1 Intent Router] Query: '%s' -> Intent: %s (Allowed: %s)", user_query[:50], query_intent.value, allowed_tools)
 
+    # STRICT MODALITY ISOLATION: Wipe stale visual session state when current query is not a visual request
+    if query_intent in (QueryIntent.TEXT_ONLY, QueryIntent.CSV_ONLY, QueryIntent.CONVERSATIONAL):
+        st.session_state["LAST_ACTIVE_IMAGE_PATH"] = None
+        st.session_state["LAST_ACTIVE_TARGET_ID"] = None
+        st.session_state["LAST_ACTIVE_TARGET_CAT"] = None
+
     # Track and resolve temporal follow-ups ("same year", "that year")
     import re
     year_in_query = re.search(r"\b(19\d\d|20\d\d)\b", user_query)
@@ -10390,7 +10460,9 @@ def run_pipeline(
         retrieved_chunks=top_chunks,
         pre_fetched_vision_data=pre_fetched_vision_data,
         last_resolved_vision_path=resolved_img_path,
-        resolved_temporal_year=resolved_temporal_year
+        resolved_temporal_year=resolved_temporal_year,
+        query_intent=query_intent,
+        allowed_tools=allowed_tools
     )
 
     # Sub-20ms Direct Fast-Path Exit for Narrative Visual Queries (Bypasses LLM Pydantic Schema Retries)
@@ -10840,7 +10912,7 @@ def run_pipeline(
                 sources_breakdown.append("- 📊 **CSV Dataset**: `gdp_df.csv` / `co2_df.csv` (World Bank Data)")
             if getattr(deps, "retrieved_chunks", None) or query_intent in (QueryIntent.TEXT_ONLY, QueryIntent.HYBRID_MULTIMODAL, QueryIntent.VISUAL_SPECIFIC):
                 sources_breakdown.append("- 📄 **PDF Document Text**: `World Development Report 2025.pdf` (Qdrant Vector DB)")
-            if getattr(result.output, "visual_asset_path", None) or getattr(result.output, "image_path", None) or query_intent in (QueryIntent.VISUAL_SPECIFIC, QueryIntent.HYBRID_MULTIMODAL):
+            if (getattr(result.output, "visual_asset_path", None) or getattr(result.output, "image_path", None)) and query_intent in (QueryIntent.VISUAL_SPECIFIC, QueryIntent.HYBRID_MULTIMODAL):
                 v_path = getattr(result.output, "visual_asset_path", None) or getattr(result.output, "image_path", None) or "Visual Asset"
                 sources_breakdown.append(f"- 🖼️ **Visual Extraction**: `{os.path.basename(str(v_path))}`")
             
@@ -11253,18 +11325,25 @@ def main() -> None:
 
         # Check if the query contains keywords asking for a visual asset
         visual_keywords = ["figure", "fig", "table", "image", "chart", "diagram", "map", "box", "spotlight"]
-        is_visual_request = any(kw in user_query.lower() for kw in visual_keywords)
+        target_cat_req, target_id_req = parse_target_asset(user_query)
+        is_visual_request = bool(target_cat_req and target_id_req) or any(kw in user_query.lower() for kw in visual_keywords)
 
-        # Collect candidates and display only the single best cropped image
+        if not is_visual_request:
+            st.session_state["LAST_ACTIVE_IMAGE_PATH"] = None
+            st.session_state["LAST_ACTIVE_TARGET_ID"] = None
+            st.session_state["LAST_ACTIVE_TARGET_CAT"] = None
+
+        # Collect candidates and display only the single best cropped image if this is a visual request
         img_candidates = []
-        if found_image:
-            img_candidates.append(found_image)
-        if st.session_state.get("current_image_path"):
-            img_candidates.append(st.session_state.get("current_image_path"))
-        if st.session_state.get("LAST_ACTIVE_IMAGE_PATH"):
-            img_candidates.append(st.session_state.get("LAST_ACTIVE_IMAGE_PATH"))
+        if is_visual_request:
+            if found_image:
+                img_candidates.append(found_image)
+            if st.session_state.get("current_image_path"):
+                img_candidates.append(st.session_state.get("current_image_path"))
+            if st.session_state.get("LAST_ACTIVE_IMAGE_PATH"):
+                img_candidates.append(st.session_state.get("LAST_ACTIVE_IMAGE_PATH"))
             
-        best_active_image = get_best_single_cropped_image(img_candidates)
+        best_active_image = get_best_single_cropped_image(img_candidates) if is_visual_request else None
 
         if answer is not None:
             answer = sanitize_user_answer(extract_llm_response_text(answer))

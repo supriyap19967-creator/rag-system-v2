@@ -873,6 +873,10 @@ def get_supabase_asset_url(path_or_url: str) -> str:
     if marker in path_str:
         path_str = path_str.split(marker, 1)[1]
 
+    # Sanitize local Windows drive paths and temp paths (e.g., C:/Users/... or Temp/...)
+    if re.search(r"^[a-zA-Z]:/", path_str) or "rag_supabase_assets" in path_str.lower() or "temp/" in path_str.lower():
+        path_str = Path(path_str).name
+
     if path_str.startswith("./"):
         path_str = path_str[2:]
     path_str = path_str.lstrip("/")
