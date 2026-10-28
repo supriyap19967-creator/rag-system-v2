@@ -50,6 +50,8 @@ MULTIMODAL_RAG_DIR = PROJECT_ROOT / "multimodal-rag-system"
 if str(MULTIMODAL_RAG_DIR) not in sys.path:
     sys.path.insert(0, str(MULTIMODAL_RAG_DIR))
 
+from app.intent_router import QueryIntent, classify_query_intent
+
 try:
     import importlib
     schemas_mod = importlib.import_module("multimodal-rag-system.schemas_and_agent")

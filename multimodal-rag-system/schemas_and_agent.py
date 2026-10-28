@@ -27,6 +27,8 @@ PROJECT_ROOT = Path("C:/Users/supri/recovered-rag-project")
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
+from app.intent_router import QueryIntent, classify_query_intent
+
 import pandas as pd
 from PIL import Image
 from qdrant_client import QdrantClient
