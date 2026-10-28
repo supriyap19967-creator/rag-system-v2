@@ -1677,6 +1677,7 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
         "- TEXT REASONING COMPLETENESS RULE: Ensure the 'text_reasoning' field of your output schema is comprehensive, detailed, and covers all requested aspects of the query, explaining concepts, trends, and growth conditions thoroughly.\n"
         "- COMPACT HORIZONTAL-VERTICAL WRAP-UP RULE: When presenting extracted information from charts, diagrams, or tables (especially when there are multiple metrics or data points for an entity or country, e.g. Ghana): DO NOT list them vertically one after another in a tall list. Instead, format and wrap all values for each entity horizontally into a single compact wrap-up line (e.g. `**Ghana**: Value 1 (x) • Value 2 (y) • Value 3 (z)...` or inline bullet wrap-up) so that all values are shown completely without missing any, providing a balanced horizontal and vertical layout that avoids excessive vertical scrolling.\n"
         "- TEXT RESPONSE STRUCTURE RULE: For all text-based answers, you MUST structure your response into a clean layout. Use bold headings for key thematic sections, followed by logical horizontal wrap-up lists or clean bullet points. Do NOT write long paragraphs or dense blocks of text.\n"
+        "- EXPLANATORY DEPTH & SUBPART ELABORATION MANDATE: When answering conceptual, policy, or explanatory questions (such as inquiries asking about core pillars, elements, dimensions, frameworks, or categories): 1. DO NOT JUST LIST NAMES: Never provide a bare bullet list of pillar/element names without substance. 2. EXPLAIN EACH PILLAR & SUBPART: If there are any subparts, pillars, elements, or categories in the answer, you MUST explain each of them in detail with their definitions, functions, operational roles, and significance according to the report; do NOT just list things. 3. COMPREHENSIVE SYNTHESIS: Dedicate a structured section or paragraph to each individual element, synthesizing details from the retrieved chunks.\n"
         "- CANONICAL METRIC DISAMBIGUATION: Total GDP (`NY.GDP.MKTP.CD`) is TOTAL market value in current US$. Do NOT confuse or label it as 'GDP per capita'. GDP per capita (`NY.GDP.PCAP.CD`) is per-person output. Keep these metrics strictly separate. Production-based CO2 (`EN.ATM.CO2E.PC`) is distinct from Consumption-based CO2 in figures. Always specify the exact indicator scope.\n"
         "- INCOME GROUP CLAIM BOUNDARY RULE: `IncomeGroup` is a World Bank GNI classification. Do NOT claim or imply that IncomeGroup measures compliance rate, regulatory capacity, or standard enforcement score.\n"
         "- FORBIDDEN FABRICATION RULE: NEVER invent or populate dummy values like 1234, 5678, 50000, 20000, 10000. If a metric/value is unavailable in retrieved chunks or pandas output, state explicitly: 'Requested value is unavailable in source documents.'\n"
@@ -1719,24 +1720,26 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
             )
 
     if ctx.deps and getattr(ctx.deps, "retrieved_chunks", None):
-        top_3 = ctx.deps.retrieved_chunks[:3]
+        target_chunk_count = 6 if getattr(ctx.deps, "query_intent", None) in ("TEXT_ONLY", QueryIntent.TEXT_ONLY) else 3
+        top_chunks_slice = ctx.deps.retrieved_chunks[:target_chunk_count]
         clean_snippets = []
-        for c in top_3:
+        for c in top_chunks_slice:
             text = ""
             if isinstance(c, dict):
                 text = c.get("content") or c.get("page_content") or c.get("text") or str(c)
             else:
                 text = getattr(c, "content", None) or getattr(c, "page_content", None) or getattr(c, "text", None) or str(c)
             text_clean = str(text or "").strip()
-            if len(text_clean) > 1000:
-                text_clean = text_clean[:1000] + "..."
+            if len(text_clean) > 1200:
+                text_clean = text_clean[:1200] + "..."
             if text_clean:
                 clean_snippets.append(text_clean)
         chunks_str = "\n---\n".join(clean_snippets)
+        num_snippets = len(clean_snippets)
         prompt += (
-            f"\n\nPRE-RETRIEVED CONTEXT CHUNKS (TOP-3 CLEAN SNIPPETS):\n"
+            f"\n\nPRE-RETRIEVED CONTEXT CHUNKS (TOP-{num_snippets} CLEAN SNIPPETS):\n"
             f"The following clean context chunks have ALREADY been retrieved for this query:\n{chunks_str}\n"
-            f"If these chunks provide sufficient information to answer the query, prioritize using them directly to produce the final ChartTableData answer in 1 turn without making extra tool calls unless additional information is required.\n"
+            f"Use these retrieved chunks as your primary source of ground truth to produce a comprehensive, well-structured answer.\n"
         )
     if ctx.deps and getattr(ctx.deps, "pre_fetched_vision_data", None):
         prompt += (
@@ -2004,7 +2007,8 @@ def query_qdrant_vector_search(ctx: RunContext[SystemPipelinesDeps], semantic_qu
     if ctx.deps and getattr(ctx.deps, "retrieved_chunks", None):
         logger.info("⚡ [Fast-Path Cache] Returning pre-hydrated vector search chunks from memory!")
         formatted_chunks = []
-        for idx, chunk in enumerate(ctx.deps.retrieved_chunks[:3], start=1):
+        target_k = 6 if getattr(ctx.deps, "query_intent", None) in ("TEXT_ONLY", QueryIntent.TEXT_ONLY) else 3
+        for idx, chunk in enumerate(ctx.deps.retrieved_chunks[:target_k], start=1):
             content = chunk.get("content") or chunk.get("page_content") or chunk.get("text") or str(chunk) if isinstance(chunk, dict) else str(chunk)
             meta = chunk.get("metadata", {}) if isinstance(chunk, dict) else {}
             source = (meta.get("source_file") if isinstance(meta, dict) else None) or (chunk.get("source") if isinstance(chunk, dict) else None) or "Document Text"
@@ -10139,14 +10143,16 @@ def run_pipeline(
                     qdrant_sparse_vec = models.SparseVector(indices=sp_indices, values=sp_values)
                     
                     dense_using, sparse_using = get_cached_vector_names(client, COLLECTION_NAME)
+                    prefetch_limit = 20 if query_intent == QueryIntent.TEXT_ONLY else 10
+                    query_limit = 15 if query_intent == QueryIntent.TEXT_ONLY else 5
                     query_res = client.query_points(
                         collection_name=COLLECTION_NAME,
                         prefetch=[
-                            models.Prefetch(query=dense_vec, using=dense_using, limit=10),
-                            models.Prefetch(query=qdrant_sparse_vec, using=sparse_using, limit=10)
+                            models.Prefetch(query=dense_vec, using=dense_using, limit=prefetch_limit),
+                            models.Prefetch(query=qdrant_sparse_vec, using=sparse_using, limit=prefetch_limit)
                         ],
                         query=models.FusionQuery(fusion=models.Fusion.RRF),
-                        limit=5
+                        limit=query_limit
                     )
                     gen_payloads = [pt.payload for pt in query_res.points if pt.payload]
                     # Deduplicate general payloads against figure payloads
@@ -10167,18 +10173,33 @@ def run_pipeline(
                     p_copy["content"] = clean_and_strip_chunk(content)
                     cleaned_payloads.append(p_copy)
 
+                # Filter out pure bibliography / citation / stub entries for text inquiries
+                def is_informative_text_chunk(payload: dict) -> bool:
+                    c = str(payload.get("content") or payload.get("page_content") or payload.get("text") or "").strip()
+                    if len(c) < 70:
+                        return False
+                    c_low = c.lower()
+                    if any(term in c_low for term in ["discussion paper", "working paper", "research policy", "doi.org", "nber working paper"]):
+                        if re.search(r"\b(?:19|20)\d\d\b[,\.]\s*[\"\'\u201c\u2018]", c) or "vol." in c_low or "pp." in c_low:
+                            return False
+                    return True
+
+                filtered_payloads = [p for p in cleaned_payloads if is_informative_text_chunk(p)]
+                candidate_payloads = filtered_payloads if len(filtered_payloads) >= 3 else cleaned_payloads
+
+                target_k = 6 if query_intent == QueryIntent.TEXT_ONLY else 3
                 try:
                     from app.reranker import get_reranker_singleton
                     from langchain_core.documents import Document
-                    docs = [Document(page_content=p.get("content", ""), metadata=p) for p in cleaned_payloads]
+                    docs = [Document(page_content=p.get("content", ""), metadata=p) for p in candidate_payloads]
                     reranker = get_reranker_singleton()
                     if reranker:
-                        reranked_docs = reranker.rerank(user_query, docs, top_k=3)
+                        reranked_docs = reranker.rerank(user_query, docs, top_k=target_k)
                         return [d.metadata for d in reranked_docs]
-                    return cleaned_payloads[:3]
+                    return candidate_payloads[:target_k]
                 except Exception as rerank_err:
-                    logger.warning("Local BGE reranker notice: %s. Returning top 3 cleaned Qdrant chunks.", rerank_err)
-                    return cleaned_payloads[:3]
+                    logger.warning("Local BGE reranker notice: %s. Returning top %d cleaned Qdrant chunks.", rerank_err, target_k)
+                    return candidate_payloads[:target_k]
             except Exception as q_err:
                 logger.warning("Parallel Qdrant scroll notice: %s", q_err)
                 return None
@@ -10822,7 +10843,10 @@ def run_pipeline(
             elif top_chunks:
                 raw_reasoning = "\n\n".join([c.get("page_content", str(c)) if isinstance(c, dict) else str(c) for c in top_chunks[:2]])
 
-        answer_text = format_compact_horizontal_wrapup(raw_reasoning)
+        if query_intent == QueryIntent.TEXT_ONLY:
+            answer_text = clean_stray_markdown_stars(raw_reasoning)
+        else:
+            answer_text = format_compact_horizontal_wrapup(raw_reasoning)
         if text_stream_callback and callable(text_stream_callback) and answer_text:
             try:
                 text_stream_callback(answer_text)

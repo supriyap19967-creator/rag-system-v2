@@ -1142,6 +1142,7 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
         "- CORRELATION VS CAUSATION RULE: PDF text findings describe correlations/associations. Do NOT overstate claims as direct causal relationships unless explicitly proven in text.\n"
         "- PANDAS EXECUTION MANDATE: For all dataset calculations, aggregations, or groupbys, ALWAYS run actual Pandas code using `query_pandas_dataframe`. Do NOT infer mathematical results from text chunks.\n"
         "- MODALITY TAGGING MANDATE: Explicitly annotate data origins in your text reasoning: `[CSV Data]`, `[PDF Text]`, or `[Visual Asset]`.\n"
+        "- EXPLANATORY DEPTH & SUBPART ELABORATION MANDATE: When answering conceptual, policy, or explanatory questions (such as inquiries asking about core pillars, elements, dimensions, frameworks, or categories): 1. DO NOT JUST LIST NAMES: Never provide a bare bullet list of pillar/element names without substance. 2. EXPLAIN EACH PILLAR & SUBPART: If there are any subparts, pillars, elements, or categories in the answer, you MUST explain each of them in detail with their definitions, functions, operational roles, and significance according to the report; do NOT just list things. 3. COMPREHENSIVE SYNTHESIS: Dedicate a structured section or paragraph to each individual element, synthesizing details from the retrieved chunks.\n"
         "- FOLLOW-UP & SPECIFIC QUESTION ANSWERING RULE: If the user prompt asks a specific question (e.g., asking for a single specific metric, value, category, or country from a figure, chart, or table), answer ONLY the specific question asked. Extract and report the exact requested value directly in 1-2 concise sentences. Do NOT re-generate or repeat the full general overview, macro trends, or full table narrative of the entire figure unless the user explicitly asks to 'describe the entire figure' or 'give a full summary of Figure X'.\n"
         "- For pure CSV-only queries targeting GDP/CO2 variables without visual/text cross-references, call `query_pandas_dataframe` only and return the final answer formatted as a key-value card inside 'text_reasoning'. You MUST retrieve the exact unit or metric from the 'Indicator Name' column of the dataframe.\n"
         "- For comparison, ranking, or statistical queries targeting multiple countries or years, you MUST append a brief 1-2 sentence analytical summary to the final output sentence, comparing the values (e.g., identifying which country/year has the highest or lowest GDP/emissions, and highlighting the difference or trend direction).\n"
@@ -1151,13 +1152,15 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
         "- Do not exceed 5 tool calls total."
     )
     if ctx.deps and getattr(ctx.deps, "retrieved_chunks", None):
-        top_3_chunks = ctx.deps.retrieved_chunks[:3]
-        clean_chunks = [clean_and_strip_chunk(c) for c in top_3_chunks if c]
+        target_chunk_count = 6 if getattr(ctx.deps, "query_intent", None) in ("TEXT_ONLY", QueryIntent.TEXT_ONLY) else 3
+        top_chunks_slice = ctx.deps.retrieved_chunks[:target_chunk_count]
+        clean_chunks = [clean_and_strip_chunk(c) for c in top_chunks_slice if c]
         chunks_str = "\n---\n".join([c for c in clean_chunks if c.strip()])
+        num_snippets = len(clean_chunks)
         prompt += (
-            f"\n\nPRE-RETRIEVED CONTEXT CHUNKS (TOP-3 RERANKED):\n"
+            f"\n\nPRE-RETRIEVED CONTEXT CHUNKS (TOP-{num_snippets} RERANKED):\n"
             f"The following clean context chunks have ALREADY been retrieved for this query:\n{chunks_str}\n"
-            f"If these chunks provide sufficient information to answer the query, prioritize using them directly to produce the final ChartTableData answer in 1 turn without making extra tool calls unless additional information is required.\n"
+            f"Use these retrieved chunks as your primary source of ground truth to produce a comprehensive, well-structured answer.\n"
         )
     if ctx.deps and getattr(ctx.deps, "pre_fetched_vision_data", None):
         prompt += (
