@@ -1975,6 +1975,15 @@ def query_pandas_dataframe(ctx: RunContext[SystemPipelinesDeps], python_code: st
     if "Calculation Provenance" not in output:
         output += prov_block
 
+    if hasattr(ctx.deps, "retrieved_chunks"):
+        if ctx.deps.retrieved_chunks is None:
+            ctx.deps.retrieved_chunks = []
+        ctx.deps.retrieved_chunks.append({
+            "content": output,
+            "source": f"{target_ds}.csv",
+            "dataset": target_ds
+        })
+
     return output
 
 
@@ -10987,61 +10996,62 @@ def run_pipeline(
         answer_text = unwrap_markdown_table_code_fences(answer_text)
 
         # Asynchronously dispatch out-of-band Ragas evaluation to Celery worker queue and log contexts to Langfuse trace metadata
+        text_chunks = []
+        extracted_csv_strings = []
+        combined_contexts = []
+        cleaned_answer = answer_text
         try:
-            if active_trace_id:
-                text_chunks = []
-                for s in sources:
-                    if isinstance(s, dict):
-                        txt = s.get("content") or s.get("text") or ""
-                        if txt:
-                            text_chunks.append(txt)
-                            
-                if not text_chunks and hasattr(deps, "retrieved_chunks") and deps.retrieved_chunks:
-                    for c in deps.retrieved_chunks:
-                        txt = ""
-                        if isinstance(c, dict):
-                            txt = c.get("content") or c.get("text") or ""
-                        else:
-                            txt = getattr(c, "content", None) or getattr(c, "text", None) or ""
-                        if txt:
-                            text_chunks.append(txt)
-                
-                extracted_csv_strings = []
-                if result and hasattr(result, "output") and result.output.extracted_table:
-                    for row in result.output.extracted_table:
-                        row_dict = to_dict(row)
-                        row_str = "The extracted table row shows: " + ", ".join(f"{k} is {v}" for k, v in row_dict.items())
-                        extracted_csv_strings.append(row_str)
-                
-                # Proactively inspect messages for tool responses (e.g. pandas tool outputs)
-                try:
-                    if result and hasattr(result, "new_messages") and result.new_messages():
-                        for msg in result.new_messages():
-                            if hasattr(msg, "parts"):
-                                for part in msg.parts:
-                                    if part.__class__.__name__ in ["ToolReturn", "ToolReturnPart"] or hasattr(part, "tool_name"):
-                                        if getattr(part, "tool_name", "") == "query_pandas_dataframe":
-                                            content = str(getattr(part, "content", "") or "")
-                                            if content.strip():
-                                                extracted_csv_strings.append(f"Pandas tool returned execution output: {content.strip()}")
-                except Exception:
-                    pass
-                
-                combined_contexts = list(text_chunks)
-                if extracted_csv_strings:
-                    combined_contexts.extend(extracted_csv_strings)
-                
-                # Clean response of metadata / source trail / table formatting
-                import re
-                cleaned_answer = answer_text
-                if "**Source Trail:**" in cleaned_answer:
-                    cleaned_answer = cleaned_answer.split("**Source Trail:**")[0]
-                if "### Extracted Table Data" in cleaned_answer:
-                    cleaned_answer = cleaned_answer.split("### Extracted Table Data")[0]
-                cleaned_answer = cleaned_answer.strip()
-                cleaned_answer = cleaned_answer.replace("**", "")
-                cleaned_answer = re.sub(r'(?m)^\s*[-*+]\s+', '', cleaned_answer)
+            for s in sources:
+                if isinstance(s, dict):
+                    txt = s.get("content") or s.get("text") or ""
+                    if txt:
+                        text_chunks.append(txt)
+                        
+            if not text_chunks and hasattr(deps, "retrieved_chunks") and deps.retrieved_chunks:
+                for c in deps.retrieved_chunks:
+                    txt = ""
+                    if isinstance(c, dict):
+                        txt = c.get("content") or c.get("text") or ""
+                    else:
+                        txt = getattr(c, "content", None) or getattr(c, "text", None) or ""
+                    if txt:
+                        text_chunks.append(txt)
+            
+            if result and hasattr(result, "output") and result.output.extracted_table:
+                for row in result.output.extracted_table:
+                    row_dict = to_dict(row)
+                    row_str = "The extracted table row shows: " + ", ".join(f"{k} is {v}" for k, v in row_dict.items())
+                    extracted_csv_strings.append(row_str)
+            
+            # Proactively inspect messages for tool responses (e.g. pandas tool outputs)
+            try:
+                if result and hasattr(result, "new_messages") and result.new_messages():
+                    for msg in result.new_messages():
+                        if hasattr(msg, "parts"):
+                            for part in msg.parts:
+                                if part.__class__.__name__ in ["ToolReturn", "ToolReturnPart"] or hasattr(part, "tool_name"):
+                                    if getattr(part, "tool_name", "") == "query_pandas_dataframe":
+                                        content = str(getattr(part, "content", "") or "")
+                                        if content.strip():
+                                            extracted_csv_strings.append(f"Pandas tool returned execution output: {content.strip()}")
+            except Exception:
+                pass
+            
+            combined_contexts = list(text_chunks)
+            if extracted_csv_strings:
+                combined_contexts.extend(extracted_csv_strings)
+            
+            # Clean response of metadata / source trail / table formatting
+            import re
+            if "**Source Trail:**" in cleaned_answer:
+                cleaned_answer = cleaned_answer.split("**Source Trail:**")[0]
+            if "### Extracted Table Data" in cleaned_answer:
+                cleaned_answer = cleaned_answer.split("### Extracted Table Data")[0]
+            cleaned_answer = cleaned_answer.strip()
+            cleaned_answer = cleaned_answer.replace("**", "")
+            cleaned_answer = re.sub(r'(?m)^\s*[-*+]\s+', '', cleaned_answer)
 
+            if active_trace_id:
                 # 1. Non-blocking Async Dispatch: Update Langfuse metadata in background worker
                 def _async_langfuse_update(ans_clean, contexts_comb, csv_strings, t_id):
                     if not t_id or not os.getenv("LANGFUSE_PUBLIC_KEY"):
@@ -11068,8 +11078,6 @@ def run_pipeline(
                         logger.warning("Background Langfuse trace update notice: %s", lf_bg_err)
 
                 _RAG_BG_EXECUTOR.submit(_async_langfuse_update, cleaned_answer, combined_contexts, extracted_csv_strings, active_trace_id)
-                
-                # Background end-to-end Ragas evaluator disabled per user request (step-by-step pipeline log scores used exclusively)
         except Exception as eval_dispatch_exc:
             logger.warning("Failed to handle background evaluation: %s", eval_dispatch_exc)
 
@@ -11108,7 +11116,8 @@ def run_pipeline(
                     res_payload["image_path"] = resolved_img or res_payload.get("image_path")
                     res_payload["final_image_path"] = resolved_img or res_payload.get("final_image_path")
                     
-                chunks_dict = [{"content": c} for c in text_chunks]
+                active_eval_contexts = combined_contexts if combined_contexts else text_chunks
+                chunks_dict = [{"content": c} for c in active_eval_contexts]
                 step1_res = evaluate_step_1_retrieval(user_query, chunks_dict, "")
                 step2_res = evaluate_step_2_generation(user_query, chunks_dict, cleaned_answer)
                 step3_res = evaluate_step_3_asset_resolution(user_query, res_payload)
@@ -11128,7 +11137,7 @@ def run_pipeline(
                 print("=" * 80 + "\n", file=sys.stderr, flush=True)
 
                 # Push exact step-by-step scores directly to active Langfuse trace
-                if trace_id and langfuse_context is not None:
+                if active_trace_id and langfuse_context is not None:
                     try:
                         langfuse_scores = {
                             "Step 1 - Retriever Recall": float(step1_res.get("context_recall", 0.0)),
