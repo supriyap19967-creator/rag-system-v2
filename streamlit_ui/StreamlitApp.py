@@ -989,22 +989,70 @@ def format_compact_horizontal_wrapup(text: str) -> str:
     return "\n".join(new_lines)
 
 
+def classify_visual_query_nature(user_query: str) -> str:
+    """
+    Classifies a visual inquiry into:
+    - 'OVERVIEW': Explicit requests for full figure overview, extraction of all data points, trend analysis.
+    - 'ANALYTICAL': Questions requiring comparative math, difference between bars, highest/lowest, ratio, correlation, why.
+    - 'TARGETED_LOOKUP': Inquiries asking for a specific year, specific category, or specific row value.
+    """
+    if not user_query:
+        return "OVERVIEW"
+    q_lower = user_query.lower()
+    
+    # 1. Analytical / Comparative triggers (MUST route to LLM to compute math/differences/synthesis)
+    analytical_keywords = [
+        "difference between", "difference in", "highest", "lowest", "maximum", "minimum",
+        "max bar", "min bar", "tallest", "shortest", "compare", "comparison", "versus", "vs",
+        "steepest", "fastest", "slowest", "ratio of", "change between", "gap between",
+        "why did", "why does", "what explains", "correlation between", "relationship between",
+        "how much more", "how many more", "which is greater", "which is higher", "which is lower"
+    ]
+    if any(k in q_lower for k in analytical_keywords):
+        return "ANALYTICAL"
+        
+    # 2. Check for explicit specific discriminators (Year or specific category)
+    years = re.findall(r'\b(1[7-9]\d{2}|20\d{2})\b', q_lower)
+    specific_phrases = [
+        "low income", "lower middle income", "lower middle", "upper middle income", "upper middle",
+        "high income", "panel a", "panel b", "panel c", "panel d", "standard adopted", "no standard adopted",
+        "providers paid", "mandated speed"
+    ]
+    has_year = bool(years)
+    has_specific_phrase = any(p in q_lower for p in specific_phrases)
+    
+    # 3. Explicit overview / extraction triggers
+    overview_keywords = [
+        "extract the data points", "extract all data points", "extract data points",
+        "extract table", "explain the trend", "explain figure", "explain chart",
+        "describe figure", "describe chart", "tell me about", "overview of", "show me figure",
+        "full breakdown", "all data points", "full extraction"
+    ]
+    is_explicit_overview = any(k in q_lower for k in overview_keywords)
+    
+    if (has_year or has_specific_phrase) and not is_explicit_overview:
+        return "TARGETED_LOOKUP"
+        
+    if is_explicit_overview and not (has_year or has_specific_phrase):
+        return "OVERVIEW"
+        
+    if has_year or has_specific_phrase:
+        return "TARGETED_LOOKUP"
+        
+    return "OVERVIEW"
+
+
 def filter_cached_transcription_for_user_query(query: str, raw_cache: str) -> str:
     """Filters raw pre-fetched markdown tables to present ONLY lines matching the user's specific sub-question keywords."""
     if not raw_cache or not isinstance(raw_cache, str):
         return raw_cache or ""
     
     q_clean = query.lower()
-    
-    # Check if query asks for a full figure summary/overview
-    is_general_overview = any(phrase in q_clean for phrase in ["tell me about", "explain figure", "explain chart", "explain table", "full summary", "describe figure", "describe chart", "overview of"]) and not any(kw in q_clean for kw in ["low income", "high income", "upper middle", "lower middle", "panel a", "panel b", "value of", "values of", "what is the value", "highest", "lowest", "compare"])
-    if is_general_overview:
-        return raw_cache
-
-    # Recognized multi-word category phrases for exact phrase boundary isolation
+    years = re.findall(r'\b(1[7-9]\d{2}|20\d{2})\b', q_clean)
     category_phrases = [
         "low income", "lower middle income", "lower middle", "upper middle income", "upper middle",
-        "high income", "panel a", "panel b", "panel c", "panel d", "standard adopted", "no standard adopted"
+        "high income", "panel a", "panel b", "panel c", "panel d", "standard adopted", "no standard adopted",
+        "providers paid", "mandated speed"
     ]
     
     target_phrase = None
@@ -1013,52 +1061,104 @@ def filter_cached_transcription_for_user_query(query: str, raw_cache: str) -> st
             target_phrase = phrase
             break
 
-    lines = raw_cache.split('\n')
-    header_lines = []
-    matched_narrative_lines = []
-    matched_table_lines = []
-    
-    stop_words = {"what", "where", "which", "figure", "table", "chart", "values", "value", "about", "tell", "show", "give", "from", "above", "this", "that", "in", "the", "are", "for", "is", "of", "and", "group"}
-    q_keywords = [w for w in re.findall(r'\b[A-Za-z0-9\._\-]+\b', q_clean) if len(w) > 2 and w not in stop_words]
+    # If neither year nor specific phrase, check if it's general overview
+    if not years and not target_phrase:
+        is_general_overview = any(phrase in q_clean for phrase in [
+            "tell me about", "explain figure", "explain chart", "explain table", "full summary",
+            "describe figure", "describe chart", "overview of", "extract the data points", "extract all"
+        ])
+        if is_general_overview:
+            return raw_cache
 
-    for line in lines:
-        l_strip = line.strip()
-        l_lower = l_strip.lower()
-        
-        # Detect table rows
-        if l_strip.startswith("|") and ("|" in l_strip[1:]):
-            if "---" in l_strip or any(h in l_lower for h in ["income", "group", "category", "series", "panel", "metric", "year", "country", "item", "data point"]):
-                header_lines.append(line)
-            else:
-                if target_phrase:
-                    first_cell = l_lower.split("|")[1] if len(l_lower.split("|")) > 1 else l_lower
-                    if target_phrase in first_cell or target_phrase in l_lower:
-                        if target_phrase == "low income" and ("lower middle" in l_lower or "upper middle" in l_lower):
-                            continue
-                        matched_table_lines.append(line)
-                elif q_keywords and any(kw in l_lower for kw in q_keywords):
-                    matched_table_lines.append(line)
-        else:
-            if target_phrase:
-                if target_phrase in l_lower:
-                    if target_phrase == "low income" and ("lower middle" in l_lower or "upper middle" in l_lower or "high income" in l_lower):
-                        continue
-                    if target_phrase == "lower middle" and "upper middle" in l_lower:
-                        continue
-                    matched_narrative_lines.append(line)
-            elif q_keywords and any(kw in l_lower for kw in q_keywords):
+    lines = raw_cache.split('\n')
+    table_lines = [l for l in lines if l.strip().startswith('|')]
+    narrative_lines = [l for l in lines if not l.strip().startswith('|')]
+    
+    header_lines = []
+    data_lines = []
+    if len(table_lines) >= 2:
+        header_lines = [table_lines[0], table_lines[1]]
+        data_lines = table_lines[2:]
+    else:
+        data_lines = table_lines
+
+    matched_table_lines = []
+    for line in data_lines:
+        l_lower = line.lower()
+        if years:
+            if any(y in l_lower for y in years):
+                matched_table_lines.append(line)
+        elif target_phrase:
+            if target_phrase in l_lower:
+                if target_phrase == "low income" and ("lower middle" in l_lower or "upper middle" in l_lower):
+                    continue
+                matched_table_lines.append(line)
+
+    matched_narrative_lines = []
+    for line in narrative_lines:
+        l_lower = line.lower()
+        if years:
+            if any(y in l_lower for y in years):
+                matched_narrative_lines.append(line)
+        elif target_phrase:
+            if target_phrase in l_lower:
+                if target_phrase == "low income" and ("lower middle" in l_lower or "upper middle" in l_lower or "high income" in l_lower):
+                    continue
+                if target_phrase == "lower middle" and "upper middle" in l_lower:
+                    continue
                 matched_narrative_lines.append(line)
 
     result_blocks = []
     if matched_narrative_lines:
-        result_blocks.append("\n".join(matched_narrative_lines))
+        result_blocks.append('\n'.join(matched_narrative_lines))
     if matched_table_lines:
-        result_blocks.append("\n".join(header_lines + matched_table_lines))
+        result_blocks.append('\n'.join(header_lines + matched_table_lines))
 
     if result_blocks:
-        return "\n\n".join(result_blocks)
+        return '\n\n'.join(result_blocks)
         
     return raw_cache
+
+
+def filter_extracted_rows_for_user_query(query: str, rows: list) -> list:
+    """Filters a list of ChartTableRow objects down to only those matching target years or categories."""
+    if not rows or not query:
+        return rows
+    q_lower = query.lower()
+    years = re.findall(r'\b(1[7-9]\d{2}|20\d{2})\b', q_lower)
+    specific_phrases = [
+        "low income", "lower middle income", "lower middle", "upper middle income", "upper middle",
+        "high income", "panel a", "panel b", "panel c", "panel d", "standard adopted", "no standard adopted",
+        "providers paid", "mandated speed"
+    ]
+    matched_target = None
+    for p in specific_phrases:
+        if p in q_lower:
+            matched_target = p
+            break
+            
+    filtered = []
+    if years:
+        for r in rows:
+            s = str(getattr(r, 'Series', '') or '')
+            c = str(getattr(r, 'Category', '') or '')
+            val = str(getattr(r, 'TargetValue', '') or '')
+            row_str = f"{s} {c} {val}".lower()
+            if any(y in row_str for y in years):
+                filtered.append(r)
+    elif matched_target:
+        for r in rows:
+            s = str(getattr(r, 'Series', '') or '')
+            c = str(getattr(r, 'Category', '') or '')
+            row_str = f"{s} {c}".lower()
+            if matched_target in row_str:
+                if matched_target == "low income" and ("lower middle" in row_str or "upper middle" in row_str):
+                    continue
+                filtered.append(r)
+                
+    if filtered and len(filtered) < len(rows):
+        return filtered
+    return rows
 
 
 
@@ -1234,13 +1334,14 @@ class ChartTableData(BaseModel):
                         self.extracted_table = [ChartTableRow(**r) for r in parsed_rows]
                         return self
                 
-                # Fallback: parse from the raw vision response stored globally
-                if LAST_VISION_RAW_CONTENT and "|" in LAST_VISION_RAW_CONTENT:
-                    parsed_rows = parse_markdown_table_to_dicts(LAST_VISION_RAW_CONTENT)
-                    if parsed_rows and not is_table_invalid(parsed_rows):
-                        val_logger.info(f"[VALIDATION SUCCESS] Automatically parsed {len(parsed_rows)} rows from global vision raw content.")
-                        self.extracted_table = [ChartTableRow(**r) for r in parsed_rows]
-                        return self
+                # Fallback: parse from the raw vision response stored globally (ONLY for full OVERVIEW queries)
+                if classify_visual_query_nature(user_query) == "OVERVIEW":
+                    if LAST_VISION_RAW_CONTENT and "|" in LAST_VISION_RAW_CONTENT:
+                        parsed_rows = parse_markdown_table_to_dicts(LAST_VISION_RAW_CONTENT)
+                        if parsed_rows and not is_table_invalid(parsed_rows):
+                            val_logger.info(f"[VALIDATION SUCCESS] Automatically parsed {len(parsed_rows)} rows from global vision raw content.")
+                            self.extracted_table = [ChartTableRow(**r) for r in parsed_rows]
+                            return self
                 
                 val_logger.warning("[VALIDATION WARNING] Empty or dummy table payload detected. Skipping validation failure to allow post-agent interception.")
                 return self
@@ -1561,18 +1662,26 @@ def validate_result(ctx: RunContext[SystemPipelinesDeps], result: ChartTableData
 
     # 3. Handle visual table data fallback parsing
     if ctx.deps.vision_element_processed:
+        cur_vis_nature = classify_visual_query_nature(ctx.deps.user_query)
         if is_table_invalid_res(result.extracted_table):
-            val_logger.info("⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy. Performing programmatic fallback parsing from tool output...")
-            if raw_markdown:
-                parsed_rows = parse_markdown_table_to_dicts(raw_markdown)
-                if parsed_rows:
-                    val_logger.info(f"✅ [RESULT VALIDATOR] Successfully parsed {len(parsed_rows)} rows. Forcefully populating extracted_table.")
-                    new_table = [ChartTableRow(**r) for r in parsed_rows]
-                    result = result.model_copy(update={"extracted_table": new_table})
+            if cur_vis_nature == "OVERVIEW":
+                val_logger.info("⚠️ [RESULT VALIDATOR] extracted_table is empty/dummy for OVERVIEW query. Performing programmatic fallback parsing from tool output...")
+                if raw_markdown:
+                    parsed_rows = parse_markdown_table_to_dicts(raw_markdown)
+                    if parsed_rows:
+                        val_logger.info(f"✅ [RESULT VALIDATOR] Successfully parsed {len(parsed_rows)} rows. Forcefully populating extracted_table.")
+                        new_table = [ChartTableRow(**r) for r in parsed_rows]
+                        result = result.model_copy(update={"extracted_table": new_table})
+                    else:
+                        val_logger.warning("❌ [RESULT VALIDATOR] Parser found no valid Markdown table in raw_markdown.")
                 else:
-                    val_logger.warning("❌ [RESULT VALIDATOR] Parser found no valid Markdown table in raw_markdown.")
+                    val_logger.warning("❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.")
             else:
-                val_logger.warning("❌ [RESULT VALIDATOR] No raw markdown content containing '|' found in text_reasoning or deps.")
+                # For analytical or targeted queries, parse from text_reasoning if a small table was produced
+                if result.text_reasoning and "|" in result.text_reasoning:
+                    parsed_sub = parse_markdown_table_to_dicts(result.text_reasoning)
+                    if parsed_sub and not is_table_invalid_res(parsed_sub):
+                        result = result.model_copy(update={"extracted_table": [ChartTableRow(**r) for r in parsed_sub]})
 
     # Strict Modality Isolation: Do NOT inject image paths into text-only or CSV queries!
     cur_intent = getattr(ctx.deps, "query_intent", None)
@@ -10530,12 +10639,18 @@ def run_pipeline(
     # Sub-20ms Direct Fast-Path Exit for Narrative Visual Queries (Bypasses LLM Pydantic Schema Retries)
     if not asset_kind and target_cat:
         asset_kind = "figure" if ("fig" in str(target_cat).lower() or "chart" in str(target_cat).lower()) else "table"
+    vis_nature = classify_visual_query_nature(user_query)
     is_explicit_table_req = any(k in user_query.lower() for k in ["extract table", "csv", "dataframe", "rows", "columns", "json data", "table format"])
+    
+    # Combination of Approach 1 (LLM Synthesis for Analytical/Comparative queries)
+    # and Approach 2 (Sub-20ms Fast-Path Slicing for Targeted Lookups / Full Overview)
     should_fast_path_exit = (target_cat and target_id and pre_fetched_vision_data) and (
+        vis_nature != "ANALYTICAL"
+    ) and (
         asset_kind == "table" or not is_explicit_table_req
     )
     if should_fast_path_exit:
-        logger.info("⚡ [Sub-20ms Fast-Path Exit] Visual query for %s %s satisfied directly from pre-transcribed store!", target_cat, target_id)
+        logger.info("⚡ [Sub-20ms Fast-Path Exit] Visual query for %s %s satisfied directly from pre-transcribed store (Nature: %s)!", target_cat, target_id, vis_nature)
         
         fb_path = resolved_img_path
         if top_chunks and len(top_chunks) > 0:
@@ -10567,10 +10682,29 @@ def run_pipeline(
         except Exception:
             extracted_rows = []
 
+        sliced_rows = filter_extracted_rows_for_user_query(user_query, extracted_rows)
+        is_targeted = (vis_nature == "TARGETED_LOOKUP") and (0 < len(sliced_rows) < len(extracted_rows))
+
+        if is_targeted:
+            final_rows = sliced_rows
+            sliced_md = filter_cached_transcription_for_user_query(user_query, pre_fetched_vision_data)
+            top_r = sliced_rows[0]
+            val_display = f"{top_r.TargetValue}" if top_r.TargetValue is not None else ""
+            cat_display = top_r.Category or ""
+            series_display = top_r.Series or ""
+            target_focus_text = f"According to {target_cat} {target_id}, the extracted data for **{series_display}**"
+            if cat_display:
+                target_focus_text += f" ({cat_display})"
+            target_focus_text += f" is **{val_display}**.\n\n"
+            fast_text_reasoning = f"### Targeted Visual Extraction for {target_cat} {target_id}\n\n{target_focus_text}{sliced_md}"
+        else:
+            final_rows = extracted_rows
+            fast_text_reasoning = f"### Visual Extraction Summary for {target_cat} {target_id}\n\n{pre_fetched_vision_data}"
+
         fast_vis_data = ChartTableData(
-            source_routing_trail="Pre-transcribed visual store fast-path exit",
-            text_reasoning=f"### Visual Extraction Summary for {target_cat} {target_id}\n\n{pre_fetched_vision_data}",
-            extracted_table=extracted_rows,
+            source_routing_trail=f"Pre-transcribed visual store fast-path exit ({'Targeted Slicing' if is_targeted else 'Full Overview'})",
+            text_reasoning=fast_text_reasoning,
+            extracted_table=final_rows,
             visual_asset_path=fb_path,
             image_path=fb_path
         )
@@ -10733,8 +10867,10 @@ def run_pipeline(
                                     return False
                             return True
 
+                        vis_nature_post = classify_visual_query_nature(user_query)
                         if is_table_invalid_post(extracted):
-                            logger.info("⚠️ [Post-Agent Interceptor] extracted_table is empty or dummy. Intercepting raw vision content to parse programmatically...")
+                            if vis_nature_post == "OVERVIEW":
+                                logger.info("⚠️ [Post-Agent Interceptor] extracted_table is empty or dummy for OVERVIEW query. Intercepting raw vision content to parse programmatically...")
                             
                             found_json = False
                             import re
@@ -10802,6 +10938,16 @@ def run_pipeline(
                                 if parsed_rows:
                                     logger.info(f"✅ [Post-Agent Interceptor] Successfully parsed {len(parsed_rows)} rows. Forcefully populating extracted_table.")
                                     result.output.extracted_table = [ChartTableRow(**r) for r in parsed_rows]
+                            else:
+                                parsed_targeted = []
+                                if result.output.text_reasoning and "|" in result.output.text_reasoning:
+                                    parsed_targeted = parse_markdown_table_to_dicts(result.output.text_reasoning)
+                                if parsed_targeted and not is_table_invalid_post(parsed_targeted):
+                                    result.output.extracted_table = [ChartTableRow(**r) for r in parsed_targeted]
+                                    logger.info(f"✅ [Post-Agent Interceptor] Populated {len(parsed_targeted)} targeted rows from agent text reasoning.")
+                                else:
+                                    result.output.extracted_table = []
+                                    logger.info("ℹ️ [Post-Agent Interceptor] Analytical/specific visual query: full table dump suppressed to preserve targeted focus.")
 
                     # ---------------------------------------------------------
                     # Post-Agent Deterministic Image URL Population Interceptor (Unconditional for Visual Queries)
