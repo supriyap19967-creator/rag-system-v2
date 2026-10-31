@@ -1580,10 +1580,15 @@ def validate_result(ctx: RunContext[SystemPipelinesDeps], result: ChartTableData
     has_explicit_asset = bool(parse_target_asset(ctx.deps.user_query)[0])
     is_visual_turn = intent_str in ("VISUAL_SPECIFIC", "HYBRID_MULTIMODAL") or has_explicit_asset
 
-    if not is_visual_turn:
+    if not is_visual_turn or (not result.visual_asset_path and not result.image_path) or "csv" in str(getattr(result, "source_routing_trail", "")).lower():
         result = result.model_copy(update={
             "visual_asset_path": None,
             "image_path": None,
+            "chart_type": None,
+            "chart_title": None,
+            "x_axis_label": None,
+            "y_axis_label": None,
+            "units": None,
         })
     else:
         visual_path = getattr(result, "visual_asset_path", None) or getattr(result, "image_path", None)
@@ -1713,7 +1718,7 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
                 "\n\n[LOCKED MODALITY: CSV_ONLY - The user inquiry is a tabular/data calculation question. "
                 "Answer strictly using query_pandas_dataframe. "
                 "You are strictly forbidden from calling process_vision_element or query_qdrant_vector_search. "
-                "Set 'visual_asset_path' and 'image_path' to null in your output.]\n"
+                "For CSV_ONLY queries, set chart_type, chart_title, x_axis_label, y_axis_label, units, visual_asset_path, and image_path strictly to null in your output.]\n"
             )
         elif intent_str == "VISUAL_SPECIFIC":
             prompt += (
@@ -2094,29 +2099,53 @@ def query_qdrant_vector_search(ctx: RunContext[SystemPipelinesDeps], semantic_qu
             )
 
 
-            # Parallel Prefetch Search using Qdrant Native RRF API (Optimized limits)
-            response = client.query_points(
-                collection_name=actual_collection,
-                prefetch=[
-                    models.Prefetch(
-                        query=dense_vec,
-                        using=dense_using,
-                        filter=qdrant_filter,
-                        limit=10
+            # Tier 1: Filtered Hybrid Search (Strict Structural/Chapter Boundary)
+            try:
+                response = client.query_points(
+                    collection_name=actual_collection,
+                    prefetch=[
+                        models.Prefetch(
+                            query=dense_vec,
+                            using=dense_using,
+                            filter=qdrant_filter,
+                            limit=10
+                        ),
+                        models.Prefetch(
+                            query=qdrant_sparse_vec,
+                            using=sparse_using,
+                            filter=qdrant_filter,
+                            limit=10
+                        )
+                    ],
+                    query=models.FusionQuery(
+                        fusion=models.Fusion.RRF
                     ),
-                    models.Prefetch(
-                        query=qdrant_sparse_vec,
-                        using=sparse_using,
-                        filter=qdrant_filter,
-                        limit=10
-                    )
-                ],
-                query=models.FusionQuery(
-                    fusion=models.Fusion.RRF
-                ),
-                limit=8
-            )
-            raw_results = response.points
+                    limit=8
+                )
+                raw_results = response.points
+            except Exception as filter_exc:
+                # Tier 2: Telemetry & Soft Semantic Recovery
+                logger.warning("Tier 1 filtered Qdrant query rejected (%s); executing Tier 2 soft-semantic hybrid retrieval", filter_exc)
+                response = client.query_points(
+                    collection_name=actual_collection,
+                    prefetch=[
+                        models.Prefetch(
+                            query=dense_vec,
+                            using=dense_using,
+                            limit=10
+                        ),
+                        models.Prefetch(
+                            query=qdrant_sparse_vec,
+                            using=sparse_using,
+                            limit=10
+                        )
+                    ],
+                    query=models.FusionQuery(
+                        fusion=models.Fusion.RRF
+                    ),
+                    limit=8
+                )
+                raw_results = response.points
             
             # Fallback search if strict metadata filters returned 0 results
             if qdrant_filter and not raw_results:
@@ -5222,15 +5251,16 @@ def extract_chapter_references(query: str) -> list[str]:
     return references
 
 
-def build_chapter_filter(chapter_numbers: list[str]) -> models.Filter | None:
-    numbers = [str(number).strip() for number in chapter_numbers if str(number).strip()]
-    if not numbers:
-        return None
-    conditions = [
-        models.FieldCondition(key=field, match=models.MatchAny(any=numbers))
-        for field in CHAPTER_PAYLOAD_FIELDS
-    ]
-    return models.Filter(should=conditions)
+def build_chapter_filter(chapter_numbers: list[str | int]) -> models.Filter | None:
+    conditions = []
+    for num in chapter_numbers:
+        str_val = str(num).strip()
+        if not str_val:
+            continue
+        conditions.append(models.FieldCondition(key="metadata.chapter_number", match=models.MatchValue(value=str_val)))
+        conditions.append(models.FieldCondition(key="chapter_number", match=models.MatchValue(value=str_val)))
+
+    return models.Filter(should=conditions) if conditions else None
 
 
 def combine_filters(*filters: models.Filter | None) -> models.Filter | None:

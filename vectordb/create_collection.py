@@ -81,7 +81,7 @@ def create_collection(
 
 
 def create_payload_indexes(client: object, collection_name: str) -> None:
-    """Create payload indexes used for common metadata filters."""
+    """Production schema reconciler: Inspects active Qdrant schema and creates missing payload indexes."""
 
     from qdrant_client import models
 
@@ -91,16 +91,27 @@ def create_payload_indexes(client: object, collection_name: str) -> None:
         "bool": models.PayloadSchemaType.BOOL,
         "text": models.PayloadSchemaType.TEXT,
     }
+    
+    existing_schema = {}
+    try:
+        col_info = client.get_collection(collection_name=collection_name)
+        existing_schema = getattr(col_info, "payload_schema", {}) or {}
+    except Exception as e:
+        logger.debug("Could not inspect collection payload schema: %s", e)
+
     for field_name, schema_name in qdrant_payload_indexes().items():
+        if field_name in existing_schema:
+            continue
         try:
             client.create_payload_index(
                 collection_name=collection_name,
                 field_name=field_name,
                 field_schema=schema_map[schema_name],
+                wait=True,
             )
-            logger.info("Payload index ready on %s: %s (%s)", collection_name, field_name, schema_name)
+            logger.info("[Schema Migration] Payload index created on %s: %s (%s)", collection_name, field_name, schema_name)
         except Exception as exc:
-            logger.debug("Payload index %s may already exist on %s: %s", field_name, collection_name, exc)
+            logger.debug("Payload index %s skipped or already exists on %s: %s", field_name, collection_name, exc)
 
 
 if __name__ == "__main__":

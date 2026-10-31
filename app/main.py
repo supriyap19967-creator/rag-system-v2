@@ -1922,15 +1922,16 @@ def extract_chapter_references(query: str) -> list[str]:
     return references
 
 
-def build_chapter_filter(chapter_numbers: list[str]) -> models.Filter | None:
-    numbers = [str(number).strip() for number in chapter_numbers if str(number).strip()]
-    if not numbers:
-        return None
-    conditions = [
-        models.FieldCondition(key=field, match=models.MatchAny(any=numbers))
-        for field in CHAPTER_PAYLOAD_FIELDS
-    ]
-    return models.Filter(should=conditions)
+def build_chapter_filter(chapter_numbers: list[str | int]) -> models.Filter | None:
+    conditions = []
+    for num in chapter_numbers:
+        str_val = str(num).strip()
+        if not str_val:
+            continue
+        conditions.append(models.FieldCondition(key="metadata.chapter_number", match=models.MatchValue(value=str_val)))
+        conditions.append(models.FieldCondition(key="chapter_number", match=models.MatchValue(value=str_val)))
+
+    return models.Filter(should=conditions) if conditions else None
 
 
 def combine_filters(*filters: models.Filter | None) -> models.Filter | None:

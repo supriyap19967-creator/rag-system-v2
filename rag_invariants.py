@@ -195,6 +195,26 @@ class RAGInvariantsValidator:
             if c0 > c2 or c1 > c3:
                 raise MalformedCoordinatesError(f"Bounding box minimums must not exceed maximums: {box}")
 
+        # Only run visual metadata validation if a visual asset was actually part of this turn
+        has_visual_asset = bool(
+            (payload.get("visual_asset_path") if isinstance(payload, dict) else None)
+            or (payload.get("image_path") if isinstance(payload, dict) else None)
+            or bounding_boxes
+        ) if payload and isinstance(payload, dict) else False
+
+        if not has_visual_asset or "csv" in str((payload.get("source_routing_trail", "") if isinstance(payload, dict) else "")).lower():
+            return len(bounding_boxes)
+
+        # Only run visual metadata validation if a visual asset was actually part of this turn
+        has_visual_asset = bool(
+            (payload.get("visual_asset_path") if isinstance(payload, dict) else None)
+            or (payload.get("image_path") if isinstance(payload, dict) else None)
+            or bounding_boxes
+        ) if payload and isinstance(payload, dict) else False
+
+        if not has_visual_asset or "csv" in str((payload.get("source_routing_trail", "") if isinstance(payload, dict) else "")).lower():
+            return len(bounding_boxes)
+
         # Spatial grounding verification for visual elements using expanded source boundary
         if payload and isinstance(payload, dict) and source_text:
             expanded_sources = [source_text]
