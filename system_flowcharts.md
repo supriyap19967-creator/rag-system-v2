@@ -1,6 +1,6 @@
 # Enterprise Multimodal Conversational RAG System: Flowcharts & Architecture
 
-This document provides an end-to-end, interview-grade architectural specification and system flowcharts for our **Enterprise Multimodal Conversational RAG System**. It covers the complete lifecycle of data ingestion, contextual query rewriting, deterministic intent routing, multi-agent collaboration, parallel multi-threaded retrieval, and 14-layer compliance gauntlet validation.
+This document provides an end-to-end, interview-grade architectural specification and system flowcharts for our **Enterprise Multimodal Conversational RAG System**. It covers the complete lifecycle of data ingestion, contextual query rewriting, deterministic intent routing, multi-agent collaboration, parallel multi-threaded retrieval, and 15-layer compliance gauntlet validation.
 
 ---
 
@@ -26,14 +26,14 @@ flowchart TD
 
     subgraph L4 ["Layer 4 & 5: Specialized Modality Execution Pipelines"]
         IntentRouter --> ModalitySwitch{"Identify Required Modality"}
-        ModalitySwitch -- "TEXT_ONLY" --> QdrantHybrid["Text Pipeline: Qdrant Hybrid Search [retriever.py]"]
-        ModalitySwitch -- "VISUAL_SPECIFIC" --> VisionStore["Visual Pipeline: RAM Lookup & Vision OCR [schemas_and_agent.py]"]
-        ModalitySwitch -- "CSV_ONLY" --> PandasEngine["CSV Pipeline: Pandas Sandbox [structured_query.py]"]
+        ModalitySwitch -- "TEXT_ONLY" --> ResearchAgent["Research Agent: Qdrant Hybrid & BGE Reranker [research.py]"]
+        ModalitySwitch -- "VISUAL_SPECIFIC" --> VisionAgent["Vision Agent: RAM Cache & Gemini Vision [vision.py]"]
+        ModalitySwitch -- "CSV_ONLY" --> DataAgent["Data Agent: Pandas Sandbox [data.py]"]
     end
 
     subgraph L6 ["Layer 6: Answer Synthesis & 15-Layer Safety Gauntlet"]
-        QdrantHybrid & VisionStore & PandasEngine --> Synthesizer["LLM Synthesizer Engine [query_rag.py]"]
-        Synthesizer --> Gauntlet["15-Layer Safety Gauntlet Evaluator [compliance_safety.py]"]
+        ResearchAgent & VisionAgent & DataAgent --> Synthesizer["LLM Synthesizer Engine [query_rag.py]"]
+        Synthesizer --> Gauntlet["Validator Agent & 15-Layer Safety Gauntlet [compliance_safety.py]"]
         
         subgraph GauntletPhases ["3 Compliance Phases"]
             Phase1["Phase 1: Input Security"] --> Phase2["Phase 2: Alignment"] --> Phase3["Phase 3: Fidelity"]
@@ -42,7 +42,7 @@ flowchart TD
     end
 
     subgraph L7 ["Layer 7: Presentation & Telemetry"]
-        GauntletPhases --> Formatter["UI Formatter & OTEL Telemetry [StreamlitApp.py]"]
+        GauntletPhases --> Formatter["UI Formatter & Langfuse/OTEL Telemetry [StreamlitApp.py]"]
         Formatter --> StreamlitUI
     end
 ```
@@ -56,7 +56,9 @@ flowchart TD
 | Subsystem / Node | Code File Location | Input Payload | Output Payload | Key Technical Responsibilities |
 | :--- | :--- | :--- | :--- | :--- |
 | **Streamlit UI** | [StreamlitApp.py](file:///C:/Users/supri/recovered-rag-project/streamlit_ui/StreamlitApp.py) | User prompt / Voice WAV | Rendered Markdown + Images | Main user interaction interface, session state maintenance (`LAST_ACTIVE_IMAGE_PATH`), voice transcription trigger, and response streaming. |
+| **FastAPI Backend Server** | [main.py](file:///C:/Users/supri/recovered-rag-project/app/main.py) | HTTP `POST /query` JSON | Validated API JSON payload | Core backend API, routing coordination, dependency injection, and health endpoints. |
 | **Gateway Guardrails** | [gateway_guardrails.py](file:///C:/Users/supri/recovered-rag-project/gateway_guardrails.py) | Raw user string | Sanitized query string | Enforces rate limits, token budgets, toxicity filters, PII masking, and Layer 1–3 security checks before retrieval. |
+| **Semantic & LRU Cache** | [cache.py](file:///C:/Users/supri/recovered-rag-project/app/cache.py) | Query embedding vector | Cached response dict | Sub-10ms cosine similarity lookup (>=0.95) returning instant responses for repeated or near-identical queries. |
 | **Multimodal Conversation Manager** | [conversation_manager.py](file:///C:/Users/supri/recovered-rag-project/app/conversation_manager.py) | Sanitized query + session ID | Contextualized standalone query | Evaluates relative references (`above figure`, `this table`, `it`). Resolves implicit follow-ups against past turns and active asset memory into explicit standalone queries. |
 | **Deterministic Intent Router** | [intent_router.py](file:///C:/Users/supri/recovered-rag-project/app/intent_router.py) | Standalone query string | `(QueryIntent, allowed_tools)` | Sub-millisecond (<1ms) intent classifier. Prioritizes `VISUAL_SPECIFIC` for figure queries and bypasses unnecessary LLM supervisor calls. |
 | **Supervisor Orchestrator Agent** | [supervisor.py](file:///C:/Users/supri/recovered-rag-project/app/agents/supervisor.py) | Contextualized query + history | Structured TaskPlan | Pydantic AI agent that analyzes complex multi-part queries and delegates sub-tasks to specialized sub-agents (`RESEARCH_AGENT`, `VISION_AGENT`, `DATA_AGENT`). |
@@ -66,7 +68,10 @@ flowchart TD
 | **Qdrant Hybrid Retriever** | [retriever.py](file:///C:/Users/supri/recovered-rag-project/app/retriever.py) | Query string + Filters | Raw matching points | Performs dense vector search (BGE-M3, 1024-dim) combined with sparse token search (BM25) inside local Qdrant collections. |
 | **Cross-Encoder Reranker** | [reranker.py](file:///C:/Users/supri/recovered-rag-project/app/reranker.py) | Query + Top-N candidates | Top-3 reranked documents | Uses `BAAI/bge-reranker-v2-m3` to compute deep cross-attention similarity scores between query and retrieved document text. |
 | **In-Memory RAM Transcription Store** | [schemas_and_agent.py](file:///C:/Users/supri/recovered-rag-project/multimodal-rag-system/schemas_and_agent.py) | Figure / Table ID | Markdown table string | Eagerly pre-loads 215+ pre-computed visual table markdowns into RAM (`_IN_MEMORY_TRANSCRIPTION_CACHE`) on startup, serving extractions in **<10ms**. |
+| **LLM Synthesizer Engine** | [query_rag.py](file:///C:/Users/supri/recovered-rag-project/query_rag.py) | Context chunks + Table rows + Prompt | Synthesized draft answer | Merges retrieved dense chunks, sparse text, and OCR markdown tables into a final grounded response. |
 | **Validator Agent & Safety Gauntlet** | [validation.py](file:///C:/Users/supri/recovered-rag-project/app/agents/validation.py) & [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) | Draft response + Source context | Cleared payload + Faithfulness score | 15-Layer gatekeeper running prompt injection filters, PII checks, system prompt scanners, exact quote anchoring, and line-level faithfulness evaluation. |
+| **Evaluator Agent** | [evaluator.py](file:///C:/Users/supri/recovered-rag-project/app/agents/evaluator.py) | Answer + Ground Truth Context | Structured EvaluationResult | Independent Pydantic-AI agent auditing answers against ground-truth tables/OCR, scoring faithfulness ($0.0 - 1.0$), and documenting reasoning. |
+| **PDF Visual Extractor & Ingestion** | [pdf_visual_extraction.py](file:///C:/Users/supri/recovered-rag-project/app/pdf_visual_extraction.py) & [ingest_data.py](file:///C:/Users/supri/recovered-rag-project/ingest_data.py) | Raw PDF / CSV documents | Chunks + High-res Crops + Embeddings | Parses PDF layout via Docling, isolates image bounding boxes, extracts crops, and generates dual BGE-M3/BM25 vectors for Qdrant indexing. |
 
 ---
 
@@ -141,14 +146,14 @@ flowchart TD
 
     subgraph Step4 ["Step 4: Parallel Retrieval [ThreadPoolExecutor max_workers=3]"]
         Router --> ParallelPool["Parallel Worker Dispatcher"]
-        ParallelPool --> QdrantWorker["Worker 1: Qdrant Vector Search"]
+        ParallelPool --> QdrantWorker["Worker 1: Qdrant Hybrid Search (BGE-M3 + BM25)"]
         ParallelPool --> RAMWorker["Worker 2: RAM Store Lookup (<10ms)"]
     end
 
     subgraph Step5 ["Step 5: Synthesis & 15-Layer Safety Gauntlet"]
         QdrantWorker & RAMWorker --> Synthesizer["LLM Synthesizer Engine"]
         Synthesizer --> DraftAnswer["Draft Answer: '$1,135 or less'"]
-        DraftAnswer --> SafetyGauntlet["15-Layer Compliance Safety Evaluator (Score = 0.95 Cleared)"]
+        DraftAnswer --> SafetyGauntlet["Validator Agent: 15-Layer Safety Gauntlet (Score = 0.95 Cleared)"]
     end
 
     subgraph Step6 ["Step 6: Rendered UI Response [StreamlitApp.py]"]
@@ -656,3 +661,4 @@ how followup questions working
 
   • What it is: Before searching vector DBs, use a fast LLM to generate a hypothetical ideal passage, then embed that passage for search.
   • Why it's awesome: Boosts retrieval recall by 20–30% for abstract or vague user questions.
+

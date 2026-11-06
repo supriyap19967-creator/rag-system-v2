@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+try:
+    import pyarrow
+except Exception:
+    pass
+
 import logging
 import os
 import sys
@@ -26,7 +31,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Constants
-COLLECTION_NAME = "rag_master_v2"
+COLLECTION_NAME = os.getenv("COLLECTION_NAME", "conversational_rag")
 
 class ResearchOutput(BaseModel):
     executive_summary: str = Field(
@@ -39,10 +44,13 @@ class ResearchOutput(BaseModel):
         description="Any caveats, data limitations, source details, page numbers, or file references."
     )
 
+ResearchOutput.model_rebuild()
+
 # Setup Research Agent
-model_name = os.getenv("RESEARCH_MODEL_NAME", "groq:llama-3.3-70b-versatile")
+from app.agents.model_factory import get_agent_model
+research_model = get_agent_model("RESEARCH_MODEL_NAME")
 research_agent = Agent(
-    model_name,
+    research_model,
     output_type=ResearchOutput,
     retries=3,
     system_prompt=(
@@ -65,10 +73,15 @@ def search_knowledge_base(ctx: RunContext[Any], query: str) -> str:
     """
     logger.info(f"Research Agent searching KB for: '{query}'")
     
-    # Initialize Qdrant Client local
-    qdrant_host = os.getenv("QDRANT_HOST", "localhost")
-    qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
-    client = QdrantClient(host=qdrant_host, port=qdrant_port)
+    # Initialize Qdrant Client (cloud or local)
+    qdrant_url = os.getenv("QDRANT_URL")
+    qdrant_api_key = os.getenv("QDRANT_API_KEY")
+    if qdrant_url:
+        client = QdrantClient(url=qdrant_url, api_key=qdrant_api_key)
+    else:
+        qdrant_host = os.getenv("QDRANT_HOST", "localhost")
+        qdrant_port = int(os.getenv("QDRANT_PORT", "6333"))
+        client = QdrantClient(host=qdrant_host, port=qdrant_port)
     
     if not client.collection_exists(COLLECTION_NAME):
         return f"Error: Qdrant collection '{COLLECTION_NAME}' does not exist."
@@ -149,7 +162,8 @@ def search_knowledge_base(ctx: RunContext[Any], query: str) -> str:
             text = (payload.get("text") or payload.get("page_content") or "").strip()
             documents.append(Document(page_content=text, metadata=payload.get("metadata", {})))
             
-        reranker = TransformersReranker(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
+        from app.reranker import get_reranker_singleton
+        reranker = get_reranker_singleton()
         reranked_docs = reranker.rerank(query, documents, top_k=3)
         
         # Format returned chunks
@@ -168,11 +182,14 @@ def search_knowledge_base(ctx: RunContext[Any], query: str) -> str:
         logger.exception("Search failed")
         return f"Error during search execution: {e}"
 
-def execute_research(query: str) -> Dict[str, Any]:
+def execute_research(query: str, retrieved_context: str = "") -> Dict[str, Any]:
     """
     Entrypoint function to execute research query.
     """
-    run_result = research_agent.run_sync(query)
+    prompt = query
+    if retrieved_context:
+        prompt = f"Retrieved Context:\n{retrieved_context}\n\nResearch Query:\n{query}"
+    run_result = research_agent.run_sync(prompt)
     output: ResearchOutput = run_result.output
     return {
         "executive_summary": output.executive_summary,

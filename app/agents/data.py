@@ -34,14 +34,24 @@ class DataOutput(BaseModel):
         description="Clear execution logic (Pandas/SQL) used to achieve the results."
     )
 
+DataOutput.model_rebuild()
+
 # Setup Data Agent
-model_name = os.getenv("DATA_AGENT_MODEL_NAME", "groq:llama-3.3-70b-versatile")
+from app.agents.model_factory import get_agent_model
+data_model = get_agent_model("DATA_AGENT_MODEL_NAME")
 data_agent = Agent(
-    model_name,
+    data_model,
     output_type=DataOutput,
     retries=10,
     system_prompt=(
         "You are a Senior Data Analyst Agent specializing in analytical, statistical, and comparative Pandas queries.\n\n"
+        "PRELOADED DATASETS IN EXECUTION ENVIRONMENT:\n"
+        "- `gdp_df`: World Bank GDP dataset. Columns include 'Country Name', 'Country Code', 'Indicator Name' ('GDP (current US$)'), 'Indicator Code' ('NY.GDP.MKTP.CD'), and yearly columns '1960' through '2023'.\n"
+        "- `gdp_meta_df`: Metadata dataset with columns 'Country Code', 'Region', 'IncomeGroup'.\n"
+        "- `co2_df`: World Bank CO2 emissions dataset.\n"
+        "- `co2_meta_df`: CO2 metadata with 'Country Code', 'Region', 'IncomeGroup'.\n"
+        "- Extracted report tables from `assets/extracted_tables/` (e.g. `page_111_Table_2_1`).\n"
+        "NOTE: Yearly columns are strings (e.g. '2020', '2021', '2022'). Use `gdp_df['2022']` rather than `df['Year'] == 2022`.\n\n"
         "CORE OBJECTIVES:\n"
         "1. Data Wrangling & Cleaning: Process raw tabular, CSV, or JSON data into clean, structured formats.\n"
         "2. Exploratory & Quantitative Analysis: Calculate descriptive statistics, correlations, and trends.\n"
@@ -99,7 +109,7 @@ def execute_pandas_query(ctx: RunContext[Any], python_code: str) -> str:
     
     Make sure to PRINT the final output/statistics using print() so it is captured in stdout.
     """
-    logger.info("Executing Pandas code on local tables...")
+    logger.info(f"Executing Pandas code on local tables:\n{python_code}")
     
     # Expose preloaded dataframes if they exist on disk, else load from Supabase CDN
     from app.multimodal_assets import get_supabase_asset_url
@@ -114,28 +124,92 @@ def execute_pandas_query(ctx: RunContext[Any], python_code: str) -> str:
                 pass
                 
     # Also expose standard names (from local disk or Supabase Cloud CDN)
-    for name, rel_path in [("gdp_df", "Data/gdp_data.csv"), ("co2_df", "Data/co2_data.csv"), ("all_tables_df", "Data/csv/World_Development_Report_2025_All_Tables.csv")]:
+    standard_files = [
+        ("gdp_df", "Data/csv/GDP1.csv", 4),
+        ("gdp1_df", "Data/csv/GDP1.csv", 4),
+        ("gdp_meta_df", "Data/csv/GDP2.csv", 0),
+        ("gdp2_df", "Data/csv/GDP2.csv", 0),
+        ("co2_df", "Data/csv/CO21.csv", 4),
+        ("co21_df", "Data/csv/CO21.csv", 4),
+        ("co2_meta_df", "Data/csv/CO22.csv", 0),
+        ("co22_df", "Data/csv/CO22.csv", 0),
+    ]
+    for name, rel_path, skip in standard_files:
         local_p = PROJECT_ROOT / rel_path
         try:
             if local_p.exists() and local_p.is_file():
-                locs[name] = pd.read_csv(local_p)
+                if skip > 0:
+                    locs[name] = pd.read_csv(local_p, skiprows=skip)
+                else:
+                    locs[name] = pd.read_csv(local_p)
             else:
                 supa_url = get_supabase_asset_url(rel_path)
                 logger.info(f"🌐 Fetching CSV dataset '{name}' from Supabase CDN: {supa_url}")
-                locs[name] = pd.read_csv(supa_url)
+                if skip > 0:
+                    locs[name] = pd.read_csv(supa_url, skiprows=skip)
+                else:
+                    locs[name] = pd.read_csv(supa_url)
         except Exception as csv_err:
             logger.warning(f"Could not load CSV dataset '{name}': {csv_err}")
         
+    # Common DataFrame aliases
+    if "gdp_df" in locs:
+        locs["GDP"] = locs["gdp_df"]
+        locs["gdp"] = locs["gdp_df"]
+        locs["df"] = locs["gdp_df"]
+    if "co2_df" in locs:
+        locs["CO2"] = locs["co2_df"]
+        locs["co2"] = locs["co2_df"]
+
+    # Provide smart pd wrapper so if code calls pd.read_csv('GDP.csv') or similar, it succeeds
+    import types
+    smart_pd = types.ModuleType("pandas_wrapper")
+    for attr in dir(pd):
+        setattr(smart_pd, attr, getattr(pd, attr))
+
+    def smart_read_csv(filepath_or_buffer, *args, **kwargs):
+        p_str = str(filepath_or_buffer).replace("\\", "/").lower()
+        if "gdp" in p_str and "2" not in p_str:
+            target = PROJECT_ROOT / "Data" / "csv" / "GDP1.csv"
+            if target.exists():
+                kwargs.setdefault("skiprows", 4)
+                return pd.read_csv(target, *args, **kwargs)
+        elif "gdp" in p_str and "2" in p_str:
+            target = PROJECT_ROOT / "Data" / "csv" / "GDP2.csv"
+            if target.exists():
+                return pd.read_csv(target, *args, **kwargs)
+        elif "co2" in p_str and "2" not in p_str:
+            target = PROJECT_ROOT / "Data" / "csv" / "CO21.csv"
+            if target.exists():
+                kwargs.setdefault("skiprows", 4)
+                return pd.read_csv(target, *args, **kwargs)
+        elif "co2" in p_str and "2" in p_str:
+            target = PROJECT_ROOT / "Data" / "csv" / "CO22.csv"
+            if target.exists():
+                return pd.read_csv(target, *args, **kwargs)
+        try:
+            return pd.read_csv(filepath_or_buffer, *args, **kwargs)
+        except Exception:
+            # Fallback with skiprows=4
+            return pd.read_csv(filepath_or_buffer, *args, skiprows=4, **kwargs)
+
+    smart_pd.read_csv = smart_read_csv
+    locs["pd"] = smart_pd
+    locs["pandas"] = smart_pd
+
     stdout = io.StringIO()
     old_stdout = sys.stdout
     
     try:
         sys.stdout = stdout
-        exec(python_code, {}, locs)
+        exec(python_code, locs, locs)
         sys.stdout = old_stdout
-        return stdout.getvalue()
+        val = stdout.getvalue()
+        logger.info(f"Pandas execution produced stdout ({len(val)} chars):\n{val[:300]}")
+        return val if val.strip() else "Code executed successfully with no stdout. Ensure you use print(...) to output values."
     except Exception as exc:
         sys.stdout = old_stdout
+        logger.warning(f"Error executing Python code: {exc}")
         return f"Error executing Python code: {exc}"
 
 def execute_data_task(query: str) -> Dict[str, Any]:

@@ -1,9 +1,15 @@
 from __future__ import annotations
 
+try:
+    import pyarrow
+except Exception:
+    pass
+
 import sys
 from pathlib import Path
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+sys.path.append(str(PROJECT_ROOT))
 
 import logging
 import hashlib
@@ -28,7 +34,7 @@ from qdrant_client import QdrantClient, models
 from vectordb.fastembed_runtime import SafeSparseEncoder
 from vectordb.qdrant_client_manager import QdrantSettings, get_qdrant_client as build_managed_qdrant_client
 
-from app.reranker import TransformersReranker
+from app.reranker import TransformersReranker, get_reranker_singleton
 from app.conversation_manager import MultimodalConversationManager
 from app.memory import store_chat_message, fetch_chat_history
 from app.utils import get_total_session_cost, get_last_query_cost
@@ -1966,13 +1972,20 @@ def _exact_asset_priority(item: dict[str, Any]) -> tuple[int, int, int]:
     return (0 if image_path else 1, 0 if contains_chart else 1, 1 if is_full_page_fallback else 0)
 
 
+_INDEXES_ENSURED = False
+
 def ensure_entity_payload_indexes(client: QdrantClient) -> None:
+    global _INDEXES_ENSURED
+    if _INDEXES_ENSURED:
+        return
+    _INDEXES_ENSURED = True
     for field_name in (*INDEXED_ENTITY_PAYLOAD_FIELDS, *ASSET_PAYLOAD_FIELDS):
         try:
             client.create_payload_index(
                 COLLECTION_NAME,
                 field_name=field_name,
                 field_schema=models.PayloadSchemaType.KEYWORD,
+                wait=False,
             )
         except Exception as exc:
             logger.debug("Payload index %s already exists or could not be created: %s", field_name, exc)
@@ -1982,6 +1995,7 @@ def ensure_entity_payload_indexes(client: QdrantClient) -> None:
                 COLLECTION_NAME,
                 field_name=field_name,
                 field_schema=models.PayloadSchemaType.KEYWORD,
+                wait=False,
             )
         except Exception as exc:
             logger.debug("Payload index %s already exists or could not be created: %s", field_name, exc)
@@ -3409,7 +3423,138 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
             final_sources = []
             model_used = "supervisor_orchestrator"
             
-            if target == "RESEARCH_AGENT":
+            is_compound = routing_decision.get("is_compound", False)
+            tasks = routing_decision.get("tasks", [])
+            comparison_goal = routing_decision.get("comparison_goal")
+
+            if is_compound and len(tasks) > 1:
+                logger.info(f"Executing Compound Multi-Agent Dispatcher with {len(tasks)} sub-tasks...")
+                sub_agent_summaries = {}
+                
+                for task in tasks:
+                    sub_agent = task.get("agent")
+                    sub_query = task.get("sub_query")
+                    asset_ref = task.get("asset_reference")
+                    
+                    if sub_agent == "DATA_AGENT":
+                        logger.info(f"Compound Dispatcher -> DATA_AGENT: {sub_query}")
+                        data_res = execute_data_task(sub_query)
+                        sub_agent_summaries["DATA_AGENT"] = (
+                            f"**Metrics Summary**:\n{data_res.get('executive_metrics', '')}\n\n"
+                            f"**Analytical Breakdown**:\n{data_res.get('analytical_breakdown', '')}"
+                        )
+                        final_sources.append("GDP1.csv")
+                        
+                    elif sub_agent == "VISION_AGENT":
+                        logger.info(f"Compound Dispatcher -> VISION_AGENT: {sub_query} (asset_ref: {asset_ref})")
+                        target_img = None
+                        
+                        # 1. Direct match on asset_ref if provided
+                        if asset_ref:
+                            clean_ref = re.sub(r"[^a-zA-Z0-9_.]", "_", asset_ref).lower()
+                            for sdir in ["Data/extracted_visuals_smoke", "assets/extracted_images", "Data"]:
+                                sp = PROJECT_ROOT / sdir
+                                if sp.exists():
+                                    for f in sp.glob("*.png"):
+                                        if clean_ref in f.name.lower() or asset_ref.lower().replace(" ", "_") in f.name.lower():
+                                            target_img = str(f).replace("\\", "/")
+                                            break
+                                if target_img:
+                                    break
+                                    
+                        # 2. Check for figure references in sub_query / question
+                        if not target_img:
+                            fig_m = re.search(r"figure\s*(\d+[._]\d+)", (sub_query + " " + question).lower())
+                            if fig_m:
+                                f_tag = fig_m.group(1).replace(".", "_")
+                                for sdir in ["Data/extracted_visuals_smoke", "assets/extracted_images"]:
+                                    sp = PROJECT_ROOT / sdir
+                                    if sp.exists():
+                                        for f in sp.glob("*.png"):
+                                            if f"figure_{f_tag}".lower() in f.name.lower() or f"figure{f_tag}".lower() in f.name.lower():
+                                                target_img = str(f).replace("\\", "/")
+                                                break
+                                    if target_img:
+                                        break
+                                        
+                        # 3. Hybrid chunk retrieval
+                        if not target_img:
+                            locked_entities = step_zero_extract_entities(sub_query)
+                            rewritten_queries = [sub_query]
+                            sparse_only = has_explicit_identifier_or_number(sub_query)
+                            structural_intent = RAGModules.classify_structural_intent(sub_query, nvidia_model)
+                            v_chunks = RAGModules.module_retrieve_hybrid(
+                                rewritten_queries,
+                                sub_query,
+                                top_k=HYBRID_RESULT_LIMIT,
+                                candidate_limit=request.top_k,
+                                filters=request.filters,
+                                sparse_only=sparse_only,
+                                locked_entities=locked_entities,
+                                structural_intent=structural_intent,
+                            )
+                            target_img = bind_image_paths_to_chunks(v_chunks, locked_entities)
+                            reranked.extend(v_chunks)
+                            
+                        # 4. Fallback to historical or smoke visual
+                        if not target_img:
+                            hist_turns = memory_manager.get_history(request.session_id)
+                            hist_assets = memory_manager._historical_assets_for_query(request.question, hist_turns)
+                            if hist_assets:
+                                target_img = hist_assets[0]
+                            else:
+                                target_img = "Data/extracted_visuals_smoke/page_70_Figure_1.1.png"
+                                
+                        resolved_img = _resolve_existing_image_path(target_img) or target_img
+                        final_image_path = resolved_img
+                        active_assets.append(resolved_img)
+                        final_sources.append(Path(resolved_img).name)
+                        
+                        vision_res = execute_vision_task(resolved_img, sub_query)
+                        tbl_md = vision_res.get("extracted_table_markdown")
+                        tbl_section = f"\n\n**Extracted Data Table**:\n{tbl_md}\n" if tbl_md and "|" in tbl_md else ""
+                        sub_agent_summaries["VISION_AGENT"] = (
+                            f"**Visual Summary ({Path(resolved_img).name})**:\n{vision_res.get('visual_summary', '')}\n\n"
+                            f"**Observations**:\n" + "\n".join([f"- {item}" for item in vision_res.get("visual_analysis", [])]) +
+                            tbl_section + "\n\n"
+                            f"**Extracted Insights**: {vision_res.get('actionable_insights', '')}"
+                        )
+                        
+                    elif sub_agent == "RESEARCH_AGENT":
+                        logger.info(f"Compound Dispatcher -> RESEARCH_AGENT: {sub_query}")
+                        locked_entities = step_zero_extract_entities(sub_query)
+                        rewritten_queries = [sub_query]
+                        sparse_only = has_explicit_identifier_or_number(sub_query)
+                        structural_intent = RAGModules.classify_structural_intent(sub_query, nvidia_model)
+                        r_chunks = RAGModules.module_retrieve_hybrid(
+                            rewritten_queries,
+                            sub_query,
+                            top_k=HYBRID_RESULT_LIMIT,
+                            candidate_limit=request.top_k,
+                            filters=request.filters,
+                            sparse_only=sparse_only,
+                            locked_entities=locked_entities,
+                            structural_intent=structural_intent,
+                        )
+                        reranked.extend(r_chunks)
+                        for rc in r_chunks:
+                            src_name = rc.get("source", "")
+                            if src_name:
+                                final_sources.append(Path(src_name).name if src_name.endswith(".pdf") or src_name.endswith(".csv") else src_name)
+                                
+                        r_context = "\n\n".join([f"[{i+1}] {c.get('text', '')}" for i, c in enumerate(r_chunks[:3])])
+                        research_res = execute_research(sub_query, retrieved_context=r_context)
+                        sub_agent_summaries["RESEARCH_AGENT"] = (
+                            f"**Executive Synthesis**:\n{research_res.get('executive_summary', '')}\n\n"
+                            f"**Key Findings**:\n" + "\n".join([f"- {item}" for item in research_res.get("key_findings", [])]) + "\n\n"
+                            f"**Notes**: {research_res.get('source_notes', '')}"
+                        )
+                        
+                from app.agents.synthesizer import synthesize_cross_modal_fusion
+                agent_response = synthesize_cross_modal_fusion(question, comparison_goal, sub_agent_summaries)
+                model_used = "compound_cross_modal_synthesizer"
+                target = "COMPOUND_ORCHESTRATION"
+            elif target == "RESEARCH_AGENT":
                 logger.info("Executing Research Agent workflow...")
                 research_res = execute_research(question)
                 agent_response = (
@@ -3509,7 +3654,9 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
                 resolved = _resolve_existing_image_path(final_image_path)
                 if resolved:
                     final_image_path = resolved
-                active_assets.append(final_image_path)
+                if final_image_path not in active_assets:
+                    active_assets.append(final_image_path)
+            active_assets = list(dict.fromkeys(active_assets))
                 
             conversation_manager = memory_manager
             conversation_manager.append(

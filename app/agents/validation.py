@@ -36,10 +36,13 @@ class ValidationOutput(BaseModel):
         )
     )
 
+ValidationOutput.model_rebuild()
+
 # Setup Validation Agent
-model_name = os.getenv("VALIDATION_AGENT_MODEL_NAME", "groq:llama-3.3-70b-versatile")
+from app.agents.model_factory import get_agent_model
+val_model = get_agent_model("VALIDATION_AGENT_MODEL_NAME")
 validation_agent = Agent(
-    model_name,
+    val_model,
     output_type=ValidationOutput,
     retries=3,
     system_prompt=(

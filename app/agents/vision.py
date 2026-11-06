@@ -5,7 +5,7 @@ import logging
 import os
 import sys
 from pathlib import Path
-from typing import Any, List, Dict
+from typing import Any, List, Dict, Optional
 
 # Add project root to sys.path
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
@@ -16,7 +16,6 @@ from pydantic import BaseModel, Field
 from pydantic_ai import Agent, RunContext
 from dotenv import load_dotenv
 from openai import OpenAI
-from app.main import _resolve_existing_image_path
 
 # Load env variables
 load_dotenv(PROJECT_ROOT / ".env")
@@ -39,10 +38,13 @@ class VisionOutput(BaseModel):
         description="If a table, chart, or data figure is present in the image, transcribe all rows and data points into a clean Markdown table string starting with '|' (e.g. '| Category | Value |\n| --- | --- |\n| A | 100 |')."
     )
 
+VisionOutput.model_rebuild()
+
 # Setup Vision Agent
-model_name = os.getenv("VISION_AGENT_MODEL_NAME", "groq:llama-3.3-70b-versatile")
+from app.agents.model_factory import get_agent_model
+vision_model = get_agent_model("VISION_AGENT_MODEL_NAME")
 vision_agent = Agent(
-    model_name,
+    vision_model,
     output_type=VisionOutput,
     retries=3,
     system_prompt=(
@@ -71,7 +73,11 @@ def analyze_image_with_vlm(ctx: RunContext[Any], image_path: str, query: str) ->
     logger.info(f"Vision Agent invoking VLM for image: '{image_path}' | Query: '{query}'")
     
     # Resolve image path
-    resolved_path = _resolve_existing_image_path(image_path)
+    try:
+        from app.main import _resolve_existing_image_path
+        resolved_path = _resolve_existing_image_path(image_path)
+    except Exception:
+        resolved_path = image_path
     if not resolved_path or not os.path.exists(resolved_path):
         return f"Error: Target image file '{image_path}' could not be resolved on disk."
         
