@@ -51,8 +51,24 @@ def test_scientific_notation_cleanup():
 def test_clean_dataframe_drops_dummy_placeholder_rows():
     df = pd.DataFrame([
         {"Series": "100", "Category": "100", "Value": "A", "Target Value": "100"},
+        {"Series": "Series", "Category": "Category", "Value": "Target Value", "Target Value": "Target Value"},
+        {"Series": "United States", "Category": "High Income GDP", "Value": "$27.29 Trillion", "Target Value": "27.29T"},
         {"Series": "United States", "Category": "High Income GDP", "Value": "$27.29 Trillion", "Target Value": "27.29T"},
     ])
     cleaned_df = clean_dataframe_for_table_rendering(df)
     assert len(cleaned_df) == 1
     assert cleaned_df.iloc[0]["Series"] == "United States"
+
+
+def test_parse_markdown_table_skips_repeated_headers():
+    from streamlit_ui.StreamlitApp import parse_markdown_table_to_dicts
+    table_md = """
+| Series | Category | Target Value | Unit | Summary / Notes |
+|---|---|---|---|---|
+| GDP Average | Low-Income Countries | $6,242,502,231 | USD | Average GDP of countries |
+| Series | Category | Target Value | Unit | Summary / Notes |
+| GDP Average | Low-Income Countries | $6,242,502,231 | USD | Average GDP of countries |
+"""
+    rows = parse_markdown_table_to_dicts(table_md)
+    assert len(rows) == 1
+    assert rows[0]["Series"] == "GDP Average"

@@ -468,6 +468,12 @@ def parse_markdown_table_to_dicts(text: str) -> list[dict[str, Any]]:
         cols = [c.strip() for c in cols]
         if len(cols) < 2:
             continue
+        
+        # Skip repeated header lines inside markdown text
+        hdr_tokens = {"series", "category", "target value", "targetvalue", "unit", "summary", "notes", "summary / notes", "value", "data point"}
+        if [c.lower() for c in cols] == [h.lower() for h in headers] or all(c.lower() in hdr_tokens for c in cols if c):
+            continue
+            
         row_dict = {}
         
         for c_idx, h in enumerate(headers):
@@ -519,7 +525,13 @@ def parse_markdown_table_to_dicts(text: str) -> list[dict[str, Any]]:
         if row_dict.get("TargetValue") in ["", None]:
             row_dict["TargetValue"] = "N/A"
             
-        data_rows.append(row_dict)
+        if not any(
+            r.get("Series") == row_dict.get("Series")
+            and r.get("Category") == row_dict.get("Category")
+            and r.get("TargetValue") == row_dict.get("TargetValue")
+            for r in data_rows
+        ):
+            data_rows.append(row_dict)
     return data_rows
 
 
@@ -9127,6 +9139,21 @@ def clean_dataframe_for_table_rendering(df: pd.DataFrame) -> pd.DataFrame:
         else:
             df_clean.rename(columns={"TargetValue": "Target Value"}, inplace=True)
 
+    # Drop any row that merely repeats header names
+    header_tokens = {"series", "category", "target value", "targetvalue", "unit", "summary", "notes", "summary / notes", "metric", "value", "data point"}
+    mask_header_rows = df_clean.fillna("").astype(str).apply(
+        lambda row: all(str(v).strip().lower() in header_tokens for v in row if str(v).strip()),
+        axis=1
+    )
+    if mask_header_rows.any():
+        df_clean = df_clean[~mask_header_rows].copy()
+
+    # Drop duplicate data rows
+    try:
+        df_clean = df_clean.drop_duplicates()
+    except Exception:
+        pass
+
     return deduplicate_dataframe_columns(df_clean)
 
 
@@ -10840,8 +10867,6 @@ def run_pipeline(
                             image_path=comp_img
                         )
                         result = MockResult(comp_data)
-                        if text_stream_callback and callable(text_stream_callback):
-                            text_stream_callback(ans_compound)
                         logger.info("✅ [Streamlit -> Multi-Agent Orchestrator] Compound cross-modal synthesis succeeded!")
                     except Exception as multi_agent_exc:
                         logger.warning("Multi-Agent compound pipeline fallback notice: %s. Falling back to monolithic agent.", multi_agent_exc)
