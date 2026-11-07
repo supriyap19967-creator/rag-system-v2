@@ -1834,6 +1834,14 @@ def system_prompt(ctx: RunContext[SystemPipelinesDeps]) -> str:
                 "\n\n[LOCKED MODALITY: VISUAL_SPECIFIC - The user inquiry explicitly targets a figure/chart/table. "
                 "Extract visual data points and populate 'visual_asset_path' and 'image_path'.]\n"
             )
+        elif intent_str == "HYBRID_MULTIMODAL":
+            prompt += (
+                "\n\n[CROSS-MODAL COMPOUND ORCHESTRATION: The user inquiry requires synthesizing multiple modalities "
+                "(e.g., CSV tabular data, visual chart/figure extractions, and document policy text). "
+                "You are authorized and required to call the necessary tools (query_pandas_dataframe, query_qdrant_vector_search, "
+                "and process_vision_element) to retrieve data across all requested dimensions, and synthesize a coherent "
+                "cross-modal comparison with both quantitative metrics and qualitative policy context.]\n"
+            )
 
     if ctx.deps and getattr(ctx.deps, "retrieved_chunks", None):
         target_chunk_count = 6 if getattr(ctx.deps, "query_intent", None) in ("TEXT_ONLY", QueryIntent.TEXT_ONLY) else 3
@@ -10124,6 +10132,9 @@ def run_pipeline(
                 allowed_tools["allow_vision"] = True
                 query_intent = QueryIntent.VISUAL_SPECIFIC
                 logger.info("🔄 [Follow-up Memory Hydrated] Hydrated active session asset: %s %s (%s)", target_cat, target_id, resolved_img_path)
+            else:
+                st.session_state["LAST_ACTIVE_IMAGE_PATH"] = None
+                resolved_img_path = None
 
         if target_cat and target_id:
             asset_kind = "figure" if ("fig" in str(target_cat).lower() or "chart" in str(target_cat).lower()) else "table"
@@ -10574,7 +10585,7 @@ def run_pipeline(
                     pre_fetched_vision_data = None
 
             # Fallback state hydration synchronously on Turn 1 cold start
-            if not pre_fetched_vision_data:
+            if not pre_fetched_vision_data and target_cat and target_id:
                 # 1. Directly read from Qdrant Cloud payload when top_chunks are present
                 if top_chunks and len(top_chunks) > 0:
                     for ch in top_chunks:
@@ -10644,7 +10655,7 @@ def run_pipeline(
     
     # Combination of Approach 1 (LLM Synthesis for Analytical/Comparative queries)
     # and Approach 2 (Sub-20ms Fast-Path Slicing for Targeted Lookups / Full Overview)
-    should_fast_path_exit = (target_cat and target_id and pre_fetched_vision_data) and (
+    should_fast_path_exit = (query_intent != QueryIntent.HYBRID_MULTIMODAL) and (target_cat and target_id and pre_fetched_vision_data) and (
         vis_nature != "ANALYTICAL"
     ) and (
         asset_kind == "table" or not is_explicit_table_req
@@ -10748,79 +10759,115 @@ def run_pipeline(
                     logger.warning("⚠️ Error building capped pydantic history: %s. Defaulting to empty history.", hist_exc)
                     capped_history = []
 
-                try:
-                    target_agent = multimodal_agent if multimodal_agent is not None else fast_fallback_agent
-                    future = _AGENT_EXECUTOR.submit(
-                        target_agent.run_sync,
-                        user_query,
-                        deps=deps,
-                        message_history=capped_history,
-                        usage_limits=UsageLimits(request_limit=5)
-                    )
+                # Multi-Agent Compound Dispatch Interceptor
+                result = None
+                if query_intent == QueryIntent.HYBRID_MULTIMODAL:
                     try:
-                        result = future.result(timeout=45.0)
-                    except concurrent.futures.TimeoutError:
-                        logger.warning("⏱️ Primary agent timed out (45s threshold). Triggering fast failover...")
-                        if fast_fallback_agent is not None and target_agent != fast_fallback_agent:
-                            fallback_future = _AGENT_EXECUTOR.submit(
-                                fast_fallback_agent.run_sync,
-                                user_query,
-                                deps=deps,
-                                message_history=capped_history,
-                                usage_limits=UsageLimits(request_limit=5)
-                            )
-                            try:
-                                result = fallback_future.result(timeout=30.0)
-                            except concurrent.futures.TimeoutError:
-                                raise TimeoutError("30s fallback latency threshold exceeded")
+                        logger.info("🚀 [Streamlit -> Multi-Agent Orchestrator] Delegating compound query to app.main:query_rag...")
+                        from app.main import query_rag, QueryRequest
+                        req = QueryRequest(question=user_query, session_id=active_session_id)
+                        rag_res = query_rag(req)
+                        ans_compound = rag_res.get("answer", "")
+                        comp_img = rag_res.get("final_image_path") or rag_res.get("image_path")
+                        if comp_img:
+                            resolved_img_path = comp_img
+                            st.session_state["LAST_ACTIVE_IMAGE_PATH"] = comp_img
                         else:
-                            raise TimeoutError("45s latency threshold exceeded")
+                            st.session_state["LAST_ACTIVE_IMAGE_PATH"] = None
+                            deps.last_resolved_vision_path = None
+                            deps.pre_fetched_vision_data = None
 
-
-                except Exception as openrouter_exc:
-                    logger.warning("⚠️ Primary agent failed/congested: %s. Triggering direct OpenRouter Llama-3.3-70B fast fallback...", openrouter_exc)
-                    if fast_fallback_agent is not None:
+                        extracted_rows = []
                         try:
-                            # Submit the fallback agent to the agent executor so we don't block the Streamlit thread directly
-                            # and can enforce a timeout
-                            fb_future = _AGENT_EXECUTOR.submit(
-                                fast_fallback_agent.run_sync,
-                                user_query,
-                                deps=deps,
-                                message_history=capped_history,
-                                usage_limits=UsageLimits(request_limit=5)
-                            )
-                            result = fb_future.result(timeout=45.0)
-                            logger.info("⚡ Direct OpenRouter Llama-3.3-70B fast fallback agent succeeded!")
-                        except Exception as fast_exc:
-                            err_msg = "TimeoutError (45s limit)" if isinstance(fast_exc, concurrent.futures.TimeoutError) else str(fast_exc)
-                            logger.warning("⚠️ Fast fallback agent also failed: %s. Generating safety fallback payload.", err_msg)
-                            result = None
-                    else:
+                            parsed_rows = parse_markdown_table_to_dicts(ans_compound)
+                            if parsed_rows:
+                                extracted_rows = [ChartTableRow(**r) for r in parsed_rows]
+                        except Exception:
+                            extracted_rows = []
+                        
+                        comp_data = ChartTableData(
+                            source_routing_trail="Pydantic-AI Multi-Agent Compound Orchestration (Supervisor -> SubAgents -> Synthesizer -> Validation)",
+                            text_reasoning=ans_compound,
+                            extracted_table=extracted_rows,
+                            visual_asset_path=comp_img,
+                            image_path=comp_img
+                        )
+                        result = MockResult(comp_data)
+                        if text_stream_callback and callable(text_stream_callback):
+                            text_stream_callback(ans_compound)
+                        logger.info("✅ [Streamlit -> Multi-Agent Orchestrator] Compound cross-modal synthesis succeeded!")
+                    except Exception as multi_agent_exc:
+                        logger.warning("Multi-Agent compound pipeline fallback notice: %s. Falling back to monolithic agent.", multi_agent_exc)
                         result = None
 
-
-
-                    if not result:
-                        if pre_fetched_vision_data:
-                            fallback_text = f"Visual extraction summary based on pre-transcribed asset:\n\n{pre_fetched_vision_data}"
-                        else:
-                            fallback_text = f"The query could not be completed: {openrouter_exc}"
-                        
-                        fb_path = getattr(deps, "last_resolved_vision_path", None)
-                        if fb_path and not str(fb_path).startswith("http"):
-                            from app.multimodal_assets import get_supabase_asset_url
-                            fb_path = get_supabase_asset_url(fb_path) or fb_path
-                        fallback_data = ChartTableData(
-                            source_routing_trail="Pre-transcribed visual store pipeline",
-                            text_reasoning=fallback_text,
-                            extracted_table=[],
-                            visual_asset_path=fb_path,
-                            image_path=fb_path
+                if result is None:
+                    try:
+                        target_agent = multimodal_agent if multimodal_agent is not None else fast_fallback_agent
+                        future = _AGENT_EXECUTOR.submit(
+                            target_agent.run_sync,
+                            user_query,
+                            deps=deps,
+                            message_history=capped_history,
+                            usage_limits=UsageLimits(request_limit=5)
                         )
-                        result = MockResult(fallback_data)
+                        try:
+                            result = future.result(timeout=45.0)
+                        except concurrent.futures.TimeoutError:
+                            logger.warning("⏱️ Primary agent timed out (45s threshold). Triggering fast failover...")
+                            if fast_fallback_agent is not None and target_agent != fast_fallback_agent:
+                                fallback_future = _AGENT_EXECUTOR.submit(
+                                    fast_fallback_agent.run_sync,
+                                    user_query,
+                                    deps=deps,
+                                    message_history=capped_history,
+                                    usage_limits=UsageLimits(request_limit=5)
+                                )
+                                try:
+                                    result = fallback_future.result(timeout=30.0)
+                                except concurrent.futures.TimeoutError:
+                                    raise TimeoutError("30s fallback latency threshold exceeded")
+                            else:
+                                raise TimeoutError("45s latency threshold exceeded")
 
-                
+                    except Exception as openrouter_exc:
+                        logger.warning("⚠️ Primary agent failed/congested: %s. Triggering direct OpenRouter Llama-3.3-70B fast fallback...", openrouter_exc)
+                        if fast_fallback_agent is not None:
+                            try:
+                                fb_future = _AGENT_EXECUTOR.submit(
+                                    fast_fallback_agent.run_sync,
+                                    user_query,
+                                    deps=deps,
+                                    message_history=capped_history,
+                                    usage_limits=UsageLimits(request_limit=5)
+                                )
+                                result = fb_future.result(timeout=45.0)
+                                logger.info("⚡ Direct OpenRouter Llama-3.3-70B fast fallback agent succeeded!")
+                            except Exception as fast_exc:
+                                err_msg = "TimeoutError (45s limit)" if isinstance(fast_exc, concurrent.futures.TimeoutError) else str(fast_exc)
+                                logger.warning("⚠️ Fast fallback agent also failed: %s. Generating safety fallback payload.", err_msg)
+                                result = None
+                        else:
+                            result = None
+
+                        if not result:
+                            if pre_fetched_vision_data:
+                                fallback_text = f"Visual extraction summary based on pre-transcribed asset:\n\n{pre_fetched_vision_data}"
+                            else:
+                                fallback_text = f"The query could not be completed: {openrouter_exc}"
+                            
+                            fb_path = getattr(deps, "last_resolved_vision_path", None)
+                            if fb_path and not str(fb_path).startswith("http"):
+                                from app.multimodal_assets import get_supabase_asset_url
+                                fb_path = get_supabase_asset_url(fb_path) or fb_path
+                            fallback_data = ChartTableData(
+                                source_routing_trail="Pre-transcribed visual store pipeline",
+                                text_reasoning=fallback_text,
+                                extracted_table=[],
+                                visual_asset_path=fb_path,
+                                image_path=fb_path
+                            )
+                            result = MockResult(fallback_data)
+
                 # Post-Execution Interceptor for Visual Extraction
                 if result and hasattr(result, "output") and result.output:
                     # Programmatic fallback injection if visual_asset_path/image_path is empty
@@ -11119,7 +11166,7 @@ def run_pipeline(
         # 3. Append source trail if present and not blocked
         if result.output.source_routing_trail and not (result.output.extracted_table == [] and answer_text == RAGMasterSafetyGauntlet.SAFE_FALLBACK_TEXT):
             sources_breakdown = []
-            if any(k in str(result.output.text_reasoning).lower() for k in ["calculation provenance", "gdp_df", "co2_df", "indicator"]) or query_intent == QueryIntent.CSV_ONLY:
+            if any(k in str(result.output.text_reasoning).lower() for k in ["calculation provenance", "gdp_df", "co2_df", "indicator"]) or query_intent in (QueryIntent.CSV_ONLY, QueryIntent.HYBRID_MULTIMODAL):
                 sources_breakdown.append("- 📊 **CSV Dataset**: `gdp_df.csv` / `co2_df.csv` (World Bank Data)")
             if getattr(deps, "retrieved_chunks", None) or query_intent in (QueryIntent.TEXT_ONLY, QueryIntent.HYBRID_MULTIMODAL, QueryIntent.VISUAL_SPECIFIC):
                 sources_breakdown.append("- 📄 **PDF Document Text**: `World Development Report 2025.pdf` (Qdrant Vector DB)")

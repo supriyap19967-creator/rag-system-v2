@@ -25,12 +25,11 @@ COUNTRY_KEYWORDS = {
 
 # Metric & Aggregation indicators that target tabular CSV datasets
 METRIC_KEYWORDS = {
-    "gdp", "co2", "emissions", "income group", "income-group", "country",
-    "top 5", "top 10", "lowest", "highest", "average co2", "average gdp",
-    "correlation", "groupby", "median", "per capita co2", "total gdp",
-    "world bank data", "csv", "dataframe", "dataset", "indicator",
-    "aggregate", "aggregate value", "total value", "value of", "values of",
-    "data of", "sum of", "statistics", "metric"
+    "gdp", "co2", "emissions", "income group", "income-group", "high income", "high-income",
+    "low income", "low-income", "middle income", "country", "top 5", "top 10", "lowest", "highest",
+    "average co2", "average gdp", "correlation", "groupby", "median", "per capita co2", "total gdp",
+    "world bank data", "csv", "dataframe", "dataset", "indicator", "aggregate", "aggregate value",
+    "total value", "value of", "values of", "data of", "sum of", "statistics", "metric", "metrics"
 }
 
 CSV_KEYWORDS = COUNTRY_KEYWORDS | METRIC_KEYWORDS
@@ -48,7 +47,8 @@ TEXT_KEYWORDS = {
     "what are the three types of standards", "definition of", "standards discussed",
     "policy", "world development report 2025", "wdr 2025", "wdr", "compliance capacity definition",
     "explain", "overview", "chapter", "framework", "recommendations", "standards",
-    "pdf", "report", "text", "document", "what does", "how does", "why does"
+    "pdf", "report", "text", "document", "what does", "how does", "why does",
+    "harmonization", "standard harmonization", "harmonization policy", "arguments"
 }
 
 
@@ -66,6 +66,30 @@ def classify_query_intent(query: str) -> Tuple[QueryIntent, Dict[str, bool]]:
 
     has_compound = any(conn in q_clean for conn in [" and ", " as well as ", " along with ", " plus ", " also "])
     explicit_hybrid = any(phrase in q_clean for phrase in ["compare csv", "combine csv", "with csv", "csv data", "dataframe", "cross-reference csv", "against gdp dataset", "against co2 dataset"])
+
+    comparison_markers = [
+        "compare", "comparing", "comparison", "contrast", "contrasting",
+        "correlate", "correlation", "relationship between", "versus", "vs",
+        "against", "along with", "as well as", "combine", "cross-reference",
+        "both", "difference between"
+    ]
+    is_comparison = any(re.search(r"\b" + re.escape(m) + r"\b", q_clean) for m in comparison_markers)
+
+    # Compound Cross-Modal Detection (HYBRID_MULTIMODAL)
+    is_compound = (
+        explicit_hybrid
+        or (has_csv and has_visual)
+        or (has_csv and has_text)
+        or (has_visual and has_text and is_comparison)
+        or (is_comparison and ((has_csv and has_visual) or (has_csv and has_text)))
+    )
+
+    if is_compound:
+        return QueryIntent.HYBRID_MULTIMODAL, {
+            "allow_pandas": bool(has_csv or has_country),
+            "allow_qdrant": True,
+            "allow_vision": bool(has_visual)
+        }
 
     # 1. Visual Specific: Target figure/chart/table explicitly named
     if has_visual:

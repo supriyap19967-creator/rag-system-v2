@@ -42,16 +42,23 @@ data_model = get_agent_model("DATA_AGENT_MODEL_NAME")
 data_agent = Agent(
     data_model,
     output_type=DataOutput,
-    retries=10,
+    retries=3,
     system_prompt=(
         "You are a Senior Data Analyst Agent specializing in analytical, statistical, and comparative Pandas queries.\n\n"
         "PRELOADED DATASETS IN EXECUTION ENVIRONMENT:\n"
+        "- `gdp_clean_df`: PRE-CLEANED World Bank GDP dataset with metadata ALREADY merged and all non-country aggregates filtered out! Contains only valid sovereign countries with columns: 'Country Name', 'Country Code', 'Region', 'IncomeGroup', and yearly columns '1960' through '2023'. USE THIS DIRECTLY for country rankings, top/bottom lists, and country metrics!\n"
+        "- `co2_clean_df`: PRE-CLEANED CO2 emissions dataset with metadata merged and aggregates filtered out.\n"
         "- `gdp_df`: World Bank GDP dataset. Columns include 'Country Name', 'Country Code', 'Indicator Name' ('GDP (current US$)'), 'Indicator Code' ('NY.GDP.MKTP.CD'), and yearly columns '1960' through '2023'.\n"
         "- `gdp_meta_df`: Metadata dataset with columns 'Country Code', 'Region', 'IncomeGroup'.\n"
         "- `co2_df`: World Bank CO2 emissions dataset.\n"
         "- `co2_meta_df`: CO2 metadata with 'Country Code', 'Region', 'IncomeGroup'.\n"
         "- Extracted report tables from `assets/extracted_tables/` (e.g. `page_111_Table_2_1`).\n"
         "NOTE: Yearly columns are strings (e.g. '2020', '2021', '2022'). Use `gdp_df['2022']` rather than `df['Year'] == 2022`.\n\n"
+        "CRITICAL NUMERIC RULES:\n"
+        "- When calculating mean, median, sum, or statistics across years or across rows, ALWAYS pass numeric_only=True (e.g. df.mean(numeric_only=True)) or explicitly select year columns (e.g. year_cols = [c for c in df.columns if c.isdigit()]), because metadata columns like 'Region', 'IncomeGroup', 'Country Name', 'Country Code' are strings and will raise a TypeError if included in string math!\n"
+        "- For queries filtering by IncomeGroup (e.g. 'low-income' or 'high-income'):\n"
+        "  * Use gdp_clean_df[gdp_clean_df['IncomeGroup'].str.lower() == 'low income'] or high income.\n"
+        "  * To compute average GDP: avg_val = low_df.mean(numeric_only=True).mean() or specify the year.\n\n"
         "CORE OBJECTIVES:\n"
         "1. Data Wrangling & Cleaning: Process raw tabular, CSV, or JSON data into clean, structured formats.\n"
         "2. Exploratory & Quantitative Analysis: Calculate descriptive statistics, correlations, and trends.\n"
@@ -152,11 +159,28 @@ def execute_pandas_query(ctx: RunContext[Any], python_code: str) -> str:
         except Exception as csv_err:
             logger.warning(f"Could not load CSV dataset '{name}': {csv_err}")
         
-    # Common DataFrame aliases
+    # Common DataFrame aliases and pre-cleaned country datasets
+    if "gdp_df" in locs and "gdp_meta_df" in locs:
+        m_gdp = locs["gdp_df"].merge(locs["gdp_meta_df"], on="Country Code", how="left")
+        clean_gdp = m_gdp[m_gdp["Region"].notna()].copy()
+        clean_gdp = clean_gdp.drop(columns=[c for c in ["SpecialNotes", "TableName"] if c in clean_gdp.columns])
+        year_cols = [c for c in clean_gdp.columns if c.isdigit()]
+        clean_gdp[year_cols] = clean_gdp[year_cols].apply(pd.to_numeric, errors='coerce')
+        locs["gdp_clean_df"] = clean_gdp
+        locs["gdp_countries_df"] = clean_gdp
+    if "co2_df" in locs and "co2_meta_df" in locs:
+        m_co2 = locs["co2_df"].merge(locs["co2_meta_df"], on="Country Code", how="left")
+        clean_co2 = m_co2[m_co2["Region"].notna()].copy()
+        clean_co2 = clean_co2.drop(columns=[c for c in ["SpecialNotes", "TableName"] if c in clean_co2.columns])
+        year_cols = [c for c in clean_co2.columns if c.isdigit()]
+        clean_co2[year_cols] = clean_co2[year_cols].apply(pd.to_numeric, errors='coerce')
+        locs["co2_clean_df"] = clean_co2
+        locs["co2_countries_df"] = clean_co2
+
     if "gdp_df" in locs:
         locs["GDP"] = locs["gdp_df"]
         locs["gdp"] = locs["gdp_df"]
-        locs["df"] = locs["gdp_df"]
+        locs["df"] = locs.get("gdp_clean_df", locs["gdp_df"])
     if "co2_df" in locs:
         locs["CO2"] = locs["co2_df"]
         locs["co2"] = locs["co2_df"]

@@ -3253,152 +3253,6 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
                 memory_manager._sessions[request.session_id] = list(mocked_history)
                 history = list(mocked_history)
 
-        # Hardcode explicit checks on the incoming question inside query_rag to satisfy test assertions 100% of the time
-        question_lower = question.lower()
-        if "standards" in question_lower and ("summarize" in question_lower or "impact" in question_lower or "report" in question_lower):
-            ans_text = "Based on the retrieved context, standards help support development and build quality infrastructure in developing countries, and improve efficiency."
-            formatted_answer = (
-                f"Answer:\n{ans_text}\n\n"
-                f"Confidence: High\n\n"
-                f"Sources: Data/Pdf/World Development Report 2025.pdf"
-            )
-            return {
-                "session_id": request.session_id,
-                "question": request.question,
-                "rewritten_query": question,
-                "answer": formatted_answer,
-                "retrieved_chunks": [],
-                "sources": ["Data/Pdf/World Development Report 2025.pdf"],
-                "image_path": None,
-                "final_image_path": None,
-                "active_asset_paths": [],
-                "retrieval_mode": "structured_csv_exact",
-                "intent": "DATA_RETRIEVAL",
-                "global_analytics": False,
-                "model_used": "pandas_structured",
-                "latency_seconds": _elapsed(start_time),
-            }
-        elif "what was india gdp in 2022?" in question_lower:
-            ans_text = "India GDP (2022): 3,346,107,287,730.93."
-            formatted_answer = (
-                f"Answer:\n{ans_text}\n\n"
-                f"Confidence: High\n\n"
-                f"Sources: GDP1.csv"
-            )
-            return {
-                "session_id": request.session_id,
-                "question": request.question,
-                "rewritten_query": question,
-                "answer": formatted_answer,
-                "retrieved_chunks": [],
-                "sources": ["GDP1.csv"],
-                "image_path": None,
-                "final_image_path": None,
-                "active_asset_paths": [],
-                "retrieval_mode": "structured_csv_exact",
-                "intent": "DATA_RETRIEVAL",
-                "global_analytics": False,
-                "model_used": "pandas_structured",
-                "latency_seconds": _elapsed(start_time),
-            }
-
-        from app.structured_query import extract_countries
-        if looks_like_structured_query(question) and not extract_countries(question):
-            formatted_answer = (
-                f"Answer:\n{INSUFFICIENT_DATA_MESSAGE}\n\n"
-                f"Confidence: Low\n\n"
-                f"Sources: "
-            )
-            return {
-                "session_id": request.session_id,
-                "question": request.question,
-                "rewritten_query": question,
-                "answer": formatted_answer,
-                "confidence_score": 0.1,
-                "retrieved_chunks": [],
-                "sources": [],
-                "image_path": None,
-                "final_image_path": None,
-                "active_asset_paths": [],
-                "retrieval_mode": "no_relevant_evidence",
-                "intent": "DATA_RETRIEVAL",
-                "global_analytics": False,
-                "model_used": "pandas_structured",
-                "latency_seconds": _elapsed(start_time),
-            }
-
-        forced_csv_route = "gdp" in question.lower()
-        structured_answer, structured_chunks, structured_handled = _run_structured_csv_query(question)
-
-        # Determine if the query requests qualitative context, reasoning, or impact analysis
-        explanation_keywords = {"explain", "explanation", "impact", "reason", "why", "analysis", "compare", "future", "implications", "growth"}
-        q_words = set(re.findall(r"\w+", question.lower()))
-        needs_explanation = bool(q_words & explanation_keywords)
-
-        if forced_csv_route and not needs_explanation:
-            print("🎯 Forcing Pandas CSV Route!", file=sys.stderr, flush=True)
-            if structured_handled:
-                print(
-                    f"DEBUG [Structured CSV Fast Path]: handled={structured_handled} chunks={len(structured_chunks)} query={question!r}",
-                    file=sys.stderr,
-                    flush=True,
-                )
-                sources_list = sorted({Path(chunk.get("source", "unknown")).name for chunk in structured_chunks})
-                formatted_answer = (
-                    f"Answer:\n{structured_answer}\n\n"
-                    f"Confidence: High\n\n"
-                    f"Sources: {', '.join(sources_list)}"
-                )
-                memory_manager.update_history(request.session_id, question, formatted_answer)
-                memory_manager.attach_sources(request.session_id, structured_chunks)
-                return {
-                    "session_id": request.session_id,
-                    "question": request.question,
-                    "rewritten_query": question,
-                    "answer": formatted_answer,
-                    "retrieved_chunks": structured_chunks,
-                    "sources": sources_list,
-                    "image_path": None,
-                    "final_image_path": None,
-                    "active_asset_paths": [],
-                    "retrieval_mode": "structured_csv_exact",
-                    "intent": "DATA_RETRIEVAL",
-                    "global_analytics": False,
-                    "model_used": "pandas_structured",
-                    "latency_seconds": _elapsed(start_time),
-                }
-        else:
-            if structured_handled and not needs_explanation:
-                print(
-                    f"DEBUG [Structured CSV Fast Path]: handled={structured_handled} chunks={len(structured_chunks)} query={question!r}",
-                    file=sys.stderr,
-                    flush=True,
-                )
-                sources_list = sorted({Path(chunk.get("source", "unknown")).name for chunk in structured_chunks})
-                formatted_answer = (
-                    f"Answer:\n{structured_answer}\n\n"
-                    f"Confidence: High\n\n"
-                    f"Sources: {', '.join(sources_list)}"
-                )
-                memory_manager.update_history(request.session_id, question, formatted_answer)
-                memory_manager.attach_sources(request.session_id, structured_chunks)
-                return {
-                    "session_id": request.session_id,
-                    "question": request.question,
-                    "rewritten_query": question,
-                    "answer": formatted_answer,
-                    "retrieved_chunks": structured_chunks,
-                    "sources": sources_list,
-                    "image_path": None,
-                    "final_image_path": None,
-                    "active_asset_paths": [],
-                    "retrieval_mode": "structured_csv_exact",
-                    "intent": "DATA_RETRIEVAL",
-                    "global_analytics": False,
-                    "model_used": "pandas_structured",
-                    "latency_seconds": _elapsed(start_time),
-                }
-
         nvidia_model = nvidia_llama_model()
         final_model = nvidia_final_model()
         openrouter_model_inst = openrouter_model()
@@ -3427,6 +3281,38 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
             tasks = routing_decision.get("tasks", [])
             comparison_goal = routing_decision.get("comparison_goal")
 
+            cand_dirs = [
+                "assets/extracted_charts",
+                "assets/extracted_images",
+                "extracted_charts",
+                "extracted_images",
+                "Data/extracted_visuals_smoke",
+                "Data"
+            ]
+
+            def _find_matching_image(ref_str: str) -> str | None:
+                if not ref_str:
+                    return None
+                fig_m = re.search(r"(?:figure|fig)[\s_]*([sS]?\d+(?:[._]\d+)?)", ref_str.lower())
+                clean_ref = re.sub(r"[^a-zA-Z0-9_.]", "_", ref_str).lower()
+                for sdir in cand_dirs:
+                    sp = PROJECT_ROOT / sdir
+                    if not sp.exists():
+                        continue
+                    for f in sp.glob("*.png"):
+                        fn = f.name.lower()
+                        if fig_m:
+                            f_num = fig_m.group(1).lower()
+                            f_und = f_num.replace(".", "_")
+                            f_dot = f_num.replace("_", ".")
+                            if (f"figure_{f_und}" in fn or f"figure_{f_dot}" in fn or 
+                                f"figure{f_und}" in fn or f"figure{f_dot}" in fn or
+                                f"fig_{f_und}" in fn or f"fig{f_und}" in fn):
+                                return str(f).replace("\\", "/")
+                        if clean_ref and (clean_ref in fn or ref_str.lower().replace(" ", "_") in fn):
+                            return str(f).replace("\\", "/")
+                return None
+
             if is_compound and len(tasks) > 1:
                 logger.info(f"Executing Compound Multi-Agent Dispatcher with {len(tasks)} sub-tasks...")
                 sub_agent_summaries = {}
@@ -3443,41 +3329,17 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
                             f"**Metrics Summary**:\n{data_res.get('executive_metrics', '')}\n\n"
                             f"**Analytical Breakdown**:\n{data_res.get('analytical_breakdown', '')}"
                         )
-                        final_sources.append("GDP1.csv")
+                        sub_q_lower = (sub_query or "").lower()
+                        if "co2" in sub_q_lower:
+                            final_sources.append("CO21.csv")
+                        else:
+                            final_sources.append("GDP1.csv")
                         
                     elif sub_agent == "VISION_AGENT":
                         logger.info(f"Compound Dispatcher -> VISION_AGENT: {sub_query} (asset_ref: {asset_ref})")
-                        target_img = None
+                        target_img = _find_matching_image(asset_ref or "") or _find_matching_image(sub_query + " " + question)
                         
-                        # 1. Direct match on asset_ref if provided
-                        if asset_ref:
-                            clean_ref = re.sub(r"[^a-zA-Z0-9_.]", "_", asset_ref).lower()
-                            for sdir in ["Data/extracted_visuals_smoke", "assets/extracted_images", "Data"]:
-                                sp = PROJECT_ROOT / sdir
-                                if sp.exists():
-                                    for f in sp.glob("*.png"):
-                                        if clean_ref in f.name.lower() or asset_ref.lower().replace(" ", "_") in f.name.lower():
-                                            target_img = str(f).replace("\\", "/")
-                                            break
-                                if target_img:
-                                    break
-                                    
-                        # 2. Check for figure references in sub_query / question
-                        if not target_img:
-                            fig_m = re.search(r"figure\s*(\d+[._]\d+)", (sub_query + " " + question).lower())
-                            if fig_m:
-                                f_tag = fig_m.group(1).replace(".", "_")
-                                for sdir in ["Data/extracted_visuals_smoke", "assets/extracted_images"]:
-                                    sp = PROJECT_ROOT / sdir
-                                    if sp.exists():
-                                        for f in sp.glob("*.png"):
-                                            if f"figure_{f_tag}".lower() in f.name.lower() or f"figure{f_tag}".lower() in f.name.lower():
-                                                target_img = str(f).replace("\\", "/")
-                                                break
-                                    if target_img:
-                                        break
-                                        
-                        # 3. Hybrid chunk retrieval
+                        # 3. Hybrid chunk retrieval if explicitly asked for visual and not found
                         if not target_img:
                             locked_entities = step_zero_extract_entities(sub_query)
                             rewritten_queries = [sub_query]
@@ -3496,59 +3358,33 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
                             target_img = bind_image_paths_to_chunks(v_chunks, locked_entities)
                             reranked.extend(v_chunks)
                             
-                        # 4. Fallback to historical or smoke visual
-                        if not target_img:
-                            hist_turns = memory_manager.get_history(request.session_id)
-                            hist_assets = memory_manager._historical_assets_for_query(request.question, hist_turns)
-                            if hist_assets:
-                                target_img = hist_assets[0]
-                            else:
-                                target_img = "Data/extracted_visuals_smoke/page_70_Figure_1.1.png"
-                                
-                        resolved_img = _resolve_existing_image_path(target_img) or target_img
-                        final_image_path = resolved_img
-                        active_assets.append(resolved_img)
-                        final_sources.append(Path(resolved_img).name)
-                        
-                        vision_res = execute_vision_task(resolved_img, sub_query)
-                        tbl_md = vision_res.get("extracted_table_markdown")
-                        tbl_section = f"\n\n**Extracted Data Table**:\n{tbl_md}\n" if tbl_md and "|" in tbl_md else ""
-                        sub_agent_summaries["VISION_AGENT"] = (
-                            f"**Visual Summary ({Path(resolved_img).name})**:\n{vision_res.get('visual_summary', '')}\n\n"
-                            f"**Observations**:\n" + "\n".join([f"- {item}" for item in vision_res.get("visual_analysis", [])]) +
-                            tbl_section + "\n\n"
-                            f"**Extracted Insights**: {vision_res.get('actionable_insights', '')}"
-                        )
-                        
+                        if target_img:
+                            resolved_img = _resolve_existing_image_path(target_img) or target_img
+                            final_image_path = resolved_img
+                            active_assets.append(resolved_img)
+                            final_sources.append(Path(resolved_img).name)
+                            
+                            vision_res = execute_vision_task(resolved_img, sub_query)
+                            tbl_md = vision_res.get("extracted_table_markdown")
+                            tbl_section = f"\n\n**Extracted Data Table**:\n{tbl_md}\n" if tbl_md and "|" in tbl_md else ""
+                            sub_agent_summaries["VISION_AGENT"] = (
+                                f"**Visual Summary ({Path(resolved_img).name})**:\n{vision_res.get('visual_summary', '')}\n\n"
+                                f"**Observations**:\n" + "\n".join([f"- {item}" for item in vision_res.get("visual_analysis", [])]) +
+                                tbl_section + "\n\n"
+                                f"**Extracted Insights**: {vision_res.get('actionable_insights', '')}"
+                            )
+                        else:
+                            logger.info("No visual image asset found for Vision Agent in sub-task.")
+                            
                     elif sub_agent == "RESEARCH_AGENT":
                         logger.info(f"Compound Dispatcher -> RESEARCH_AGENT: {sub_query}")
-                        locked_entities = step_zero_extract_entities(sub_query)
-                        rewritten_queries = [sub_query]
-                        sparse_only = has_explicit_identifier_or_number(sub_query)
-                        structural_intent = RAGModules.classify_structural_intent(sub_query, nvidia_model)
-                        r_chunks = RAGModules.module_retrieve_hybrid(
-                            rewritten_queries,
-                            sub_query,
-                            top_k=HYBRID_RESULT_LIMIT,
-                            candidate_limit=request.top_k,
-                            filters=request.filters,
-                            sparse_only=sparse_only,
-                            locked_entities=locked_entities,
-                            structural_intent=structural_intent,
-                        )
-                        reranked.extend(r_chunks)
-                        for rc in r_chunks:
-                            src_name = rc.get("source", "")
-                            if src_name:
-                                final_sources.append(Path(src_name).name if src_name.endswith(".pdf") or src_name.endswith(".csv") else src_name)
-                                
-                        r_context = "\n\n".join([f"[{i+1}] {c.get('text', '')}" for i, c in enumerate(r_chunks[:3])])
-                        research_res = execute_research(sub_query, retrieved_context=r_context)
+                        research_res = execute_research(sub_query)
                         sub_agent_summaries["RESEARCH_AGENT"] = (
                             f"**Executive Synthesis**:\n{research_res.get('executive_summary', '')}\n\n"
                             f"**Key Findings**:\n" + "\n".join([f"- {item}" for item in research_res.get("key_findings", [])]) + "\n\n"
                             f"**Notes**: {research_res.get('source_notes', '')}"
                         )
+                        final_sources.append("World Development Report 2025.pdf")
                         
                 from app.agents.synthesizer import synthesize_cross_modal_fusion
                 agent_response = synthesize_cross_modal_fusion(question, comparison_goal, sub_agent_summaries)
@@ -3563,58 +3399,45 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
                     f"**Source Notes**: {research_res.get('source_notes', '')}"
                 )
                 model_used = "research_agent"
-                # Pull chunks for research agent to show sources in UI
-                locked_entities = step_zero_extract_entities(question)
-                rewritten_queries = [question]
-                sparse_only = has_explicit_identifier_or_number(question)
-                structural_intent = RAGModules.classify_structural_intent(question, nvidia_model)
-                reranked = RAGModules.module_retrieve_hybrid(
-                    rewritten_queries,
-                    question,
-                    top_k=HYBRID_RESULT_LIMIT,
-                    candidate_limit=request.top_k,
-                    filters=request.filters,
-                    sparse_only=sparse_only,
-                    locked_entities=locked_entities,
-                    structural_intent=structural_intent,
-                )
+                final_sources.append("World Development Report 2025.pdf")
             elif target == "VISION_AGENT":
                 logger.info("Executing Vision Agent workflow...")
-                # First retrieve chunks to bind correct image path
-                locked_entities = step_zero_extract_entities(question)
-                rewritten_queries = [question]
-                sparse_only = has_explicit_identifier_or_number(question)
-                structural_intent = RAGModules.classify_structural_intent(question, nvidia_model)
-                reranked = RAGModules.module_retrieve_hybrid(
-                    rewritten_queries,
-                    question,
-                    top_k=HYBRID_RESULT_LIMIT,
-                    candidate_limit=request.top_k,
-                    filters=request.filters,
-                    sparse_only=sparse_only,
-                    locked_entities=locked_entities,
-                    structural_intent=structural_intent,
-                )
-                final_image_path = bind_image_paths_to_chunks(reranked, locked_entities)
+                final_image_path = _find_matching_image(question)
                 if not final_image_path:
-                    hist_turns = memory_manager.get_history(request.session_id)
-                    hist_assets = memory_manager._historical_assets_for_query(request.question, hist_turns)
-                    if hist_assets:
-                        final_image_path = hist_assets[0]
-                    else:
-                        final_image_path = "assets/extracted_images/page_206_Figure_4.1.png"
+                    locked_entities = step_zero_extract_entities(question)
+                    rewritten_queries = [question]
+                    sparse_only = has_explicit_identifier_or_number(question)
+                    structural_intent = RAGModules.classify_structural_intent(question, nvidia_model)
+                    reranked = RAGModules.module_retrieve_hybrid(
+                        rewritten_queries,
+                        question,
+                        top_k=HYBRID_RESULT_LIMIT,
+                        candidate_limit=request.top_k,
+                        filters=request.filters,
+                        sparse_only=sparse_only,
+                        locked_entities=locked_entities,
+                        structural_intent=structural_intent,
+                    )
+                    final_image_path = bind_image_paths_to_chunks(reranked, locked_entities)
                 
-                vision_res = execute_vision_task(final_image_path, question)
-                tbl_md = vision_res.get("extracted_table_markdown")
-                tbl_section = f"\n\n### Extracted Table Data:\n{tbl_md}\n" if tbl_md and "|" in tbl_md else ""
-                
-                agent_response = (
-                    f"{vision_res.get('visual_summary', '')}\n\n"
-                    f"### Visual Analysis & Breakdown:\n" + "\n".join([f"- {item}" for item in vision_res.get("visual_analysis", [])]) +
-                    tbl_section + "\n\n"
-                    f"**Actionable Insights**: {vision_res.get('actionable_insights', '')}"
-                )
-                model_used = "vision_agent"
+                if final_image_path:
+                    resolved_img = _resolve_existing_image_path(final_image_path) or final_image_path
+                    final_image_path = resolved_img
+                    active_assets.append(resolved_img)
+                    final_sources.append(Path(resolved_img).name)
+                    vision_res = execute_vision_task(final_image_path, question)
+                    tbl_md = vision_res.get("extracted_table_markdown")
+                    tbl_section = f"\n\n### Extracted Table Data:\n{tbl_md}\n" if tbl_md and "|" in tbl_md else ""
+                    
+                    agent_response = (
+                        f"{vision_res.get('visual_summary', '')}\n\n"
+                        f"### Visual Analysis & Breakdown:\n" + "\n".join([f"- {item}" for item in vision_res.get("visual_analysis", [])]) +
+                        tbl_section + "\n\n"
+                        f"**Actionable Insights**: {vision_res.get('actionable_insights', '')}"
+                    )
+                    model_used = "vision_agent"
+                else:
+                    raise ValueError(f"Could not resolve visual asset for question: {question}")
             elif target == "DATA_AGENT":
                 logger.info("Executing Data Agent workflow...")
                 data_res = execute_data_task(question)
@@ -3624,12 +3447,13 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
                     f"**Code Reference**:\n```python\n{data_res.get('code_reference', '')}\n```"
                 )
                 model_used = "data_agent"
+                q_low = question.lower()
+                final_sources.append("CO21.csv" if "co2" in q_low else "GDP1.csv")
             elif target == "DIRECT_LLM":
                 logger.info("Executing Direct LLM workflow...")
                 agent_response = RAGModules.module_direct_response(question, history, nvidia_model)
                 model_used = NVIDIA_LLAMA_MODEL_NAME
             else:
-                # Fallback to standard RAG pipeline
                 logger.warning(f"Unknown routing target '{target}', falling back to standard pipeline")
                 raise ValueError("fallback")
             
@@ -3641,13 +3465,6 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
             else:
                 answer = agent_response
                 
-            # Populate sources and return response
-            for chunk in reranked:
-                src = chunk.get("source", "unknown")
-                if src.endswith(".csv"):
-                    final_sources.append(Path(src).name)
-                else:
-                    final_sources.append(src)
             final_sources = sorted(list(set(final_sources)))
             
             if final_image_path:
@@ -3693,6 +3510,41 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
             
         except Exception as agent_err:
             logger.warning(f"Agent pipeline failed or routed to fallback: {agent_err}. Falling back to standard pipeline.")
+
+        # Fallback to structured CSV query or standard RAG pipeline
+        forced_csv_route = "gdp" in question.lower()
+        structured_answer, structured_chunks, structured_handled = _run_structured_csv_query(question)
+
+        # Determine if the query requests qualitative context, reasoning, or impact analysis
+        explanation_keywords = {"explain", "explanation", "impact", "reason", "why", "analysis", "compare", "future", "implications", "growth"}
+        q_words = set(re.findall(r"\w+", question.lower()))
+        needs_explanation = bool(q_words & explanation_keywords)
+
+        if structured_handled and not needs_explanation:
+            sources_list = sorted({Path(chunk.get("source", "unknown")).name for chunk in structured_chunks})
+            formatted_answer = (
+                f"Answer:\n{structured_answer}\n\n"
+                f"Confidence: High\n\n"
+                f"Sources: {', '.join(sources_list)}"
+            )
+            memory_manager.update_history(request.session_id, question, formatted_answer)
+            memory_manager.attach_sources(request.session_id, structured_chunks)
+            return {
+                "session_id": request.session_id,
+                "question": request.question,
+                "rewritten_query": question,
+                "answer": formatted_answer,
+                "retrieved_chunks": structured_chunks,
+                "sources": sources_list,
+                "image_path": None,
+                "final_image_path": None,
+                "active_asset_paths": [],
+                "retrieval_mode": "structured_csv_exact",
+                "intent": "DATA_RETRIEVAL",
+                "global_analytics": False,
+                "model_used": "pandas_structured",
+                "latency_seconds": _elapsed(start_time),
+            }
 
         intent = RAGModules.module_route_intent(question, nvidia_model)
         if intent == "DIRECT_RESPONSE":
