@@ -141,11 +141,20 @@ def analyze_image_with_vlm(ctx: RunContext[Any], image_path: str, query: str) ->
         logger.exception("VLM invocation failed")
         return f"Error during VLM execution: {e}"
 
+_VISION_CACHE: Dict[str, Dict[str, Any]] = {}
+
 def execute_vision_task(image_path: str, query: str) -> Dict[str, Any]:
     """
-    Entrypoint function to execute vision perception query with ground-truth transcription support.
+    Entrypoint function to execute vision perception query with ground-truth transcription support
+    and high-performance in-memory caching to eliminate redundant visual latency.
     """
     import json, re
+    fn = Path(image_path).name.lower()
+    cache_key = f"{fn}:{query.strip().lower()}"
+    if cache_key in _VISION_CACHE:
+        logger.info(f"⚡ [Vision Cache Hit] Returning cached visual extraction for: {fn}")
+        return _VISION_CACHE[cache_key]
+
     cached_table = None
     fn = Path(image_path).name.lower()
     fig_m = re.search(r"(?:figure|fig|table|tab)[\s_]*([sS]?\d+(?:[._]\d+)?)", fn + " " + query.lower())
@@ -179,9 +188,13 @@ def execute_vision_task(image_path: str, query: str) -> Dict[str, Any]:
         if cached_table:
             final_tbl = cached_table
 
-    return {
+    res = {
         "visual_summary": output.visual_summary,
         "visual_analysis": output.visual_analysis,
         "actionable_insights": output.actionable_insights,
         "extracted_table_markdown": final_tbl
     }
+    _VISION_CACHE[cache_key] = res
+    # Also save under generic filename key for follow-up questions
+    _VISION_CACHE[fn] = res
+    return res

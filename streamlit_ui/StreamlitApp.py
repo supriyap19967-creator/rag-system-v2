@@ -8914,6 +8914,11 @@ def resolve_single_figure_path(query_text: str, agent_result: any, source_chunks
         except Exception:
             pass
 
+    # Only return fallback image if query explicitly targets a visual asset or chart
+    visual_indicators = ["figure", "fig", "chart", "diagram", "plot", "image", "visual"]
+    if not any(v in q_lower for v in visual_indicators):
+        return None
+
     # 2. Prioritize extracted_charts / extracted_tables over raw page crops
     sorted_candidates = sorted(search_candidates, key=lambda p: 0 if ("extracted_charts" in p.lower() or "extracted_tables" in p.lower()) else 1)
     return sorted_candidates[0]
@@ -9190,6 +9195,10 @@ def ensure_text_summary_narrative_first(answer_text: str, extracted_table: list 
             table_md = df_clean.to_markdown(index=False)
             summary = extract_text_summary_from_markdown_table(table_md)
             return f"{summary}\n\n### Extracted Table Data\n{table_md}"
+        return answer_text
+
+    # Cross-modal compound reports already contain complete executive narrative & structure
+    if "Executive Cross-Modal Takeaway" in answer_text:
         return answer_text
 
     if "|" not in answer_text:
@@ -11662,7 +11671,10 @@ def main() -> None:
         st.session_state.current_image_path = _resolve_existing_image_path(image_path) or None
 
         # Check if the query contains keywords asking for a visual asset
-        visual_keywords = ["figure", "fig", "table", "image", "chart", "diagram", "map", "box", "spotlight"]
+        visual_keywords = ["figure", "fig", "image", "chart", "diagram", "map", "box", "spotlight"]
+        is_table_visual = "table" in user_query.lower() and not any(k in user_query.lower() for k in ["gdp", "co2", "emission", "indicator", "income", "country", "countries", "dataset"])
+        if is_table_visual:
+            visual_keywords.append("table")
         target_cat_req, target_id_req = parse_target_asset(user_query)
         is_visual_request = bool(target_cat_req and target_id_req) or any(kw in user_query.lower() for kw in visual_keywords)
 

@@ -20,6 +20,7 @@ import sys
 import threading
 import time
 import uuid
+import concurrent.futures
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
@@ -3281,65 +3282,77 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
             tasks = routing_decision.get("tasks", [])
             comparison_goal = routing_decision.get("comparison_goal")
 
-            cand_dirs = [
-                "assets/extracted_charts",
-                "assets/extracted_images",
-                "extracted_charts",
-                "extracted_images",
-                "Data/extracted_visuals_smoke",
-                "Data"
-            ]
-
+            # Fast in-memory image registry to eliminate disk scanning latency
             def _find_matching_image(ref_str: str) -> str | None:
                 if not ref_str:
                     return None
-                fig_m = re.search(r"(?:figure|fig)[\s_]*([sS]?\d+(?:[._]\d+)?)", ref_str.lower())
+                global _IMAGE_REGISTRY_CACHE
+                if "_IMAGE_REGISTRY_CACHE" not in globals() or not _IMAGE_REGISTRY_CACHE:
+                    cand_dirs = [
+                        "assets/extracted_charts",
+                        "assets/extracted_images",
+                        "extracted_charts",
+                        "extracted_images",
+                        "Data/extracted_visuals_smoke",
+                        "Data"
+                    ]
+                    reg: dict[str, str] = {}
+                    for sdir in cand_dirs:
+                        sp = PROJECT_ROOT / sdir
+                        if not sp.exists():
+                            continue
+                        for f in sp.glob("*.png"):
+                            p_str = str(f).replace("\\", "/")
+                            fn = f.name.lower()
+                            reg[fn] = p_str
+                            fig_m = re.search(r"(?:figure|fig|table|tab)[\s_]*([sS]?\d+(?:[._]\d+)?)", fn)
+                            if fig_m:
+                                f_num = fig_m.group(1).lower()
+                                reg[f"figure_{f_num.replace('.', '_')}"] = p_str
+                                reg[f"figure_{f_num.replace('_', '.')}"] = p_str
+                                reg[f"fig_{f_num.replace('.', '_')}"] = p_str
+                                reg[f"fig_{f_num.replace('_', '.')}"] = p_str
+                                reg[f_num.replace('.', '_')] = p_str
+                                reg[f_num.replace('_', '.')] = p_str
+                    globals()["_IMAGE_REGISTRY_CACHE"] = reg
+
+                reg = globals().get("_IMAGE_REGISTRY_CACHE", {})
+                fig_m = re.search(r"(?:figure|fig|table|tab)[\s_]*([sS]?\d+(?:[._]\d+)?)", ref_str.lower())
+                if fig_m:
+                    f_num = fig_m.group(1).lower()
+                    for k in [f"figure_{f_num.replace('.', '_')}", f"figure_{f_num.replace('_', '.')}", f"fig_{f_num.replace('.', '_')}", f_num.replace('.', '_'), f_num.replace('_', '.')]:
+                        if k in reg:
+                            return reg[k]
                 clean_ref = re.sub(r"[^a-zA-Z0-9_.]", "_", ref_str).lower()
-                for sdir in cand_dirs:
-                    sp = PROJECT_ROOT / sdir
-                    if not sp.exists():
-                        continue
-                    for f in sp.glob("*.png"):
-                        fn = f.name.lower()
-                        if fig_m:
-                            f_num = fig_m.group(1).lower()
-                            f_und = f_num.replace(".", "_")
-                            f_dot = f_num.replace("_", ".")
-                            if (f"figure_{f_und}" in fn or f"figure_{f_dot}" in fn or 
-                                f"figure{f_und}" in fn or f"figure{f_dot}" in fn or
-                                f"fig_{f_und}" in fn or f"fig{f_und}" in fn):
-                                return str(f).replace("\\", "/")
-                        if clean_ref and (clean_ref in fn or ref_str.lower().replace(" ", "_") in fn):
-                            return str(f).replace("\\", "/")
+                for k, p in reg.items():
+                    if clean_ref and (clean_ref in k or ref_str.lower().replace(" ", "_") in k):
+                        return p
                 return None
 
             if is_compound and len(tasks) > 1:
-                logger.info(f"Executing Compound Multi-Agent Dispatcher with {len(tasks)} sub-tasks...")
+                logger.info(f"⚡ [Parallel Compound Multi-Agent Dispatcher] Executing {len(tasks)} sub-tasks concurrently...")
                 sub_agent_summaries = {}
-                
-                for task in tasks:
-                    sub_agent = task.get("agent")
-                    sub_query = task.get("sub_query")
-                    asset_ref = task.get("asset_reference")
-                    
+
+                def _execute_subtask(task_item: dict) -> dict[str, Any]:
+                    sub_agent = task_item.get("agent")
+                    sub_query = task_item.get("sub_query")
+                    asset_ref = task_item.get("asset_reference")
+
                     if sub_agent == "DATA_AGENT":
-                        logger.info(f"Compound Dispatcher -> DATA_AGENT: {sub_query}")
+                        logger.info(f"Parallel Dispatcher -> DATA_AGENT: {sub_query}")
                         data_res = execute_data_task(sub_query)
-                        sub_agent_summaries["DATA_AGENT"] = (
+                        summary = (
                             f"**Metrics Summary**:\n{data_res.get('executive_metrics', '')}\n\n"
                             f"**Analytical Breakdown**:\n{data_res.get('analytical_breakdown', '')}"
                         )
                         sub_q_lower = (sub_query or "").lower()
-                        if "co2" in sub_q_lower:
-                            final_sources.append("CO21.csv")
-                        else:
-                            final_sources.append("GDP1.csv")
-                        
+                        src = "CO21.csv" if "co2" in sub_q_lower else "GDP1.csv"
+                        return {"agent": "DATA_AGENT", "summary": summary, "source": src}
+
                     elif sub_agent == "VISION_AGENT":
-                        logger.info(f"Compound Dispatcher -> VISION_AGENT: {sub_query} (asset_ref: {asset_ref})")
-                        target_img = _find_matching_image(asset_ref or "") or _find_matching_image(sub_query + " " + question)
-                        
-                        # 3. Hybrid chunk retrieval if explicitly asked for visual and not found
+                        logger.info(f"Parallel Dispatcher -> VISION_AGENT: {sub_query} (asset_ref: {asset_ref})")
+                        target_img = _find_matching_image(asset_ref or "") or _find_matching_image((sub_query or "") + " " + question)
+                        v_chunks = []
                         if not target_img:
                             locked_entities = step_zero_extract_entities(sub_query)
                             rewritten_queries = [sub_query]
@@ -3356,36 +3369,68 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
                                 structural_intent=structural_intent,
                             )
                             target_img = bind_image_paths_to_chunks(v_chunks, locked_entities)
-                            reranked.extend(v_chunks)
-                            
+
                         if target_img:
                             resolved_img = _resolve_existing_image_path(target_img) or target_img
-                            final_image_path = resolved_img
-                            active_assets.append(resolved_img)
-                            final_sources.append(Path(resolved_img).name)
-                            
                             vision_res = execute_vision_task(resolved_img, sub_query)
                             tbl_md = vision_res.get("extracted_table_markdown")
                             tbl_section = f"\n\n**Extracted Data Table**:\n{tbl_md}\n" if tbl_md and "|" in tbl_md else ""
-                            sub_agent_summaries["VISION_AGENT"] = (
+                            summary = (
                                 f"**Visual Summary ({Path(resolved_img).name})**:\n{vision_res.get('visual_summary', '')}\n\n"
                                 f"**Observations**:\n" + "\n".join([f"- {item}" for item in vision_res.get("visual_analysis", [])]) +
                                 tbl_section + "\n\n"
                                 f"**Extracted Insights**: {vision_res.get('actionable_insights', '')}"
                             )
+                            return {
+                                "agent": "VISION_AGENT",
+                                "summary": summary,
+                                "source": Path(resolved_img).name,
+                                "resolved_img": resolved_img,
+                                "v_chunks": v_chunks
+                            }
                         else:
                             logger.info("No visual image asset found for Vision Agent in sub-task.")
-                            
+                            return {
+                                "agent": "VISION_AGENT",
+                                "summary": "No visual image asset found for analysis.",
+                                "source": None
+                            }
+
                     elif sub_agent == "RESEARCH_AGENT":
-                        logger.info(f"Compound Dispatcher -> RESEARCH_AGENT: {sub_query}")
+                        logger.info(f"Parallel Dispatcher -> RESEARCH_AGENT: {sub_query}")
                         research_res = execute_research(sub_query)
-                        sub_agent_summaries["RESEARCH_AGENT"] = (
+                        summary = (
                             f"**Executive Synthesis**:\n{research_res.get('executive_summary', '')}\n\n"
                             f"**Key Findings**:\n" + "\n".join([f"- {item}" for item in research_res.get("key_findings", [])]) + "\n\n"
                             f"**Notes**: {research_res.get('source_notes', '')}"
                         )
-                        final_sources.append("World Development Report 2025.pdf")
-                        
+                        return {
+                            "agent": "RESEARCH_AGENT",
+                            "summary": summary,
+                            "source": "World Development Report 2025.pdf"
+                        }
+
+                    return {"agent": sub_agent, "summary": "", "source": None}
+
+                with concurrent.futures.ThreadPoolExecutor(max_workers=min(4, len(tasks))) as pool:
+                    futures = [pool.submit(_execute_subtask, t) for t in tasks]
+                    for fut in concurrent.futures.as_completed(futures):
+                        try:
+                            res = fut.result()
+                            ag = res.get("agent")
+                            if ag and res.get("summary"):
+                                sub_agent_summaries[ag] = res["summary"]
+                            if res.get("source"):
+                                final_sources.append(res["source"])
+                            if res.get("resolved_img"):
+                                r_img = res["resolved_img"]
+                                final_image_path = r_img
+                                active_assets.append(r_img)
+                            if res.get("v_chunks"):
+                                reranked.extend(res["v_chunks"])
+                        except Exception as sub_exc:
+                            logger.error(f"Error in parallel subtask: {sub_exc}")
+
                 from app.agents.synthesizer import synthesize_cross_modal_fusion
                 agent_response = synthesize_cross_modal_fusion(question, comparison_goal, sub_agent_summaries)
                 model_used = "compound_cross_modal_synthesizer"

@@ -43,7 +43,20 @@ STYLE GUIDELINES:
 - Professional executive tone.
 - Clear markdown headings and crisp bullet points.
 - Grounded strictly in the provided sub-agent findings. Zero hallucination.
+- TERMINATION MANDATE: Conclude your report completely at the end of '## 📋 Data Provenance & Sources'. NEVER repeat any section, repeat the title, or output a secondary summary.
 """
+
+def _deduplicate_synthesizer_response(text: str) -> str:
+    """
+    Prevents LLM repetition loops by truncating any repeated occurrence of
+    'Executive Cross-Modal Takeaway' or duplicate report restarts.
+    """
+    if not text:
+        return text
+    matches = list(re.finditer(r"(?:##\s*)?(?:📊\s*)?Executive Cross-Modal Takeaway", text, re.IGNORECASE))
+    if len(matches) > 1:
+        text = text[:matches[1].start()].strip()
+    return text
 
 def _clean_scientific_notation_in_text(text: str) -> str:
     """Replaces raw scientific notation numbers like 2.72922e+13 with human-readable numbers."""
@@ -99,23 +112,38 @@ Please produce the final synthesized cross-modal analytical report following the
 
     api_key = os.getenv("OPENROUTER_API_KEY")
     if api_key:
+        synth_model = os.getenv("SYNTHESIZER_MODEL_NAME", "google/gemini-2.5-flash")
         try:
             from openai import OpenAI
             client = OpenAI(
                 api_key=api_key,
                 base_url="https://openrouter.ai/api/v1"
             )
-            response = client.chat.completions.create(
-                model="meta-llama/llama-3.3-70b-instruct",
-                messages=[
-                    {"role": "system", "content": SYNTHESIZER_SYSTEM_PROMPT},
-                    {"role": "user", "content": prompt}
-                ],
-                temperature=0.2,
-                max_tokens=2048,
-            )
+            try:
+                response = client.chat.completions.create(
+                    model=synth_model,
+                    messages=[
+                        {"role": "system", "content": SYNTHESIZER_SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.2,
+                    max_tokens=1500,
+                )
+            except Exception as model_err:
+                logger.warning(f"Preferred model {synth_model} failed ({model_err}). Falling back to meta-llama/llama-3.3-70b-instruct.")
+                response = client.chat.completions.create(
+                    model="meta-llama/llama-3.3-70b-instruct",
+                    messages=[
+                        {"role": "system", "content": SYNTHESIZER_SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.2,
+                    max_tokens=1500,
+                )
+
             if response and response.choices and response.choices[0].message.content:
                 out = response.choices[0].message.content.strip()
+                out = _deduplicate_synthesizer_response(out)
                 return _clean_scientific_notation_in_text(out)
         except Exception as exc:
             logger.warning(f"Synthesizer LLM invocation failed: {exc}. Using structured fallback.")

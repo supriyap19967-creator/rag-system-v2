@@ -72,3 +72,28 @@ def test_parse_markdown_table_skips_repeated_headers():
     rows = parse_markdown_table_to_dicts(table_md)
     assert len(rows) == 1
     assert rows[0]["Series"] == "GDP Average"
+
+
+def test_synthesizer_anti_repetition_guard():
+    from app.agents.synthesizer import _deduplicate_synthesizer_response
+    double_report = """## 📊 Executive Cross-Modal Takeaway
+The 2023 GDP numbers of Germany and Japan are strong.
+
+## 📋 Data Provenance & Sources
+- GDP dataset
+
+## 📊 Executive Cross-Modal Takeaway
+The 2023 GDP numbers of Germany and Japan are strong.
+"""
+    deduped = _deduplicate_synthesizer_response(double_report)
+    assert deduped.count("Executive Cross-Modal Takeaway") == 1
+    assert "## 📋 Data Provenance & Sources" in deduped
+
+
+def test_resolve_single_figure_path_isolates_non_visual_queries():
+    from streamlit_ui.StreamlitApp import resolve_single_figure_path
+    non_visual_query = "Compare the average GDP of low-income countries in the table with the three types of standards explained in the report"
+    mock_chunks = [{"image_path": "assets/extracted_charts/page_110_Figure_3.4.png"}]
+    # Must NOT attach figure_3.4.png because the query does not ask for a visual figure
+    res = resolve_single_figure_path(non_visual_query, None, mock_chunks)
+    assert res is None
