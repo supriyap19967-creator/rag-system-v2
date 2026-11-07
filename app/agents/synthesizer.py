@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
@@ -23,8 +24,10 @@ MANDATORY RESPONSE STRUCTURE:
 - Provide a concise 2-3 sentence strategic synthesis directly answering the user's comparison question and highlighting the primary correlation or insight.
 
 ## 📈 Quantitative & Analytical Findings
-- Synthesize the exact numerical findings, tables, metrics, and trends from the Data Agent or Vision extracted data.
-- Ensure all numbers match the agent outputs with zero hallucination.
+- Synthesize the exact numerical findings, metrics, and trends from the Data Agent and/or Vision extracted data.
+- MANDATORY STANDARDIZED MARKDOWN TABLE: Whenever quantitative metrics or visual extracted tables are present in the evidence, you MUST render them as a clean, standardized GitHub-Flavored Markdown table with columns:
+| Series | Category | Target Value | Unit | Summary / Notes |
+- NUMERIC FORMATTING RULE: Never print raw scientific notation (e.g. NEVER write '2.72922e+13'). Always format currency as '$27.29 Trillion', '$4.56 Trillion', or percentages/counts clearly.
 
 ## 🔍 Contextual & Qualitative Analysis
 - Detail the thematic, policy, structural, or narrative insights provided by the Research Agent and/or Vision observations.
@@ -39,8 +42,30 @@ MANDATORY RESPONSE STRUCTURE:
 STYLE GUIDELINES:
 - Professional executive tone.
 - Clear markdown headings and crisp bullet points.
-- Grounded strictly in the provided sub-agent findings.
+- Grounded strictly in the provided sub-agent findings. Zero hallucination.
 """
+
+def _clean_scientific_notation_in_text(text: str) -> str:
+    """Replaces raw scientific notation numbers like 2.72922e+13 with human-readable numbers."""
+    def repl(m):
+        try:
+            num = float(m.group(0))
+            if abs(num) >= 1e12:
+                return f"${num / 1e12:.2f} Trillion"
+            elif abs(num) >= 1e9:
+                return f"${num / 1e9:.2f} Billion"
+            elif abs(num) >= 1e6:
+                return f"${num / 1e6:.2f} Million"
+            elif abs(num) >= 1000:
+                return f"{num:,.2f}"
+            else:
+                return f"{num:.2f}"
+        except Exception:
+            return m.group(0)
+
+    # Match numbers like 2.72922e+13 or 4.56e12
+    return re.sub(r"\b[0-9]+(?:\.[0-9]+)?[eE][+-]?[0-9]+\b", repl, text)
+
 
 def synthesize_cross_modal_fusion(
     question: str,
@@ -56,7 +81,8 @@ def synthesize_cross_modal_fusion(
     # Compile agent evidence
     evidence_blocks = []
     for agent_name, summary_text in sub_agent_summaries.items():
-        evidence_blocks.append(f"### [Agent: {agent_name}]\n{summary_text.strip()}")
+        cleaned_text = _clean_scientific_notation_in_text(summary_text)
+        evidence_blocks.append(f"### [Agent: {agent_name}]\n{cleaned_text.strip()}")
     combined_evidence = "\n\n---\n\n".join(evidence_blocks)
     
     prompt = f"""User Question:
@@ -89,7 +115,8 @@ Please produce the final synthesized cross-modal analytical report following the
                 max_tokens=2048,
             )
             if response and response.choices and response.choices[0].message.content:
-                return response.choices[0].message.content.strip()
+                out = response.choices[0].message.content.strip()
+                return _clean_scientific_notation_in_text(out)
         except Exception as exc:
             logger.warning(f"Synthesizer LLM invocation failed: {exc}. Using structured fallback.")
             
@@ -100,5 +127,6 @@ Please produce the final synthesized cross-modal analytical report following the
         f"**Goal**: {comparison_goal or 'Cross-modal correlation and analysis'}\n"
     ]
     for agent_name, text in sub_agent_summaries.items():
-        fallback_parts.append(f"### Evidence from {agent_name}:\n{text}\n")
+        cleaned_text = _clean_scientific_notation_in_text(text)
+        fallback_parts.append(f"### Evidence from {agent_name}:\n{cleaned_text}\n")
     return "\n\n".join(fallback_parts)

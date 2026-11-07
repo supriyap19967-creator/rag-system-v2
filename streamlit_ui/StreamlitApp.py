@@ -9090,15 +9090,25 @@ def clean_dataframe_for_table_rendering(df: pd.DataFrame) -> pd.DataFrame:
     """
     Cleans DataFrame prior to markdown rendering:
     1. Deduplicates column names to prevent duplicate column collisions.
-    2. If TargetValue or Unit columns contain ONLY N/A, None, or empty values across all rows,
+    2. Drops dummy mock rows (e.g. schema placeholders '100', 'A', 'Value').
+    3. If TargetValue or Unit columns contain ONLY N/A, None, or empty values across all rows,
        drops those columns completely so they don't clutter the extracted table UI with N/A columns.
-    3. Safely renames TargetValue -> Target Value without creating duplicates.
+    4. Safely renames TargetValue -> Target Value without creating duplicates.
     """
     if df is None or df.empty:
         return df
 
     df_clean = deduplicate_dataframe_columns(df)
     dummy_vals = {"n/a", "none", "null", "-", "", "nan"}
+
+    # Drop dummy schema placeholder rows (e.g. '100', 'Value', 'A')
+    mock_tokens = {"100", "100.0", "a", "value", "category", "placeholder"}
+    mask_dummy_rows = df_clean.fillna("").astype(str).apply(
+        lambda row: all(str(v).strip().lower() in mock_tokens for v in row if str(v).strip()),
+        axis=1
+    )
+    if mask_dummy_rows.any() and not mask_dummy_rows.all():
+        df_clean = df_clean[~mask_dummy_rows].copy()
 
     for col in list(df_clean.columns):
         col_str = str(col).strip().lower()
@@ -9428,6 +9438,7 @@ def render_qualitative_diagram_cards(df: pd.DataFrame, table_text: str):
 def render_quantitative_table_with_search(df: pd.DataFrame, key_suffix: str = "0"):
     """
     Renders quantitative tables with an instant, zero-latency in-table search & filter bar.
+    Formats large numbers and scientific notation (e.g. 2.72922e+13 -> $27.29 Trillion).
     """
     if df is None or df.empty:
         return
@@ -9446,7 +9457,30 @@ def render_quantitative_table_with_search(df: pd.DataFrame, key_suffix: str = "0
         filtered_df = df[mask]
         st.caption(f"Showing {len(filtered_df)} of {len(df)} matching rows")
 
-    st.dataframe(filtered_df, width="stretch", hide_index=True)
+    def _format_cell(val):
+        if val is None or pd.isna(val):
+            return ""
+        s = str(val).strip()
+        if re.match(r"^[+-]?\d+(?:\.\d+)?[eE][+-]?\d+$", s):
+            try:
+                num = float(s)
+                if abs(num) >= 1e12:
+                    return f"${num / 1e12:.2f} Trillion"
+                elif abs(num) >= 1e9:
+                    return f"${num / 1e9:.2f} Billion"
+                elif abs(num) >= 1e6:
+                    return f"${num / 1e6:.2f} Million"
+                else:
+                    return f"{num:,.2f}"
+            except Exception:
+                return s
+        return val
+
+    display_df = filtered_df.copy()
+    for col in display_df.columns:
+        display_df[col] = display_df[col].apply(_format_cell)
+
+    st.dataframe(display_df, width="stretch", hide_index=True)
 
 
 def generate_executive_briefing_report_html(
@@ -10124,8 +10158,16 @@ def run_pipeline(
         target_cat, target_id = parse_target_asset(user_query)
         if not (target_cat and target_id):
             q_lower = user_query.lower()
-            followup_markers = ["above figure", "this figure", "the figure", "above chart", "this chart", "the chart", "above table", "this table", "the table", "in this figure", "in above figure", "from this figure", "from above figure", "from the figure", "from the chart", "from the table"]
-            if any(m in q_lower for m in followup_markers) and st.session_state.get("LAST_ACTIVE_TARGET_ID"):
+            # Strict Modality Guard: Do not hydrate visual follow-up if query has CSV or comparative indicators
+            has_csv_ctx = any(k in q_lower for k in ("gdp", "co2", "emissions", "emission", "income", "country", "countries", "dataset", "indicator", "rate", "capita"))
+            has_comp_ctx = any(k in q_lower for k in ("compare", "versus", "vs", "difference between", "against"))
+            is_csv_or_comp = bool(has_csv_ctx or has_comp_ctx or query_intent == QueryIntent.HYBRID_MULTIMODAL)
+            
+            followup_markers = ["above figure", "this figure", "the figure", "above chart", "this chart", "the chart", "above table", "this table", "in this figure", "in above figure", "from this figure", "from above figure", "from the figure", "from the chart"]
+            if not is_csv_or_comp:
+                followup_markers.extend(["the table", "from the table"])
+
+            if not is_csv_or_comp and allowed_tools.get("allow_vision", False) and any(m in q_lower for m in followup_markers) and st.session_state.get("LAST_ACTIVE_TARGET_ID"):
                 target_cat = st.session_state.get("LAST_ACTIVE_TARGET_CAT", "Figure")
                 target_id = st.session_state.get("LAST_ACTIVE_TARGET_ID")
                 resolved_img_path = st.session_state.get("LAST_ACTIVE_IMAGE_PATH")
@@ -10133,8 +10175,13 @@ def run_pipeline(
                 query_intent = QueryIntent.VISUAL_SPECIFIC
                 logger.info("🔄 [Follow-up Memory Hydrated] Hydrated active session asset: %s %s (%s)", target_cat, target_id, resolved_img_path)
             else:
-                st.session_state["LAST_ACTIVE_IMAGE_PATH"] = None
-                resolved_img_path = None
+                if not allowed_tools.get("allow_vision", False):
+                    st.session_state["LAST_ACTIVE_IMAGE_PATH"] = None
+                    st.session_state["LAST_ACTIVE_TARGET_ID"] = None
+                    st.session_state["LAST_ACTIVE_TARGET_CAT"] = None
+                    resolved_img_path = None
+                    target_cat = None
+                    target_id = None
 
         if target_cat and target_id:
             asset_kind = "figure" if ("fig" in str(target_cat).lower() or "chart" in str(target_cat).lower()) else "table"
@@ -10850,7 +10897,7 @@ def run_pipeline(
                             result = None
 
                         if not result:
-                            if pre_fetched_vision_data:
+                            if pre_fetched_vision_data and allowed_tools.get("allow_vision", False):
                                 fallback_text = f"Visual extraction summary based on pre-transcribed asset:\n\n{pre_fetched_vision_data}"
                             else:
                                 fallback_text = f"The query could not be completed: {openrouter_exc}"

@@ -36,6 +36,10 @@ class SubTask(BaseModel):
     sub_query: str = Field(
         description="Self-contained, isolated query targeted specifically for this agent."
     )
+    asset_reference: Optional[str] = Field(
+        default=None,
+        description="Explicit figure, chart, or table identifier if applicable (e.g. 'Figure 4.1', 'Figure 5.1', 'Table 2.1'). ONLY set for VISION_AGENT."
+    )
     rationale: str = Field(
         default="",
         description="Why this specific agent is required for this sub-task."
@@ -44,14 +48,14 @@ class SubTask(BaseModel):
 class TaskPlan(BaseModel):
     is_compound: bool = Field(
         default=False,
-        description="True if the user query requires cross-modal collaboration across multiple distinct agents (e.g. CSV+Visual, CSV+Text, Text+Visual)."
+        description="True if the user query requires cross-modal collaboration across multiple distinct agents (e.g. CSV+Visual, CSV+Text, Text+Visual, Tri-Modal)."
     )
     target_agent: TargetAgent = Field(
         description="The primary sub-agent if single-modality, or primary coordinating agent if compound."
     )
     tasks: List[SubTask] = Field(
         default_factory=list,
-        description="List of 1 to 3 isolated sub-tasks to execute across specialized agents. For single queries, contains 1 sub-task. For compound queries, contains 2 or more sub-tasks."
+        description="List of 1 to 3 isolated sub-tasks to execute across specialized agents. For single queries, contains 1 sub-task. For compound queries, contains 2 or 3 sub-tasks."
     )
     comparison_goal: Optional[str] = Field(
         default=None,
@@ -80,35 +84,41 @@ supervisor_agent = Agent(
     output_type=TaskPlan,
     retries=3,
     system_prompt=(
-        "You are the Supervisor Orchestrator Agent for an enterprise multimodal RAG system.\n"
+        "You are the Master Supervisor Orchestrator Agent for an enterprise multimodal RAG system.\n"
         "Your task is to analyze user queries, determine if they are single-modality or compound cross-modal queries, "
-        "and generate a structured TaskPlan with isolated sub-tasks.\n\n"
-        "### SPECIALIZED WORKER CAPABILITIES:\n"
-        "1. DATA_AGENT: Runs Python/Pandas code in a sandbox over CSV/tabular data (GDP, CO2, emissions, tables). "
-        "Use for exact mathematical calculations, statistics, rankings, sums, and averages.\n"
-        "2. VISION_AGENT: Analyzes images, charts, graphs, diagrams, figures, and visual crops via Gemini Vision. "
-        "Use for visual trend extraction, axis values, curve interpretations, and chart OCR.\n"
-        "3. RESEARCH_AGENT: Searches Qdrant vector store (dense BGE-M3 + sparse BM25) and cross-encoder reranker. "
-        "Use for qualitative text lookups, report policies, definitions, and narrative explanations.\n"
+        "and generate a structured TaskPlan with strictly isolated sub-tasks.\n\n"
+        "### SPECIALIZED WORKER CAPABILITIES & STRICT MODALITY CONTRACTS:\n"
+        "1. DATA_AGENT: Runs Python/Pandas in a sandbox over tabular World Bank CSV datasets (GDP, CO2, emissions, income groups, countries).\n"
+        "   - Use for exact mathematical calculations, averages, statistics, country rankings, sums, and tabular CSV lookups.\n"
+        "   - CRITICAL DISAMBIGUATION: When user says 'in the table', 'from the table', 'GDP table', or 'countries in the table', this refers to TABULAR CSV DATA! Assign to DATA_AGENT.\n"
+        "2. VISION_AGENT: Analyzes charts, diagrams, graphs, and specific visual figures (e.g. Figure 4.1, Figure 5.1, Table 6.2) via Gemini Vision & verified OCR transcriptions.\n"
+        "   - Use for visual curve interpretations, trendlines, axis values, and chart OCR.\n"
+        "   - ABSOLUTE GUARDRAIL: NEVER assign VISION_AGENT unless the query explicitly targets a visual asset, chart, figure, or diagram!\n"
+        "3. RESEARCH_AGENT: Searches Qdrant vector store (dense BGE-M3 + sparse BM25) and cross-encoder reranker over the World Development Report 2025 PDF.\n"
+        "   - Use for conceptual definitions (e.g. 'three types of standards'), policy arguments, regulatory frameworks, chapter discussions, and qualitative explanations.\n"
         "4. DIRECT_LLM: General conversational questions not relating to document datasets.\n\n"
-        "### COMPOUND CROSS-MODAL ROUTING RULES:\n"
-        "When a query combines two different modalities, set `is_compound = True`, define a clear `comparison_goal`, "
-        "and decompose the prompt into 2 separate sub-tasks in `tasks`:\n"
-        "A. CSV + VISUAL:\n"
-        "   - Example: 'Compare the GDP numbers in the table with the mortality trends in Figure 5.1'\n"
-        "   - Task 1 -> DATA_AGENT: calculate/extract the relevant GDP numbers from the CSV table.\n"
-        "   - Task 2 -> VISION_AGENT: extract the mortality trends and values from Figure 5.1.\n"
-        "B. CSV + TEXT:\n"
-        "   - Example: 'Compare the high-income GDP metrics in the table with the standard harmonization policy arguments in the text'\n"
-        "   - Task 1 -> DATA_AGENT: calculate/extract high-income GDP metrics from CSV.\n"
-        "   - Task 2 -> RESEARCH_AGENT: retrieve policy explanations and arguments from the report text.\n"
-        "C. TEXT + VISUAL:\n"
-        "   - Example: 'Explain how the environmental policy instruments described in the text relate to the emissions curves in Figure 6.1'\n"
-        "   - Task 1 -> RESEARCH_AGENT: retrieve the text explanations of environmental policy instruments.\n"
-        "   - Task 2 -> VISION_AGENT: extract and analyze the emissions curves depicted in Figure 6.1.\n\n"
-        "### SINGLE-MODALITY ROUTING RULES:\n"
-        "If the query only requires ONE modality, set `is_compound = False`, assign `target_agent`, "
-        "and populate `tasks` with exactly 1 SubTask targeting that agent."
+        "### COMPOUND CROSS-MODAL DECOMPOSITION RULES:\n"
+        "When a query compares or synthesizes multiple modalities, set `is_compound = True`, define a clear `comparison_goal`, and decompose into distinct tasks:\n\n"
+        "Pattern 1 [DATA + TEXT]:\n"
+        "- Example: 'Compare the average GDP of low-income countries in the table with the three types of standards explained in the report'\n"
+        "- Task 1 -> DATA_AGENT: 'Calculate the average GDP of low-income countries from the dataset table.'\n"
+        "- Task 2 -> RESEARCH_AGENT: 'Retrieve and explain the three types of standards discussed in the report text.'\n"
+        "- (Note: VISION_AGENT MUST NOT be assigned here! No visual asset exists in this query.)\n\n"
+        "Pattern 2 [TEXT + VISUAL]:\n"
+        "- Example: 'Compare the definition of standards in Chapter 4 with the adoption metrics in Figure 4.1'\n"
+        "- Task 1 -> RESEARCH_AGENT: 'Retrieve the definition and types of standards in Chapter 4 from the report text.'\n"
+        "- Task 2 -> VISION_AGENT (asset_reference='Figure 4.1'): 'Extract the adoption metrics and series from Figure 4.1.'\n\n"
+        "Pattern 3 [DATA + VISUAL]:\n"
+        "- Example: 'Compare top 5 countries by CO2 in 2020 with the adoption trends in Figure 4.1'\n"
+        "- Task 1 -> DATA_AGENT: 'Extract top 5 countries by CO2 emissions in 2020 from the dataset.'\n"
+        "- Task 2 -> VISION_AGENT (asset_reference='Figure 4.1'): 'Extract adoption trends and percentages from Figure 4.1.'\n\n"
+        "Pattern 4 [TRI-MODAL: DATA + TEXT + VISUAL]:\n"
+        "- Example: 'Compare top 5 GDP nations in 2023 with mortality rates in Figure 5.1 and health policy arguments'\n"
+        "- Task 1 -> DATA_AGENT: 'Extract top 5 countries by GDP in 2023 from dataset.'\n"
+        "- Task 2 -> VISION_AGENT (asset_reference='Figure 5.1'): 'Extract mortality rates and curves from Figure 5.1.'\n"
+        "- Task 3 -> RESEARCH_AGENT: 'Retrieve health policy arguments and investments from report text.'\n\n"
+        "### SINGLE-MODALITY RULE:\n"
+        "If the query only requires ONE modality, set `is_compound = False`, assign `target_agent`, and populate `tasks` with exactly 1 SubTask targeting that agent."
     )
 )
 
@@ -133,12 +143,14 @@ def orchestrate_query(user_query: str) -> Dict[str, Any]:
             tasks_payload.append({
                 "agent": t.agent.value,
                 "sub_query": t.sub_query,
+                "asset_reference": getattr(t, "asset_reference", None),
                 "rationale": t.rationale
             })
     else:
         tasks_payload.append({
             "agent": plan.target_agent.value,
             "sub_query": user_query,
+            "asset_reference": None,
             "rationale": plan.reasoning
         })
         
