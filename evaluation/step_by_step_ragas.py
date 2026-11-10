@@ -46,7 +46,7 @@ def evaluate_step_1_retrieval(query: str, retrieved_chunks: List[Dict[str, Any]]
         from app.main import step_zero_extract_entities
         ents = step_zero_extract_entities(query)
         stopwords = {"what", "which", "where", "when", "about", "show", "tell", "give", "from", "with", "that", "this", "these", "those", "have", "been", "were", "does", "also", "was", "for", "the", "in", "of", "and", "a", "an", "is"}
-        ref_words = set(ents) if ents else {w for w in re.findall(r"[a-z0-9]+", query.lower()) if len(w) > 2 and w not in stopwords}
+        ref_words = {str(e).lower() for e in ents} if ents else {w for w in re.findall(r"[a-z0-9]+", query.lower()) if len(w) > 2 and w not in stopwords}
         
     found_facts = 0
     total_facts = max(len(ref_words), 1)
