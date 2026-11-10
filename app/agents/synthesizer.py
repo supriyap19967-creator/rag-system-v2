@@ -112,34 +112,22 @@ Please produce the final synthesized cross-modal analytical report following the
 
     api_key = os.getenv("OPENROUTER_API_KEY")
     if api_key:
-        synth_model = os.getenv("SYNTHESIZER_MODEL_NAME", "google/gemini-2.5-flash")
+        synth_model = os.getenv("SYNTHESIZER_MODEL_NAME", "meta-llama/llama-3.3-70b-instruct")
         try:
             from openai import OpenAI
             client = OpenAI(
                 api_key=api_key,
                 base_url="https://openrouter.ai/api/v1"
             )
-            try:
-                response = client.chat.completions.create(
-                    model=synth_model,
-                    messages=[
-                        {"role": "system", "content": SYNTHESIZER_SYSTEM_PROMPT},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.2,
-                    max_tokens=1500,
-                )
-            except Exception as model_err:
-                logger.warning(f"Preferred model {synth_model} failed ({model_err}). Falling back to meta-llama/llama-3.3-70b-instruct.")
-                response = client.chat.completions.create(
-                    model="meta-llama/llama-3.3-70b-instruct",
-                    messages=[
-                        {"role": "system", "content": SYNTHESIZER_SYSTEM_PROMPT},
-                        {"role": "user", "content": prompt}
-                    ],
-                    temperature=0.2,
-                    max_tokens=1500,
-                )
+            response = client.chat.completions.create(
+                model=synth_model,
+                messages=[
+                    {"role": "system", "content": SYNTHESIZER_SYSTEM_PROMPT},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.2,
+                max_tokens=1500,
+            )
 
             if response and response.choices and response.choices[0].message.content:
                 out = response.choices[0].message.content.strip()
