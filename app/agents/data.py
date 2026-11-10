@@ -236,14 +236,23 @@ def execute_pandas_query(ctx: RunContext[Any], python_code: str) -> str:
         logger.warning(f"Error executing Python code: {exc}")
         return f"Error executing Python code: {exc}"
 
+_DATA_TASK_CACHE: Dict[str, Dict[str, Any]] = {}
+
 def execute_data_task(query: str) -> Dict[str, Any]:
     """
-    Entrypoint function to execute data analytics query.
+    Entrypoint function to execute data analytics query with in-memory caching.
     """
+    cache_key = query.strip().lower()
+    if cache_key in _DATA_TASK_CACHE:
+        logger.info(f"⚡ [Data Agent Cache Hit] Returning in-memory cached calculation for: {query[:50]}")
+        return _DATA_TASK_CACHE[cache_key]
+
     run_result = data_agent.run_sync(query)
     output: DataOutput = run_result.output
-    return {
+    res = {
         "executive_metrics": output.executive_metrics,
         "analytical_breakdown": output.analytical_breakdown,
         "code_reference": output.code_reference
     }
+    _DATA_TASK_CACHE[cache_key] = res
+    return res

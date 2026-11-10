@@ -182,17 +182,26 @@ def search_knowledge_base(ctx: RunContext[Any], query: str) -> str:
         logger.exception("Search failed")
         return f"Error during search execution: {e}"
 
+_RESEARCH_CACHE: Dict[str, Dict[str, Any]] = {}
+
 def execute_research(query: str, retrieved_context: str = "") -> Dict[str, Any]:
     """
-    Entrypoint function to execute research query.
+    Entrypoint function to execute research query with in-memory caching.
     """
+    cache_key = f"{query.strip().lower()}:{retrieved_context.strip()[:50]}"
+    if cache_key in _RESEARCH_CACHE:
+        logger.info(f"⚡ [Research Cache Hit] Returning in-memory cached research result for: {query[:50]}")
+        return _RESEARCH_CACHE[cache_key]
+
     prompt = query
     if retrieved_context:
         prompt = f"Retrieved Context:\n{retrieved_context}\n\nResearch Query:\n{query}"
     run_result = research_agent.run_sync(prompt)
     output: ResearchOutput = run_result.output
-    return {
+    res = {
         "executive_summary": output.executive_summary,
         "key_findings": output.key_findings,
         "source_notes": output.source_notes
     }
+    _RESEARCH_CACHE[cache_key] = res
+    return res

@@ -3502,13 +3502,15 @@ def query_rag(request: QueryRequest) -> dict[str, Any]:
                 logger.warning(f"Unknown routing target '{target}', falling back to standard pipeline")
                 raise ValueError("fallback")
             
-            # Run Validation audit if required or generally for agents
-            if routing_decision.get("requires_validation", True) and target != "DIRECT_LLM":
-                logger.info("Executing Validation Agent compiler check...")
-                val_res = execute_validation_task(question, agent_response, final_image_path or "")
-                answer = f"{agent_response}\n\n---\n\n{val_res.get('card_payload', '')}"
-            else:
-                answer = agent_response
+            # Async Pipeline Separation: Deliver response immediately; audit asynchronously
+            answer = agent_response
+            if routing_decision.get("requires_validation", False) and target not in ("DIRECT_LLM", "COMPOUND_ORCHESTRATION"):
+                try:
+                    # Non-blocking async background audit to avoid blocking foreground response
+                    bg_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+                    bg_pool.submit(execute_validation_task, question, agent_response, final_image_path or "")
+                except Exception as bg_v_err:
+                    logger.debug("Background validation notice: %s", bg_v_err)
                 
             final_sources = sorted(list(set(final_sources)))
             

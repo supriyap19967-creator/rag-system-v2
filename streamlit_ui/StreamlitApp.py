@@ -10650,8 +10650,9 @@ def run_pipeline(
 
             return None
 
-        should_run_qdrant = allowed_tools.get("allow_qdrant", True) and query_intent in (QueryIntent.TEXT_ONLY, QueryIntent.HYBRID_MULTIMODAL, QueryIntent.VISUAL_SPECIFIC)
-        should_run_vision = bool(allowed_tools.get("allow_vision", False)) and bool(target_cat and target_id and resolved_img_path)
+        # Async Pipeline Optimization: Bypass redundant pre-flight CPU reranking for compound multi-agent queries
+        should_run_qdrant = allowed_tools.get("allow_qdrant", True) and query_intent in (QueryIntent.TEXT_ONLY, QueryIntent.VISUAL_SPECIFIC)
+        should_run_vision = bool(allowed_tools.get("allow_vision", False)) and bool(target_cat and target_id and resolved_img_path) and (query_intent != QueryIntent.HYBRID_MULTIMODAL)
 
         if should_run_qdrant or should_run_vision:
             q_fut = _GLOBAL_REQUEST_EXECUTOR.submit(_fetch_qdrant) if should_run_qdrant else None
