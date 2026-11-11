@@ -52,9 +52,9 @@ This document provides an end-to-end, interview-grade architectural specificatio
 ```
 ---
 ## Technical Legend & Component Responsibilities
+    ### Master System Component Matrix
 
-### Part 1 : Subsystem Component Matrix
- | Subsystem / Node | Code File Location | Input Payload | Output Payload | Key Technical Responsibilities & Technologies |
+    | Subsystem / Node | Code File Location | Input Payload | Output Payload | Key Technical Responsibilities & Technologies |
     | :--- | :--- | :--- | :--- | :--- |
     | **Streamlit UI Container** | `streamlit_ui/StreamlitApp.py` | User Text Prompt / Voice WAV | Rendered Markdown + Supabase Assets | Main client interface, voice
     WAV audio transcription, **<20ms visual fast-path** short-circuit, modality source badges, and live response streaming. |
@@ -65,8 +65,8 @@ This document provides an end-to-end, interview-grade architectural specificatio
     pool management, dependency injection, and health endpoints. |
     | **Gateway Guardrails** | `gateway_guardrails.py` | Raw user query string | Sanitized query string | Enforces Layer 1–3 security: rate limits, token budgets,
     prompt injection heuristics, toxicity filtering, and regex-based PII masking before retrieval. |
-    | **Semantic LRU Cache** | `app/cache.py` & `streamlit_ui/StreamlitApp.py` | Query embedding vector | Cached response tuple | Sub-10ms cosine similarity lookup
-    ($\ge 0.95$) returning instant responses for repeated or semantically identical queries. |
+    | **Semantic LRU Cache** | `app/cache.py` & `streamlit_ui/StreamlitApp.py` | Query embedding vector | Cached response tuple | Sub-10ms cosine similarity lookup (>=
+    0.95) returning instant responses for repeated or semantically identical queries. |
     | **Multimodal Conversation Manager** | `app/conversation_manager.py` | Sanitized query + Session ID | Standalone contextualized query | Evaluates relative
     references (*"above figure"*, *"this table"*, *"its GDP"*). Rewrites conversational anaphora into explicit standalone queries while preserving active asset context.
     |
@@ -110,11 +110,9 @@ This document provides an end-to-end, interview-grade architectural specificatio
     | **PDF Visual Extractor & Ingestion** | `app/pdf_visual_extraction.py` & `ingest_data.py` | Raw PDF / CSV documents | Chunks + High-res Crops + Embeddings | Parses
     PDF layout via Docling, isolates image bounding boxes, extracts crops, and generates dual BGE-M3/BM25 vectors for Qdrant indexing. |
 
-    
-### Part 2 : Compound Query Execution Matrix (`HYBRID_MULTIMODAL`)
+    ---
 
-    This matrix details how complex, cross-modal compound queries (e.g., *"Compare 2023 GDP of France, Italy, and Canada from the table with the report's discussion on
-    mutual recognition"*) flow through each phase of the multi-agent pipeline:
+    ### Compound Query Execution Matrix (`HYBRID_MULTIMODAL`)
 
     | Phase | Component Responsible | Technical Action | Latency / Concurrency Policy |
     | :--- | :--- | :--- | :--- |
@@ -126,8 +124,8 @@ This document provides an end-to-end, interview-grade architectural specificatio
     | Single OpenRouter LLM call (`llama-3.3-70b-instruct`). |
     | **4. Parallel Worker Execution** | `app/main.py:3415` | Dispatches `Data Agent` and `Research Agent` simultaneously via `ThreadPoolExecutor(max_workers=2)`. |
     **Parallel Execution:** Runs concurrently, cutting retrieval latency by **~50%**. |
-    | **5. Sub-Agent Execution** | `app/agents/data.py` & `app/agents/research.py` | - Data Agent executes safe Pandas query on `gdp_df.csv`<br>- Research Agent
-    retrieves text from Qdrant Cloud + BGE Reranker | Results cached in `_DATA_TASK_CACHE` and `_RESEARCH_CACHE` for sub-10ms repeat lookups. |
+    | **5. Sub-Agent Execution** | `app/agents/data.py` & `app/agents/research.py` | Data Agent executes safe Pandas query on `gdp_df.csv`; Research Agent retrieves
+    text from Qdrant Cloud + BGE Reranker. | Results cached in `_DATA_TASK_CACHE` and `_RESEARCH_CACHE` for sub-10ms repeat lookups. |
     | **6. Cross-Modal Fusion** | `app/agents/synthesizer.py` | Synthesizer Agent fuses tabular data and text excerpts into a unified response with citation provenance.
     | Generates structured Pydantic `ChartTableData`. |
     | **7. Tier 1 Fast Verification** | `streamlit_ui/StreamlitApp.py` | Validates numeric facts and delivers the answer directly to the Streamlit UI stream. |
@@ -136,8 +134,9 @@ This document provides an end-to-end, interview-grade architectural specificatio
     **Non-blocking background thread** (0ms user wait). |
     | **9. Async RAGAS & Tracing** | `evaluation/step_by_step_ragas.py` | Computes Step 1/2/3 Ragas metrics against both CSV and PDF contexts; pushes scores to
     Langfuse. | Evaluates out-of-band and reconciles live into the Analytics Dashboard. |
- 
 
+    ---
+    
 ### Detailed 15-Layer Compliance Safety Gauntlet Breakdown
 
 To ensure zero visual clutter in the high-level architecture diagram while providing full technical depth for technical interviews, the complete 15-layer compliance gauntlet implemented in [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) is categorized below:
