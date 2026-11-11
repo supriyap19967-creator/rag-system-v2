@@ -103,29 +103,32 @@ This document provides an end-to-end, interview-grade architectural specificatio
 
 ### Detailed 15-Layer Compliance Safety Gauntlet Breakdown
 
-To ensure zero visual clutter in the high-level architecture diagram while providing full technical depth for technical interviews, the complete 15-layer compliance gauntlet implemented in [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) is categorized below:
+    To ensure zero visual clutter in the high-level architecture diagram while providing full technical depth for technical interviews, the complete 15-layer compliance
+    gauntlet implemented in compliance_safety.py is categorized below:
 
-#### **Phase 1: Input Security & Pre-Sanitization (Layers 1–4)**
-1. **Layer 1: Prompt Injection Filter**: Scans user input for adversarial instructions (e.g. `ignore previous rules`, `DAN mode`).
-2. **Layer 2: PII Redaction**: Masks sensitive personal data (emails, phone numbers, API keys) before query processing.
-3. **Layer 3: Rate Limit & Token Budget**: Enforces rate limits and monitors token budgets to ensure system availability.
-4. **Layer 4: Retrieval Coverage**: Verifies that the retrieval context adequately covers the user's requested concepts.
+    > **Execution Note (Decoupled 2-Tier Runtime):** To prevent latency penalties, this 15-layer gauntlet is decoupled into **Tier 1 (Foreground Pre-Render Gatekeeper
+    <10ms)** and **Tier 2 (Asynchronous Deep Gauntlet via `_RAG_BG_EXECUTOR`)**, running all 15 compliance checks out-of-band without blocking response delivery.
 
-#### **Phase 2: Contextual & Structural Alignment (Layers 5–10)**
-5. **Layer 5: Semantic Content Check**: Validates that queries and responses align semantically with allowed domain topics.
-6. **Layer 6: Path Verification**: Verifies that referenced visual crops (`figure_4_2.png`) exist on disk before VLM calls.
-7. **Layer 7: Bounding Box Validator**: Ensures visual coordinates match original PDF page bounding boxes.
-8. **Layer 8: Entity Cross Checker**: Prevents conflating single categories with aggregate brackets (e.g. Income Groups).
-9. **Layer 9: Exact Quote Anchoring**: Cross-checks verbatim text claims against retrieved vector context chunks.
-10. **Layer 10: Markdown Sanitizer**: Cleans and validates the structural formatting of generated tables and markdowns.
+    #### **Phase 1: Input Security & Pre-Sanitization (Layers 1–4)**
+    1. **Layer 1: Prompt Injection Filter**: Scans user input for adversarial instructions (e.g. `ignore previous rules`, `DAN mode`).
+    2. **Layer 2: PII Redaction**: Masks sensitive personal data (emails, phone numbers, API keys) before query processing.
+    3. **Layer 3: Rate Limit & Token Budget**: Enforces rate limits and monitors token budgets to ensure system availability.
+    4. **Layer 4: Retrieval Coverage**: Verifies that the retrieval context adequately covers the user's requested concepts.
 
-#### **Phase 3: Fidelity & Hallucination Defense (Layers 11–15)**
-11. **Layer 11: System Prompt Leakage Scanner**: Detects and blocks attempts to extract internal system prompt instructions.
-12. **Layer 12: DLP Blocklist**: Prevents data loss by scanning output against a strict blacklist of sensitive terms.
-13. **Layer 13: Faithfulness Evaluation**: Computes sentence-level max semantic similarity, enforcing a strict passing threshold ($\ge 0.90$).
-14. **Layer 14: Dummy Value Blacklist Scanner**: Checks for and scrubs hallucinated generic filler words (e.g. `John Doe`, `xxx`).
-15. **Layer 15: Income Group Claim Sanitizer**: Specifically audits statements about low, middle, and high-income bands against verified constants.
+    #### **Phase 2: Contextual & Structural Alignment (Layers 5–10)**
+    5. **Layer 5: Semantic Content Check**: Validates that queries and responses align semantically with allowed domain topics.
+    6. **Layer 6: Path Verification**: Verifies that referenced visual crops (`figure_4_2.png`) exist on disk before VLM calls.
+    7. **Layer 7: Bounding Box Validator**: Ensures visual coordinates match original PDF page bounding boxes.
+    8. **Layer 8: Entity Cross Checker**: Prevents conflating single categories with aggregate brackets (e.g. Income Groups).
+    9. **Layer 9: Exact Quote Anchoring**: Cross-checks verbatim text claims against retrieved vector context chunks.
+    10. **Layer 10: Markdown Sanitizer**: Cleans and validates the structural formatting of generated tables and markdowns.
 
+    #### **Phase 3: Fidelity & Hallucination Defense (Layers 11–15)**
+    11. **Layer 11: System Prompt Leakage Scanner**: Detects and blocks attempts to extract internal system prompt instructions.
+    12. **Layer 12: DLP Blocklist**: Prevents data loss by scanning output against a strict blacklist of sensitive terms.
+    13. **Layer 13: Faithfulness Evaluation**: Computes sentence-level max semantic similarity, enforcing a strict passing threshold ($\ge 0.90$).
+    14. **Layer 14: Dummy Value Blacklist Scanner**: Checks for and scrubs hallucinated generic filler words (e.g. `John Doe`, `xxx`).
+    15. **Layer 15: Income Group Claim Sanitizer**: Specifically audits statements about low, middle, and high-income bands against verified constants.
 ---
 
 
