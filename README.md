@@ -52,7 +52,6 @@ This document provides an end-to-end, interview-grade architectural specificatio
 ```
 ---
 ## Technical Legend & Component Responsibilities
-```
 
 ### Part 1 : Subsystem Component Matrix
  | Subsystem / Node | Code File Location | Input Payload | Output Payload | Key Technical Responsibilities & Technologies |
@@ -137,8 +136,7 @@ This document provides an end-to-end, interview-grade architectural specificatio
     **Non-blocking background thread** (0ms user wait). |
     | **9. Async RAGAS & Tracing** | `evaluation/step_by_step_ragas.py` | Computes Step 1/2/3 Ragas metrics against both CSV and PDF contexts; pushes scores to
     Langfuse. | Evaluates out-of-band and reconciles live into the Analytics Dashboard. |
-```
----
+
 
 ### Detailed 15-Layer Compliance Safety Gauntlet Breakdown
 
