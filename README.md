@@ -19,6 +19,40 @@ This document provides an end-to-end, interview-grade architectural specificatio
 
  ```mermaid
     flowchart TD
+        subgraph Ingress ["1. Ingress & Context"]
+            User(["👤 User Query"]) --> UI["Streamlit Interface"]
+            UI --> Gateway["Gateway Guardrails & Semantic Cache"]
+            Gateway --> Memory["Multimodal Conversation Memory"]
+        end
+
+        subgraph Routing ["2. Deterministic Intent Routing"]
+            Memory --> Router{"Intent Router"}
+            Router -- "Fast-Path (<20ms)" --> FastPath["Pre-transcribed Store & Slicer"]
+            Router -- "Single-Modality" --> Dedicated["Specialized Execution Agents"]
+            Router -- "Compound Query" --> Supervisor["Supervisor Orchestrator"]
+        end
+
+        subgraph Execution ["3. Modality Engines & Execution"]
+            Dedicated --> Modalities["• Text: Qdrant Hybrid + BGE Reranker\n• Data: Pandas Code-Execution Sandbox\n• Vision: Gemini Vision OCR"]
+            Supervisor -->|Parallel Workers| Modalities
+        end
+
+        subgraph Synthesis ["4. Synthesis & Fast Delivery"]
+            Modalities --> Synthesizer["Cross-Modal Synthesizer (Llama 3.3 70B)"]
+            Synthesizer --> Tier1["Tier 1 Pre-Render Gatekeeper (<10ms)"]
+            FastPath & Tier1 --> Delivery(["⚡ Immediate User Response"])
+        end
+
+        subgraph AsyncObservability ["5. Non-Blocking Observability & Safety (_RAG_BG_EXECUTOR)"]
+            Delivery -. "Background Thread" .-> AsyncEngine["Background Async Engine"]
+            AsyncEngine --> Tier2["Tier 2 Deep 15-Rule Safety Gauntlet"]
+            AsyncEngine --> Ragas["Step-by-Step Modular RAGAS (Faithfulness / Precision)"]
+            AsyncEngine --> Tracing["Langfuse Traces & Real-Time Dashboard"]
+        end
+```
+
+ ```mermaid
+    flowchart TD
         subgraph L1 ["Layer 1: Client Interface & Gateway Control"]
             User(["👤 User Input Question"]) --> StreamlitUI["Streamlit UI Container [StreamlitApp.py]"]
             StreamlitUI --> Gateway["Gateway Guardrails [gateway_guardrails.py]"]
