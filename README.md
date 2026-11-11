@@ -52,29 +52,92 @@ This document provides an end-to-end, interview-grade architectural specificatio
 ```
 ---
 ## Technical Legend & Component Responsibilities
+```
 
-### Subsystem Component Matrix
+### Part 1 : Subsystem Component Matrix
+ | Subsystem / Node | Code File Location | Input Payload | Output Payload | Key Technical Responsibilities & Technologies |
+    | :--- | :--- | :--- | :--- | :--- |
+    | **Streamlit UI Container** | `streamlit_ui/StreamlitApp.py` | User Text Prompt / Voice WAV | Rendered Markdown + Supabase Assets | Main client interface, voice
+    WAV audio transcription, **<20ms visual fast-path** short-circuit, modality source badges, and live response streaming. |
+    | **Live RAG Telemetry Dashboard** | `streamlit_ui/StreamlitApp.py` | Live query session metrics | Reconciled Charts & KPI Cards | Real-time analytics tracking
+    faithfulness, answer relevancy, context precision, token consumption, latency breakdown, and query costs. Reconciles background Ragas scores via
+    `_ASYNC_RAGAS_STORE`. |
+    | **FastAPI Backend Server** | `app/main.py` | HTTP POST `/query` JSON | Validated API JSON payload | Core backend API, supervisor coordination, parallel thread
+    pool management, dependency injection, and health endpoints. |
+    | **Gateway Guardrails** | `gateway_guardrails.py` | Raw user query string | Sanitized query string | Enforces Layer 1–3 security: rate limits, token budgets,
+    prompt injection heuristics, toxicity filtering, and regex-based PII masking before retrieval. |
+    | **Semantic LRU Cache** | `app/cache.py` & `streamlit_ui/StreamlitApp.py` | Query embedding vector | Cached response tuple | Sub-10ms cosine similarity lookup
+    ($\ge 0.95$) returning instant responses for repeated or semantically identical queries. |
+    | **Multimodal Conversation Manager** | `app/conversation_manager.py` | Sanitized query + Session ID | Standalone contextualized query | Evaluates relative
+    references (*"above figure"*, *"this table"*, *"its GDP"*). Rewrites conversational anaphora into explicit standalone queries while preserving active asset context.
+    |
+    | **Deterministic Intent Router** | `app/intent_router.py` | Standalone query string | `(QueryIntent, allowed_tools)` | Sub-millisecond (<1ms) regex/keyword
+    classifier. Routes into `CSV_ONLY`, `TEXT_ONLY`, `VISUAL_SPECIFIC`, or compound `HYBRID_MULTIMODAL` without burning LLM tokens. |
+    | **In-Memory RAM Transcription Store** | `multimodal-rag-system/schemas_and_agent.py` | Figure / Table ID | Pre-computed markdown table | Pre-loads **437 verified
+    visual tables** into RAM cache (`_IN_MEMORY_TRANSCRIPTION_CACHE`) on startup, eliminating OCR inference latency for known assets. |
+    | **Sub-20ms Visual Fast-Path Slicer** | `streamlit_ui/StreamlitApp.py` | Targeted query + Cached markdown | Targeted markdown slice (<20ms) | Parses and slices
+    pre-transcribed figure/table rows directly into the UI for targeted lookups, completely bypassing LLM inference and schema retries. |
+    | **Central Agent Model Factory** | `app/agents/model_factory.py` | Agent role identifier | Configured `OpenRouterModel` | **OpenRouter Integration:** Central
+    singleton factory routing all Pydantic-AI agents through OpenRouter (`meta-llama/llama-3.3-70b-instruct`) with unified timeout and retry policies. |
+    | **Supervisor Orchestrator Agent** | `app/agents/supervisor.py` | Contextualized query + History | **Pydantic `TaskPlan`** | **Multi-Agent Orchestrator:** Analyzes
+    compound queries, decomposes multi-part instructions into dedicated sub-tasks, and schedules concurrent agent execution. |
+    | **Concurrent Worker Dispatcher** | `app/main.py` | Sub-tasks from `TaskPlan` | Concurrent Future results | Uses
+    `concurrent.futures.ThreadPoolExecutor(max_workers=2)` to execute Data and Research agents simultaneously in parallel, cutting retrieval time by ~50%. |
+    | **Pydantic AI Self-Correction Engine** | `streamlit_ui/StreamlitApp.py` & `app/main.py` | Validation error / Traceback | Validated Pydantic Schema |
+    **Self-Correction & Reflection:** Catches schema failures via `UsageLimits`, passes the validation error back into the agent context, and automatically repairs the
+    output format. |
+    | **Data Agent** | `app/agents/data.py` | Quantitative sub-query | Executive metrics + Code ref | **Pydantic-AI Agent:** Generates and executes safe Pandas
+    dataframe code in an isolated sandbox against `gdp_df.csv` and `co2_df.csv` with result caching (`_DATA_TASK_CACHE`). |
+    | **Research Agent** | `app/agents/research.py` | Textual sub-query | Key findings + Source notes | **Pydantic-AI Agent:** Coordinates dense/sparse Qdrant vector
+    retrieval, applies cross-encoder reranking, and extracts grounded textual excerpts with result caching (`_RESEARCH_CACHE`). |
+    | **Vision Agent** | `app/agents/vision.py` | Image path + User query | **Pydantic `VisionOutput`** | **Pydantic-AI Agent:** Processes visual charts/tables via
+    Google Gemini 2.5 Flash with PIL thumbnail downscaling (max 1024px) for 70% lighter base64 network payloads. |
+    | **Qdrant Hybrid Retriever** | `app/retriever.py` | Query string + Filters | Raw matching Qdrant points | Performs hybrid search: 1024-dim dense BGE-M3 embeddings
+    + BM25/FastEmbed sparse tokens fused via Reciprocal Rank Fusion (RRF) on Qdrant Cloud. |
+    | **Cross-Encoder Reranker** | `app/reranker.py` | Query + Candidate chunks | Top-3 reranked documents | Uses `BAAI/bge-reranker-v2-m3` singleton to compute
+    cross-attention relevance scores between the query and candidate document chunks. |
+    | **Multi-Modal Synthesizer** | `app/agents/synthesizer.py` | Context chunks + Pandas table + Prompt | **Pydantic `ChartTableData`** | **Cross-Modal Fact Fusion:**
+    Merges Pandas numeric findings, vector text excerpts, and visual metadata into a unified grounded answer with citation provenance. |
+    | **Multimodal Asset Resolver** | `app/multimodal_assets.py` | Asset mention (e.g. `Figure 7.2`) | **Supabase Signed URL** | **Cloud Storage Integration:** Resolves
+    visual figure/table mentions to secure, cloud-hosted Supabase CDN signed image URLs with local filesystem fallback. |
+    | **Tier 1 Pre-Render Gatekeeper** | `streamlit_ui/StreamlitApp.py` | Draft response + Context | Display-ready response (<10ms) | Foreground safety check verifying
+    numeric fact grounding, quote anchoring, and fallback protection before displaying the answer to the user. |
+    | **Tier 2 Async Safety Gauntlet** | `compliance_safety.py` | Payload + Qdrant chunks + Session | 15-Rule Compliance Audit | Deep validation gauntlet running
+    **asynchronously in background** (`_RAG_BG_EXECUTOR`) evaluating Phase 1 (Input Security), Phase 2 (Alignment), and Phase 3 (Fidelity). |
+    | **Async Step-by-Step RAGAS Evaluator** | `evaluation/step_by_step_ragas.py` | Query + Context + Answer | Modular RAGAS Scores | Evaluates out-of-band via
+    `_RAG_BG_EXECUTOR`: Step 1 Retrieval (Recall/Precision), Step 2 Generation (BGE-cosine Faithfulness & Numerical Grounding), Step 3 Asset Precision. |
+    | **Distributed Tracing & Observability** | `streamlit_ui/StreamlitApp.py` | Agent spans + Telemetry data | Langfuse Traces & Scores | **Langfuse & OpenTelemetry:**
+    Logs full trace trees, agent tool spans, token usage, and pushes live Step-by-Step Ragas evaluation scores to Langfuse Cloud. |
+    | **PDF Visual Extractor & Ingestion** | `app/pdf_visual_extraction.py` & `ingest_data.py` | Raw PDF / CSV documents | Chunks + High-res Crops + Embeddings | Parses
+    PDF layout via Docling, isolates image bounding boxes, extracts crops, and generates dual BGE-M3/BM25 vectors for Qdrant indexing. |
 
-| Subsystem / Node | Code File Location | Input Payload | Output Payload | Key Technical Responsibilities |
-| :--- | :--- | :--- | :--- | :--- |
-| **Streamlit UI** | [StreamlitApp.py](file:///C:/Users/supri/recovered-rag-project/streamlit_ui/StreamlitApp.py) | User prompt / Voice WAV | Rendered Markdown + Images | Main user interaction interface, session state maintenance (`LAST_ACTIVE_IMAGE_PATH`), voice transcription trigger, and response streaming. |
-| **FastAPI Backend Server** | [main.py](file:///C:/Users/supri/recovered-rag-project/app/main.py) | HTTP `POST /query` JSON | Validated API JSON payload | Core backend API, routing coordination, dependency injection, and health endpoints. |
-| **Gateway Guardrails** | [gateway_guardrails.py](file:///C:/Users/supri/recovered-rag-project/gateway_guardrails.py) | Raw user string | Sanitized query string | Enforces rate limits, token budgets, toxicity filters, PII masking, and Layer 1–3 security checks before retrieval. |
-| **Semantic & LRU Cache** | [cache.py](file:///C:/Users/supri/recovered-rag-project/app/cache.py) | Query embedding vector | Cached response dict | Sub-10ms cosine similarity lookup (>=0.95) returning instant responses for repeated or near-identical queries. |
-| **Multimodal Conversation Manager** | [conversation_manager.py](file:///C:/Users/supri/recovered-rag-project/app/conversation_manager.py) | Sanitized query + session ID | Contextualized standalone query | Evaluates relative references (`above figure`, `this table`, `it`). Resolves implicit follow-ups against past turns and active asset memory into explicit standalone queries. |
-| **Deterministic Intent Router** | [intent_router.py](file:///C:/Users/supri/recovered-rag-project/app/intent_router.py) | Standalone query string | `(QueryIntent, allowed_tools)` | Sub-millisecond (<1ms) intent classifier. Prioritizes `VISUAL_SPECIFIC` for figure queries and bypasses unnecessary LLM supervisor calls. |
-| **Supervisor Orchestrator Agent** | [supervisor.py](file:///C:/Users/supri/recovered-rag-project/app/agents/supervisor.py) | Contextualized query + history | Structured TaskPlan | Pydantic AI agent that analyzes complex multi-part queries and delegates sub-tasks to specialized sub-agents (`RESEARCH_AGENT`, `VISION_AGENT`, `DATA_AGENT`). |
-| **Research Agent** | [research.py](file:///C:/Users/supri/recovered-rag-project/app/agents/research.py) | Textual sub-query | Key findings + Source notes | Specialized sub-agent for qualitative text search, semantic document retrieval, and report synthesis. |
-| **Vision Agent** | [vision.py](file:///C:/Users/supri/recovered-rag-project/app/agents/vision.py) | Image path + user query | Structured VisionOutput payload | Handles visual charts, diagrams, and figures. Features **PIL thumbnail downscaling (max 1024px)** for 70% lighter base64 network payloads. |
-| **Data Agent** | [data.py](file:///C:/Users/supri/recovered-rag-project/app/agents/data.py) | Quantitative sub-query | Executive metrics + Code ref | Executes Pandas dataframe code in a sandboxed execution environment for calculations, groupbys, and rankings. |
-| **Qdrant Hybrid Retriever** | [retriever.py](file:///C:/Users/supri/recovered-rag-project/app/retriever.py) | Query string + Filters | Raw matching points | Performs dense vector search (BGE-M3, 1024-dim) combined with sparse token search (BM25) inside local Qdrant collections. |
-| **Cross-Encoder Reranker** | [reranker.py](file:///C:/Users/supri/recovered-rag-project/app/reranker.py) | Query + Top-N candidates | Top-3 reranked documents | Uses `BAAI/bge-reranker-v2-m3` to compute deep cross-attention similarity scores between query and retrieved document text. |
-| **In-Memory RAM Transcription Store** | [schemas_and_agent.py](file:///C:/Users/supri/recovered-rag-project/multimodal-rag-system/schemas_and_agent.py) | Figure / Table ID | Markdown table string | Eagerly pre-loads 215+ pre-computed visual table markdowns into RAM (`_IN_MEMORY_TRANSCRIPTION_CACHE`) on startup, serving extractions in **<10ms**. |
-| **LLM Synthesizer Engine** | [query_rag.py](file:///C:/Users/supri/recovered-rag-project/query_rag.py) | Context chunks + Table rows + Prompt | Synthesized draft answer | Merges retrieved dense chunks, sparse text, and OCR markdown tables into a final grounded response. |
-| **Validator Agent & Safety Gauntlet** | [validation.py](file:///C:/Users/supri/recovered-rag-project/app/agents/validation.py) & [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) | Draft response + Source context | Cleared payload + Faithfulness score | 15-Layer gatekeeper running prompt injection filters, PII checks, system prompt scanners, exact quote anchoring, and line-level faithfulness evaluation. |
-| **Evaluator Agent** | [evaluator.py](file:///C:/Users/supri/recovered-rag-project/app/agents/evaluator.py) | Answer + Ground Truth Context | Structured EvaluationResult | Independent Pydantic-AI agent auditing answers against ground-truth tables/OCR, scoring faithfulness ($0.0 - 1.0$), and documenting reasoning. |
-| **PDF Visual Extractor & Ingestion** | [pdf_visual_extraction.py](file:///C:/Users/supri/recovered-rag-project/app/pdf_visual_extraction.py) & [ingest_data.py](file:///C:/Users/supri/recovered-rag-project/ingest_data.py) | Raw PDF / CSV documents | Chunks + High-res Crops + Embeddings | Parses PDF layout via Docling, isolates image bounding boxes, extracts crops, and generates dual BGE-M3/BM25 vectors for Qdrant indexing. |
+    
+    ### Part 2 : Compound Query Execution Matrix (`HYBRID_MULTIMODAL`)
 
+    This matrix details how complex, cross-modal compound queries (e.g., *"Compare 2023 GDP of France, Italy, and Canada from the table with the report's discussion on
+    mutual recognition"*) flow through each phase of the multi-agent pipeline:
+
+    | Phase | Component Responsible | Technical Action | Latency / Concurrency Policy |
+    | :--- | :--- | :--- | :--- |
+    | **1. Intent Recognition** | `app/intent_router.py` | Classifies query as `HYBRID_MULTIMODAL` (`allow_pandas=True`, `allow_qdrant=True`). | **<1ms** deterministic
+    keyword/entity match. |
+    | **2. Pre-Flight Shortcut** | `streamlit_ui/StreamlitApp.py` | Bypasses redundant single-modality dense/sparse rerankers in the UI. | Saves **~1.2 seconds** of
+    redundant pre-search. |
+    | **3. Sub-Task Decomposition** | `app/agents/supervisor.py` | Supervisor Agent generates Pydantic `TaskPlan`: splits into Data Task (CSV) and Research Task (PDF).
+    | Single OpenRouter LLM call (`llama-3.3-70b-instruct`). |
+    | **4. Parallel Worker Execution** | `app/main.py:3415` | Dispatches `Data Agent` and `Research Agent` simultaneously via `ThreadPoolExecutor(max_workers=2)`. |
+    **Parallel Execution:** Runs concurrently, cutting retrieval latency by **~50%**. |
+    | **5. Sub-Agent Execution** | `app/agents/data.py` & `app/agents/research.py` | - Data Agent executes safe Pandas query on `gdp_df.csv`<br>- Research Agent
+    retrieves text from Qdrant Cloud + BGE Reranker | Results cached in `_DATA_TASK_CACHE` and `_RESEARCH_CACHE` for sub-10ms repeat lookups. |
+    | **6. Cross-Modal Fusion** | `app/agents/synthesizer.py` | Synthesizer Agent fuses tabular data and text excerpts into a unified response with citation provenance.
+    | Generates structured Pydantic `ChartTableData`. |
+    | **7. Tier 1 Fast Verification** | `streamlit_ui/StreamlitApp.py` | Validates numeric facts and delivers the answer directly to the Streamlit UI stream. |
+    **<10ms** foreground delivery to user. |
+    | **8. Tier 2 Async Safety Gauntlet** | `compliance_safety.py` | Dispatches dual-modality validation (CSV provenance + PDF grounding) to `_RAG_BG_EXECUTOR`. |
+    **Non-blocking background thread** (0ms user wait). |
+    | **9. Async RAGAS & Tracing** | `evaluation/step_by_step_ragas.py` | Computes Step 1/2/3 Ragas metrics against both CSV and PDF contexts; pushes scores to
+    Langfuse. | Evaluates out-of-band and reconciles live into the Analytics Dashboard. |
+```
 ---
 
 ### Detailed 15-Layer Compliance Safety Gauntlet Breakdown
