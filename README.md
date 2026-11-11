@@ -111,7 +111,7 @@ This document provides an end-to-end, interview-grade architectural specificatio
     PDF layout via Docling, isolates image bounding boxes, extracts crops, and generates dual BGE-M3/BM25 vectors for Qdrant indexing. |
 
     
-    ### Part 2 : Compound Query Execution Matrix (`HYBRID_MULTIMODAL`)
+### Part 2 : Compound Query Execution Matrix (`HYBRID_MULTIMODAL`)
 
     This matrix details how complex, cross-modal compound queries (e.g., *"Compare 2023 GDP of France, Italy, and Canada from the table with the report's discussion on
     mutual recognition"*) flow through each phase of the multi-agent pipeline:
@@ -136,8 +136,7 @@ This document provides an end-to-end, interview-grade architectural specificatio
     **Non-blocking background thread** (0ms user wait). |
     | **9. Async RAGAS & Tracing** | `evaluation/step_by_step_ragas.py` | Computes Step 1/2/3 Ragas metrics against both CSV and PDF contexts; pushes scores to
     Langfuse. | Evaluates out-of-band and reconciles live into the Analytics Dashboard. |
- ---
- ___
+ 
 
 ### Detailed 15-Layer Compliance Safety Gauntlet Breakdown
 
