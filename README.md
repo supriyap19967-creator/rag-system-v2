@@ -286,32 +286,49 @@ Returns:
 # Project Structure
 
 ```
-    recovered-rag-project/
-    │
-    ├── .agents/                          # Customization configurations and agents
-    ├── app/                              # Core application backend
-    │   ├── agents/                       # Multi-agent implementations (supervisor, research, vision, data)
-    │   ├── conversation_manager.py       # Session history, active asset memory & anaphora rewriter
-    │   ├── intent_router.py              # Sub-millisecond (<1ms) intent classification router
-    │   ├── main.py                       # FastAPI server setup and core business logic
-    │   ├── retriever.py                  # Qdrant hybrid vector & BM25 sparse search engine
-    │   └── reranker.py                   # BAAI/bge-reranker-v2-m3 cross-encoder layer
-    │
-    ├── extracted_images/                 # Extracted figure crops and binary visual chart assets
-    ├── multimodal-rag-system/            # Schema and agent utilities
-    │   └── schemas_and_agent.py          # Pydantic schemas & In-Memory RAM Transcription Store (<10ms)
-    │
-    ├── streamlit_ui/                     # Streamlit frontend app
-    │   └── StreamlitApp.py               # Main UI rendering engine, voice transcription & display helper
-    │
-    ├── query_rag.py                      # Core LLM Synthesizer Engine & generation logic
-    ├── compliance_safety.py              # Decoupled 15-Layer safety gauntlet validation pipeline
-    ├── gateway_guardrails.py             # Rate limiting (5 req/60s) and PII masking gateway
-    ├── ingest_data.py                    # Multimodal document parsing & chunking ingestion pipeline
-    ├── deploy_to_qdrant.py               # Qdrant collection upsert & indexing script
-    ├── pytest.ini                        # Pytest config options
-    ├── requirements.txt                  # Python dependency list
-    └── .env                              # API keys (Groq, OpenRouter, Qdrant, Langfuse)
+recovered-rag-project/
+│
+├── app/                                  # Core application backend
+│   ├── agents/                           # Multi-agent system (Pydantic-AI)
+│   │   ├── model_factory.py              # Central singleton factory routing agents to OpenRouter (Llama 3.3 70B)
+│   │   ├── supervisor.py                 # Multi-agent orchestrator decomposing compound queries into TaskPlans
+│   │   ├── data.py                       # Data Agent executing safe Pandas queries against CSV dataframes
+│   │   ├── research.py                   # Research Agent coordinating Qdrant dense/sparse vector retrieval
+│   │   ├── vision.py                     # Vision Agent processing charts via Gemini 2.5 Flash + thumbnail downscaling
+│   │   └── synthesizer.py                # Cross-modal fact fusion agent returning Pydantic ChartTableData
+│   │
+│   ├── cache.py                          # Sub-10ms Semantic LRU vector cache for repeated queries
+│   ├── conversation_manager.py           # Multi-turn session memory, active visual context & anaphora rewriter
+│   ├── intent_router.py                  # Sub-millisecond (<1ms) deterministic keyword/regex intent classifier
+│   ├── main.py                           # FastAPI server, parallel ThreadPoolExecutor dispatcher & health endpoints
+│   ├── multimodal_assets.py              # Supabase Cloud CDN signed URL resolver & Git LFS pointer filter (<1 KB)
+│   ├── pdf_visual_extraction.py          # Docling document layout parser & high-resolution visual cropper
+│   ├── retriever.py                      # Qdrant hybrid retrieval: dense BGE-M3 (1024-dim) + BM25 sparse vectors
+│   └── reranker.py                       # BAAI/bge-reranker-v2-m3 singleton cross-encoder scoring layer
+│
+├── Data/                                 # Tabular structured datasets
+│   ├── gdp_df.csv                        # World GDP tabular index for Pandas execution sandbox
+│   └── co2_df.csv                        # CO2 emissions tabular index for Pandas execution sandbox
+│
+├── evaluation/                           # RAGAS evaluation & telemetry pipelines
+│   └── step_by_step_ragas.py             # Modular async RAGAS: Step 1 Retrieval, Step 2 Generation, Step 3 Asset Precision
+│
+├── extracted_images/                     # Extracted high-resolution figure/table visual crops
+│
+├── multimodal-rag-system/                # RAM cache & schema utilities
+│   └── schemas_and_agent.py              # In-Memory RAM Transcription Store (437 verified visual tables in <10ms)
+│
+├── streamlit_ui/                         # Interactive frontend client
+│   └── StreamlitApp.py                   # Streamlit app, voice WAV transcription, fast-path slicer & live telemetry
+│
+├── compliance_safety.py                  # Decoupled 15-Layer Compliance Gauntlet (_RAG_BG_EXECUTOR background runner)
+├── gateway_guardrails.py                 # Layer 1-3 Ingress security: rate limits (5 req/60s), token budgets & PII masking
+├── ingest_data.py                        # Multimodal ingestion pipeline: Docling layout, Gemini captions & dual vectors
+├── deploy_to_qdrant.py                   # Production Qdrant Cloud collection upsert & indexing script
+├── query_rag.py                          # Core RAG querying logic & fallback synthesis
+├── pytest.ini                            # Pytest configuration & test discovery rules
+├── requirements.txt                      # Production Python dependencies
+└── .env                                  # Environment credentials (OpenRouter, Gemini, Qdrant, Supabase, Langfuse)
 ```
 ---
 
