@@ -135,11 +135,7 @@ This document provides an end-to-end, interview-grade architectural specificatio
 ## 2. Deep Dive: Ingestion Pipeline
 
 ```mermaid
-
-    > **Diagram exceeds terminal width (402 > 170 cols)**
-    > Displayed as code block. Widen terminal to view inline.
-
-    flowchart TD
+flowchart TD
         Start([Start Multimodal Ingestion]) --> CheckType{Document Modality}
 
         %% Tabular / CSV Path
@@ -171,7 +167,6 @@ This document provides an end-to-end, interview-grade architectural specificatio
   • Dual Vector & Tabular Indexing: Dense BGE-M3 (1024-dim) and BM25 sparse vectors are upserted to Qdrant Cloud via deploy_to_qdrant.py, while CSVs populate the
   isolated Pandas sandbox
 ```
----
 
 ## 3. Deep Dive: Multi-Turn Execution Sequence & Follow-up Resolution
 
