@@ -171,10 +171,6 @@ This document provides an end-to-end, interview-grade architectural specificatio
 ## 3. Deep Dive: Multi-Turn Execution Sequence & Follow-up Resolution
 
 ```mermaid
-
-  │ Diagram exceeds terminal width (294 > 170 cols)
-  │ Displayed as code block. Widen terminal to view inline.
-
     flowchart TD
         subgraph Step1 ["Step 1: User Follow-up Input"]
             Input["👤 User Query: 'in above figure what are the values of low income?'"]
