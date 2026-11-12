@@ -135,25 +135,41 @@ This document provides an end-to-end, interview-grade architectural specificatio
 ## 2. Deep Dive: Ingestion Pipeline
 
 ```mermaid
-flowchart TD
-    Start([Start Ingestion]) --> CheckType{Document Type}
-    
-    CheckType -- CSV --> CSVProc["Parse CSV Rows & Token Chunking"]
-    CheckType -- PDF --> PDFProc["PDF Layout & Visual Extraction [Docling Parser]"]
-    
-    PDFProc --> Cropper["Generate High-Res Crops [pdf_visual_extraction.py]"]
-    
-    CSVProc & PDFProc & Cropper --> ChunkCombine["Unify Chunks & Generate Metadata"]
-    ChunkCombine --> SafetyVetting["Compliance Vetting & Safety Verification"]
-    
-    SafetyVetting --> Embeddings["Dual Embeddings: BGE-M3 (Dense) + BM25 (Sparse)"]
-    Embeddings --> UploadQdrant[("Upsert to Qdrant Collection [deploy_to_qdrant.py]")]
-    UploadQdrant --> EndIngest([Ingestion Complete])
+
+    > **Diagram exceeds terminal width (402 > 170 cols)**
+    > Displayed as code block. Widen terminal to view inline.
+
+    flowchart TD
+        Start([Start Multimodal Ingestion]) --> CheckType{Document Modality}
+
+        %% Tabular / CSV Path
+        CheckType -- "Tabular (CSV)" --> CSVProc["Parse CSV Rows & Structure Cleaning"]
+        CSVProc --> DataFrames[("Pre-loaded DataFrames: gdp_df & co2_df\n(Pandas Execution Sandbox)")]
+
+        %% PDF Layout Path
+        CheckType -- "Document (PDF)" --> Docling["PDF Layout Parser & Element Decomposition\n(Docling Parser)"]
+
+        %% Visual Assets Path
+        Docling --> VisualExtract["Visual Extractor\n(pdf_visual_extraction.py)"]
+        VisualExtract --> HighResCrops["Extract High-Res Bounding Box Crops"]
+        HighResCrops --> SupabaseCDN[("Supabase Cloud CDN Storage\n(Signed Image URLs)")]
+        HighResCrops --> VisionCaption["Gemini Vision Multimodal Captioning\n(Contextual Summaries)"]
+        HighResCrops --> RAMCache[("In-Memory RAM Transcription Store\n(437 Pre-Transcribed Tables)")]
+
+        %% Text & Hybrid Embeddings Path
+        Docling --> TextChunks["Layout Text Chunking & Parent-Child Context"]
+        VisionCaption --> TextChunks
+        TextChunks --> SafetyVet["Structural Compliance & Metadata Enrichment\n(Craft ID & Page Mapping)"]
+        SafetyVet --> DualEmbed["Dual Embeddings:\n• BGE-M3 (1024-dim Dense)\n• FastEmbed BM25 (Sparse)"]
+        DualEmbed --> QdrantCloud[("Upsert to Qdrant Vector Cloud\n(deploy_to_qdrant.py)")]
+
+        DataFrames & SupabaseCDN & RAMCache & QdrantCloud --> EndIngest([Ready for Retrieval & Multi-Agent Execution])
+
 ```
-
-- **Visual Extraction**: Uses [pdf_visual_extraction.py](file:///C:/Users/supri/recovered-rag-project/app/pdf_visual_extraction.py) to isolate visual elements and crops.
-- **Data Ingestion Script**: Managed by [ingest_data.py](file:///C:/Users/supri/recovered-rag-project/ingest_data.py) and deployment scripts like [deploy_to_qdrant.py](file:///C:/Users/supri/recovered-rag-project/deploy_to_qdrant.py).
-
+  • Visual Extraction & Supabase CDN: Uses pdf_visual_extraction.py to isolate visual elements and upload crops to Supabase Cloud CDN.
+  • In-Memory RAM Transcription Store: Pre-indexes 437 verified markdown tables into RAM cache for sub-20ms visual fast-path slicing.
+  • Dual Vector & Tabular Indexing: Dense BGE-M3 (1024-dim) and BM25 sparse vectors are upserted to Qdrant Cloud via deploy_to_qdrant.py, while CSVs populate the
+  isolated Pandas sandbox
 ---
 
 ## 3. Deep Dive: Multi-Turn Execution Sequence & Follow-up Resolution
