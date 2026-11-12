@@ -230,91 +230,32 @@ This document provides an end-to-end, interview-grade architectural specificatio
 | **6** | Safety Gauntlet | [compliance_safety.py](file:///C:/Users/supri/recovered-rag-project/compliance_safety.py) | Draft Answer + Source Chunks | Faithfulness Score = 0.95 (Cleared) | Sentence-level max similarity and comma-normalized token overlap check. |
 | **7** | Streamlit UI | [StreamlitApp.py](file:///C:/Users/supri/recovered-rag-project/streamlit_ui/StreamlitApp.py) | Cleared Payload | Rendered Markdown + Crop + Sources | Unconditional session state saving of active visual asset path. |
 
-
-
-
-
-  ## 2. Key Components
-
-  ### 🖥️ A. Frontend: Streamlit Application (streamlit_ui/StreamlitApp.py)
-
-  • Primary Role: Manages interactive UI rendering, voice input processing (WAV audio transcription), active chatbot session management (LAST_ACTIVE_IMAGE_PATH), and chat history persistence.
-  • display_image_robustly / resolve_single_figure_path Helper: A specialized utility that handles cross-platform path translation (Windows vs. Linux), filters out broken Git LFS pointer files (<1 KB),
-  dynamically resolves visual crop paths from root or mount directories, and performs PIL thumbnail downscaling (max 1024px) for 70% lighter network payloads.
-  • Live RAG Telemetry Context Injection: Asynchronously captures Streamlit's script context and injects background thread calculations directly into the UI state, rendering real-time Faithfulness and
-  Relevance scores without blocking the chat loop.
-
-  ### 🧠 B. Brain: Pydantic-AI Orchestrator & Fast-Path Intent Router
-
-  • Primary Role: Functions as the central routing and decision engine across specialized agents (supervisor.py, research.py, vision.py, data.py).
-  • Deterministic Intent Fast-Path Router (intent_router.py): Sub-millisecond (<1ms) classifier that detects visual asset queries (figure, chart, table) and CSV queries, directly setting tool availability
-  (allow_pandas: False for figures) to bypass unnecessary LLM supervisor calls.
-  • Model Integration Strategy:
-      • Groq / NVIDIA APIs (Llama 3.3 70B): Utilized for rapid text reasoning, logic evaluation, and route classification.
-      • OpenRouter (Gemini 2.5 Flash): Leveraged specifically for multimodal vision processing, diagram understanding, and extracting structured data points from visual figures.
-  • Autonomous Routing: Uses dynamic Pydantic tool call schemas (BaseModel) to inspect data structures on the fly, avoiding rigid heuristics.
-
-  ### 📁 C. Indexing & Registries (Craft ID Mapping) & In-Memory RAM Store
-
-  • Multimodal Asset Registry & Craft ID Mapping: A compiled Python catalog linking raw files, figures, tables, page numbers, and unique Craft IDs / Entity IDs directly to their absolute disk paths.
-      • Craft ID Cataloging: Assigns deterministic entity identifiers (e.g. metadata.asset_id="4.2", asset_type="figure") to every extracted visual element, chart, and structured table during ingestion.
-      • Deterministic Mapping: Ensures the orchestrator can perform fast, direct lookups by Craft ID rather than relying solely on fuzzy semantic searches, guaranteeing exact asset retrieval.
-  • In-Memory RAM Transcription Store (schemas_and_agent.py): Eagerly pre-loads 215+ visual table extractions into system RAM (_IN_MEMORY_TRANSCRIPTION_CACHE) on startup, serving extractions in <10ms.
-  • Vector Store: Qdrant indexing standard text pages embedded using dense BAAI/bge-m3 (1024-dim) vectors and BM25 sparse tokenizers with cross-encoder reranking (BAAI/bge-reranker-v2-m3).
-  • Tabular Index: Pre-loaded Pandas DataFrames (gdp_df, co2_df) representing structured document tables for exact, programmatic data manipulation.
-
-  ### 🛡️ D. Security: 15-Layer Safety Gauntlet
-
-  An invariant safety pipeline (compliance_safety.py & validation.py) executing strict sequential checks prior to payload dispatch across 3 phases:
-
-  • Core Layers: Prompt Injection Scans, PII Redaction, Rate Limit & Token Budgeting, Retrieval Coverage, Semantic Content Verification, Craft ID / Path Verification (<1 KB LFS filter), Bounding Box Region
-  Alignment, Entity Cross-Checking (preventing Low Income ≤$1,135 vs Low & Middle Income aggregate <$13,935 conflation), Exact Quote Anchoring, Markdown Sanitization, System Prompt Leak Prevention, DLP
-  Blocklists, Dummy Value Scraping, Income Group Sanitization, and Line-Level Faithfulness Evaluations (≥0.90).
-
 ---
 
- ## 3. Query Execution Lifecycle
+## 4. Architectural Deep Dive: Subsystem Implementation Details
 
-   ### Step 1: Input Validation & Rate Limiting
+### 🖥️ A. Frontend & UI Runtime (`streamlit_ui/StreamlitApp.py`)
 
-  • Scans incoming user queries for active prompt injections, toxicity, and sensitive PII leak vectors in gateway_guardrails.py.
-  • Evaluates sliding-window rate limits (REQUEST_CAP = 5 requests per WINDOW_SECONDS = 60).
+• **Interactive UI & Voice Processing**: Manages active chatbot session state, voice WAV audio transcription, active visual tracking (`LAST_ACTIVE_IMAGE_PATH`), and chat history persistence.  
+• **Visual Asset Resolution & Git LFS Guard**: Uses `app/multimodal_assets.py` to resolve visual mentions to cloud-hosted **Supabase CDN signed URLs** (with local filesystem fallback). Implements `display_image_robustly` / `resolve_single_figure_path` to handle cross-platform path translation (Windows vs. Linux), filters out broken Git LFS pointer files (<1 KB), and applies PIL thumbnail downscaling (max 1024px) for 70% lighter network payloads.  
+• **Sub-20ms Visual Fast-Path Slicer**: Inspects targeted figure/table queries against the pre-transcribed RAM cache to slice rows directly into the UI, completely bypassing LLM inference.  
+• **Live Telemetry Context Injection (`add_script_run_ctx`)**: Asynchronously attaches Streamlit's internal execution thread context to background worker threads (`_RAG_BG_EXECUTOR`), reconciling `_ASYNC_RAGAS_STORE` metrics into real-time UI KPI cards and charts without blocking the main chat loop.
 
-  ### Step 2: Contextual Query Rewriting & Memory (Anaphora Resolution)
+### 🧠 B. Multi-Agent Orchestration & Self-Correction Engine (`app/agents/`)
 
-  • Implicit Reference Resolution: The conversation_manager.py inspects the active session state (e.g. LAST_ACTIVE_IMAGE_PATH) and previous chat turns to resolve anaphora references.
-  • Query Transformation: Automatically rewrites vague follow-up questions (e.g., "what about the low income values here?") into explicit, standalone queries (e.g., "what are the low income values in Figure
-  4.2?") before they are sent to the vector database or intent router.
+• **Deterministic Intent Router (`app/intent_router.py`)**: Sub-millisecond (<1ms) keyword and regex classifier that routes queries to `CSV_ONLY`, `TEXT_ONLY`, `VISUAL_SPECIFIC`, or `HYBRID_MULTIMODAL`. Dynamically applies tool masks (e.g. `allow_pandas: False` for figures) to eliminate redundant LLM supervisor overhead.  
+• **Central Model Factory (`app/agents/model_factory.py`)**: Singleton factory routing all Pydantic-AI agents through OpenRouter (`meta-llama/llama-3.3-70b-instruct`) with unified exponential retry and timeout policies. Routes vision OCR tasks to Google Gemini 2.5 Flash.  
+• **Concurrent Worker Dispatcher (`app/main.py`)**: Uses `concurrent.futures.ThreadPoolExecutor(max_workers=2)` to execute Data Agent (Pandas) and Research Agent (Qdrant) simultaneously for compound queries, cutting retrieval latency by ~50%.  
+• **Self-Correction & Reflection Loop (`UsageLimits`)**: Catches schema validation failures via Pydantic-AI `UsageLimits`, feeding traceback errors directly back into the agent context to auto-repair JSON output structures. If a visual query yields a malformed table, a programmatic fallback parser intercepts the raw vision output, extracting Markdown table rows (`|`) directly from intermediate reasoning.
 
-  ### Step 3: Intent Classification & Search Routing
+### 📁 C. Deterministic Registries, RAM Store & Hybrid Indexing
 
-  The system leverages a sub-millisecond Fast-Path Regex Router alongside agentic semantic analysis to dispatch execution to one of three optimal pathways:
-  • Pathway A (Tabular): Routed to Pandas for data aggregations, dynamic mathematical computations, and direct dataframe filtering.
-  • Pathway B (Textual): Routed to Qdrant vector search for dense (BGE-M3) and sparse (BM25) hybrid chunk retrieval, followed by a Transformer-based cross-encoder reranking pass (bge-reranker-v2-m3).
-  • Pathway C (Visual & Entity Lookups): Triggered instantly when a query references a figure, image, chart, or explicit Craft ID. Looks up the precise Craft ID in the RAM Store
-  (_IN_MEMORY_TRANSCRIPTION_CACHE in <10ms) or asset registry, using Gemini Vision with PIL downscaling (max 1024px) for 70% lighter base64 network payloads.
+• **Multimodal Asset Registry & Craft ID Mapping**: A compiled Python catalog linking raw files, figures, tables, page numbers, and unique Craft IDs / Entity IDs directly to cloud Supabase CDN URLs and disk paths.  
+    • **Deterministic Craft ID Cataloging**: Assigns immutable entity identifiers (e.g. `metadata.asset_id="4.2"`, `asset_type="figure"`) to every extracted visual element during ingestion, ensuring exact asset retrieval rather than relying solely on fuzzy semantic searches.  
+• **In-Memory RAM Transcription Store (`schemas_and_agent.py`)**: Eagerly pre-loads **437 verified visual table extractions** into system RAM (`_IN_MEMORY_TRANSCRIPTION_CACHE`) on startup, serving extractions in <10ms.  
+• **Hybrid Vector Index (Qdrant Cloud)**: Dual-vector retrieval combining 1024-dim dense BGE-M3 embeddings with BM25/FastEmbed sparse tokens fused via Reciprocal Rank Fusion (RRF), followed by `BAAI/bge-reranker-v2-m3` cross-encoder reranking.  
+• **Programmatic Tabular Index**: Pre-loaded DataFrames (`gdp_df.csv`, `co2_df.csv`) operating within an isolated Pandas sandbox for exact, programmatic data manipulation and filtering.
 
-  ### Step 4: Self-Correction & Dynamic Schema Recovery
-
-  • Dynamic Schema Flexibility: Core Pydantic AI schemas (extracted_table, source_routing_trail) are structured as Optional, allowing text-only queries to pass validation instantly without triggering
-  unnecessary LLM retries.
-  • Table Recovery Loop: If a visual query genuinely fails or yields a malformed table payload, a programmatic fallback parser intercepts the raw vision output, extracting Markdown table rows (|) directly
-  from the intermediate reasoning string and injecting them back into the structured response.
-
-  ### Step 5: 15-Layer Output Guardrails & Safety Vetting
-
-  • Path & Craft ID Alignment: Verifies that any referenced visual asset matches its registered Craft ID, exists in the asset registry, and points to a valid binary image (filtering Git LFS pointers <1 KB).
-  • Bounding Box & Category Matching: Confirms extracted chart data boundaries map precisely back to source document page coordinates and prevents conflation of single categories vs aggregate brackets.
-  • Fidelity & DLP Protection: Computes sentence-level maximum semantic similarity scores against retrieved context chunks, whilst actively scrubbing hallucinated generic filler words and blocking sensitive
-  financial DLP terms.
-
-  ### Step 6: Frontend Rendering & Telemetry
-
-  • Text Synthesis: Streamlit renders the validated reasoning stream.
-  • Tabular Data: Reconstructs raw tabular outputs into clean interactive UI tables.
-  • Visual Data: Displays high-resolution binary image assets mapped directly from the Craft ID registry inline.
-  • Live Background Telemetry: Asynchronously logs execution metrics and safety scores to Langfuse, utilizing native Streamlit Context Injection (add_script_run_ctx) to seamlessly push real-time
-  Faithfulness and Relevance scores directly back to the UI dashboard without blocking the main chat loop.
 
 ---
 
