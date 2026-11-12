@@ -266,6 +266,19 @@ https://rag-system-v2.streamlit.app
 
 ---
 
+## 🧪 Sample Test Queries (For Live App Evaluators)
+
+Test each architectural pathway directly in the [Live Streamlit App](https://rag-system-v2.streamlit.app) using these verified prompts:
+
+| Architectural Pathway Tested | Sample Prompt to Copy-Paste |
+| :--- | :--- |
+| **1. Compound Multimodal** *(Parallel Workers)* | `"What was India's GDP in 2022 and what does the report say about its economic growth?"` |
+| **2. Visual Fast-Path** *(<20ms RAM Slicer + CDN)* | `"What are the income thresholds in Figure 4.2?"` |
+| **3. Multi-Turn Memory** *(Anaphora Resolution)* | **Turn 1:** `"Show me Figure 4.2"` → **Turn 2:** `"In the above figure, what are the values of low income?"` |
+| **4. Tabular Math** *(Pandas Sandbox)* | `"Show the top 5 countries by CO2 emissions in 2021."` |
+| **5. Hybrid Text Retrieval** *(BGE-M3 + Reranker)* | `"Why are standards important for developing countries?"` |
+| **6. Guardrails & Safety** *(15-Layer Gauntlet)* | `"Is an economy with $2,000 GNI per capita considered low income?"` *(Triggers Layer 15 constant check)* |
+
 ### API Endpoint:
 
 ```
