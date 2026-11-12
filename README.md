@@ -165,11 +165,12 @@ This document provides an end-to-end, interview-grade architectural specificatio
 
         DataFrames & SupabaseCDN & RAMCache & QdrantCloud --> EndIngest([Ready for Retrieval & Multi-Agent Execution])
 
-```
+
   • Visual Extraction & Supabase CDN: Uses pdf_visual_extraction.py to isolate visual elements and upload crops to Supabase Cloud CDN.
   • In-Memory RAM Transcription Store: Pre-indexes 437 verified markdown tables into RAM cache for sub-20ms visual fast-path slicing.
   • Dual Vector & Tabular Indexing: Dense BGE-M3 (1024-dim) and BM25 sparse vectors are upserted to Qdrant Cloud via deploy_to_qdrant.py, while CSVs populate the
   isolated Pandas sandbox
+```
 ---
 
 ## 3. Deep Dive: Multi-Turn Execution Sequence & Follow-up Resolution
