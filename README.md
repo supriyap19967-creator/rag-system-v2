@@ -346,7 +346,7 @@ recovered-rag-project/
 
 ### 1. Repository & Git LFS Setup
 ```bash
-git clone https://github.com/your-username/rag-system-v2.git
+git clone https://github.com/supriyap19967-creator/rag-system-v2.git
 cd rag-system-v2
 git lfs install && git lfs pull
 ```
@@ -360,36 +360,49 @@ pip install --upgrade pip && pip install -r requirements.txt
 
 ### 3. Environment Variables (.env)
 ```env
-GROQ_API_KEY=your_groq_api_key
+# Core LLM & Multimodal Vision APIs
 OPENROUTER_API_KEY=your_openrouter_api_key
+GEMINI_API_KEY=your_gemini_api_key
+GROQ_API_KEY=your_groq_api_key
+
+# Vector Database (Local Docker or Qdrant Cloud)
 QDRANT_HOST=localhost
 QDRANT_PORT=6333
-# Optional Observability Logging
+# QDRANT_URL=https://your-cluster-id.qdrant.io  # (If using Qdrant Cloud)
+# QDRANT_API_KEY=your_qdrant_api_key
+
+# Optional: Observability & Cloud Assets
 LANGFUSE_PUBLIC_KEY=your_langfuse_public_key
 LANGFUSE_SECRET_KEY=your_langfuse_secret_key
 LANGFUSE_HOST=https://cloud.langfuse.com
+SUPABASE_URL=your_supabase_project_url
+SUPABASE_KEY=your_supabase_anon_key
 ```
 
 ### 4. Run Services & Launch App
+
 - **Start Qdrant Vector Store (Docker)**:
-  ```bash
-  docker run -d -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant
-  ```
+```bash
+docker run -d -p 6333:6333 -p 6334:6334 -v qdrant_storage:/qdrant/storage qdrant/qdrant
+```
+
 - **Run Pytest Test Suite**:
-  ```bash
-  pytest scratch/test_followup_resolution.py test_intent_router.py -v
-  ```
+```bash
+pytest scratch/test_followup_resolution.py test_intent_router.py -v
+```
+
 - **Launch Streamlit Interface**:
-  ```bash
-  streamlit run streamlit_ui/StreamlitApp.py
-  ```
+```bash
+streamlit run streamlit_ui/StreamlitApp.py
+```
+
 - **Launch FastAPI Backend API**:
-  ```bash
-  python -m uvicorn app.main:app --reload
-  ```
+```bash
+python -m uvicorn app.main:app --reload
+```
 
 ---
 
 # Deployment
 
-Deploy directly to **Streamlit Community Cloud** by connecting your GitHub repository and setting `app_file` to `streamlit_ui/StreamlitApp.py`.
+Deploy directly to **Streamlit Community Cloud** by connecting your GitHub repository and setting the main file path to `streamlit_ui/StreamlitApp.py`.
