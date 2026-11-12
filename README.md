@@ -134,6 +134,9 @@ This document provides an end-to-end, interview-grade architectural specificatio
 
 ## 2. Deep Dive: Ingestion Pipeline
 
+<details>
+<summary><b>📊 Click to expand Ingestion Pipeline Flowchart</b></summary>
+
 ```mermaid
         flowchart TD
         Start([Start Multimodal Ingestion]) --> CheckType{Document Modality}
@@ -162,6 +165,8 @@ This document provides an end-to-end, interview-grade architectural specificatio
         DataFrames & SupabaseCDN & RAMCache & QdrantCloud --> EndIngest([Ready for Retrieval & Multi-Agent Execution])
 
 ```
+
+</details>
 • Visual Extraction & Supabase CDN: Uses pdf_visual_extraction.py to isolate visual elements and upload crops to Supabase Cloud CDN.
 • In-Memory RAM Transcription Store: Pre-indexes 437 verified markdown tables into RAM cache for sub-20ms visual fast-path slicing.
 • Dual Vector & Tabular Indexing: Dense BGE-M3 (1024-dim) and BM25 sparse vectors are upserted to Qdrant Cloud via deploy_to_qdrant.py, while CSVs populate the
@@ -169,6 +174,9 @@ This document provides an end-to-end, interview-grade architectural specificatio
 
 
 ## 3. Deep Dive: Multi-Turn Execution Sequence & Follow-up Resolution
+
+<details>
+<summary><b>🔄 Click to expand Multi-Turn Execution Flowchart</b></summary>
 
 ```mermaid
     flowchart TD
@@ -207,6 +215,8 @@ This document provides an end-to-end, interview-grade architectural specificatio
             RagasEval --> Observability["Langfuse Traces & Live UI Telemetry Reconcile"]
         end
 ```
+
+</details>
 
 ### Multi-Turn Execution Step Walkthrough
 
