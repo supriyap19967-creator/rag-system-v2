@@ -341,7 +341,6 @@ recovered-rag-project/
 ├── query_rag.py                          # Core RAG querying logic & fallback synthesis
 ├── pytest.ini                            # Pytest configuration & test discovery rules
 ├── requirements.txt                      # Production Python dependencies
-└── .env                                  # Environment credentials (OpenRouter, Gemini, Qdrant, Supabase, Langfuse)
 ```
 ---
 
@@ -349,11 +348,7 @@ recovered-rag-project/
 # 🚀 Future Improvements & Engineering Roadmap
 
 - **Model Context Protocol (MCP) Server Endpoint (`mcp_server.py`)**: Expose the RAG system's Qdrant vector store, Gemini VLM parsing engine, and Pandas execution tools via an MCP server interface (using Anthropic FastMCP), enabling external AI developer tools (Cursor, Antigravity, Claude Desktop) to query the system directly.
-- **Token-Level Answer Streaming (`agent.run_stream`)**: Upgrade UI response generation to token-by-token streaming, reducing Time-To-First-Token (TTFT) from ~1.5s down to `<200ms` while safely buffering Pydantic JSON schemas.
-- **Advanced Reciprocal Rank Fusion (RRF)**: Implement native RRF algorithm score fusion combining dense BGE-M3 vector ranks with BM25 sparse keyword ranks ($\alpha=0.6$) to further boost retrieval recall on financial acronyms and ISO regulatory standards.
 - **Cross-Chart Multi-Asset Comparative Reasoning**: Extend active session memory to support multi-turn visual comparison across multiple figures (e.g. *"Compare Figure 4.2 low-income values with Figure 3.1 middle-income trends"*).
-- **Executive Briefing PDF / Excel Exporter**: Add a one-click exporter button (`st.download_button`) generating executive PDF / XLSX briefing reports complete with wrap-up narratives, extracted Markdown tables, high-res visual chart crops, and full source citations.
-
 
 ## 🛠️ Local Setup & Installation
 
