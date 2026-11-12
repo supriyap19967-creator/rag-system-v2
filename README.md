@@ -162,45 +162,54 @@ This document provides an end-to-end, interview-grade architectural specificatio
         DataFrames & SupabaseCDN & RAMCache & QdrantCloud --> EndIngest([Ready for Retrieval & Multi-Agent Execution])
 
 ```
-  • Visual Extraction & Supabase CDN: Uses pdf_visual_extraction.py to isolate visual elements and upload crops to Supabase Cloud CDN.
-  • In-Memory RAM Transcription Store: Pre-indexes 437 verified markdown tables into RAM cache for sub-20ms visual fast-path slicing.
-  • Dual Vector & Tabular Indexing: Dense BGE-M3 (1024-dim) and BM25 sparse vectors are upserted to Qdrant Cloud via deploy_to_qdrant.py, while CSVs populate the
+• Visual Extraction & Supabase CDN: Uses pdf_visual_extraction.py to isolate visual elements and upload crops to Supabase Cloud CDN.
+• In-Memory RAM Transcription Store: Pre-indexes 437 verified markdown tables into RAM cache for sub-20ms visual fast-path slicing.
+• Dual Vector & Tabular Indexing: Dense BGE-M3 (1024-dim) and BM25 sparse vectors are upserted to Qdrant Cloud via deploy_to_qdrant.py, while CSVs populate the
   isolated Pandas sandbox
 
 
 ## 3. Deep Dive: Multi-Turn Execution Sequence & Follow-up Resolution
 
 ```mermaid
-flowchart TD
-    subgraph Step1 ["Step 1: User Follow-up Input"]
-        Input["👤 User Query: 'in above figure what are the values of low income?'"]
-    end
 
-    subgraph Step2 ["Step 2: Contextual Query Rewriting [conversation_manager.py]"]
-        Input --> ContextManager["Multimodal Conversation Manager"]
-        SessionStore[("Active Session Store (Figure 4.2)")] <--> ContextManager
-        ContextManager --> Rewritten["Rewritten Query: 'in Figure 4.2 what are the values of low income?'"]
-    end
+  │ Diagram exceeds terminal width (294 > 170 cols)
+  │ Displayed as code block. Widen terminal to view inline.
 
-    subgraph Step3 ["Step 3: Intent Classification [intent_router.py]"]
-        Rewritten --> Router["Intent Router: VISUAL_SPECIFIC (allow_pandas: False)"]
-    end
+    flowchart TD
+        subgraph Step1 ["Step 1: User Follow-up Input"]
+            Input["👤 User Query: 'in above figure what are the values of low income?'"]
+        end
 
-    subgraph Step4 ["Step 4: Parallel Retrieval [ThreadPoolExecutor max_workers=3]"]
-        Router --> ParallelPool["Parallel Worker Dispatcher"]
-        ParallelPool --> QdrantWorker["Worker 1: Qdrant Hybrid Search (BGE-M3 + BM25)"]
-        ParallelPool --> RAMWorker["Worker 2: RAM Store Lookup (<10ms)"]
-    end
+        subgraph Step2 ["Step 2: Contextual Query Rewriting [conversation_manager.py]"]
+            Input --> ContextManager["Multimodal Conversation Manager"]
+            SessionStore[("Active Session Store (Figure 4.2)")] <--> ContextManager
+            ContextManager --> Rewritten["Rewritten Query: 'in Figure 4.2 what are the values of low income?'"]
+        end
 
-    subgraph Step5 ["Step 5: Synthesis & 15-Layer Safety Gauntlet"]
-        QdrantWorker & RAMWorker --> Synthesizer["LLM Synthesizer Engine"]
-        Synthesizer --> DraftAnswer["Draft Answer: '$1,135 or less'"]
-        DraftAnswer --> SafetyGauntlet["Validator Agent: 15-Layer Safety Gauntlet (Score = 0.95 Cleared)"]
-    end
+        subgraph Step3 ["Step 3: Intent Classification [intent_router.py]"]
+            Rewritten --> Router{"Intent Router (<1ms)"}
+            Router -- "VISUAL_SPECIFIC" --> WorkerDispatch["Worker Dispatcher (allow_pandas=False)"]
+        end
 
-    subgraph Step6 ["Step 6: Rendered UI Response [StreamlitApp.py]"]
-        SafetyGauntlet --> UIResponse["Streamlit UI Card (Markdown Answer + Figure 4.2 Crop + Citations)"]
-    end
+        subgraph Step4 ["Step 4: Parallel Retrieval & Asset Resolution"]
+            WorkerDispatch --> ParallelPool["ThreadPoolExecutor (max_workers=2)"]
+            ParallelPool --> QdrantWorker["Worker 1: Qdrant Hybrid Search (BGE-M3 + BM25)"]
+            ParallelPool --> RAMWorker["Worker 2: RAM Store Lookup (<10ms)"]
+            WorkerDispatch --> AssetResolver["Multimodal Asset Resolver (Supabase Signed CDN URL)"]
+        end
+
+        subgraph Step5 ["Step 5: Synthesis & Tier 1 Fast Delivery"]
+            QdrantWorker & RAMWorker & AssetResolver --> Synthesizer["Cross-Modal Synthesizer (Llama 3.3 70B)"]
+            Synthesizer --> DraftAnswer["Draft Answer: '$1,135 or less'"]
+            DraftAnswer --> Tier1["Tier 1 Pre-Render Gatekeeper (<10ms)\n(Numeric Fact & Grounding Guard)"]
+            Tier1 --> UIResponse["Streamlit UI Card\n(Markdown Answer + Figure 4.2 Crop + Citations)"]
+        end
+
+        subgraph Step6 ["Step 6: Tier 2 Non-Blocking Background Safety & Observability"]
+            UIResponse -. "Background Thread (_RAG_BG_EXECUTOR)" .-> AsyncSafety["Tier 2: Deep 15-Layer Safety Gauntlet\n(Faithfulness Score = 0.95 Cleared)"]
+            AsyncSafety --> RagasEval["Step-by-Step Modular RAGAS Evaluation"]
+            RagasEval --> Observability["Langfuse Traces & Live UI Telemetry Reconcile"]
+        end
 ```
 
 ### Multi-Turn Execution Step Walkthrough
