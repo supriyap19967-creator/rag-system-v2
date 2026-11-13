@@ -262,7 +262,8 @@ This document provides an end-to-end, interview-grade architectural specificatio
 # Live Demo
 
 🔗 **Streamlit App:**  
-https://rag-system-v2.streamlit.app
+https://rag-system-v2-fd3ozduu9yt3aueppadnkv.streamlit.app
+
 
 ---
 
