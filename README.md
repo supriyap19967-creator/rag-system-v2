@@ -82,6 +82,7 @@ This document provides an end-to-end, interview-grade architectural specificatio
 | **Async Step-by-Step RAGAS Evaluator** | `evaluation/step_by_step_ragas.py` | Query + Context + Answer | Modular RAGAS Scores | Evaluates out-of-band via _RAG_BG_EXECUTOR: Retrieval Recall/Precision, BGE Faithfulness, and Asset Precision. |
 | **Distributed Tracing & Observability** | `streamlit_ui/StreamlitApp.py` | Agent spans + Telemetry data | Langfuse Traces & Scores | Logs full trace trees, agent tool spans, token usage, and pushes live Step-by-Step Ragas scores to Langfuse Cloud. |
 | **PDF Visual Extractor & Ingestion** | `app/pdf_visual_extraction.py` & `ingest_data.py` | Raw PDF / CSV documents | Chunks + High-res Crops + Embeddings | Parses PDF layout via Docling, isolates image bounding boxes, extracts crops, and generates dual BGE-M3/BM25 vectors. |
+| **Automated CI/CD Pipeline** | `.github/workflows/ci.yml` | Git Push / Pull Request to `main` | Test status badge + Pytest exit code | Automated GitHub Actions CI pipeline running the full Pytest test suite, dependency vetting, and regression tests on Python 3.11. |
 
 ---
 
@@ -135,7 +136,11 @@ This document provides an end-to-end, interview-grade architectural specificatio
 ## 2. Deep Dive: Ingestion Pipeline
 
 <details>
-<summary><b>📊 Click to expand Ingestion Pipeline Flowchart</b></summary>
+<summary>
+  <img src="https://img.shields.io/badge/📊_CLICK_TO_EXPAND-Ingestion_Pipeline_Flowchart_▼-0969da?style=for-the-badge" alt="📊 Click to expand Ingestion Pipeline Flowchart" />
+  <br>
+  <b><kbd>👉 Click here to view the full interactive Ingestion Pipeline flowchart ▾</kbd></b>
+</summary>
 
 ```mermaid
         flowchart TD
@@ -176,7 +181,11 @@ This document provides an end-to-end, interview-grade architectural specificatio
 ## 3. Deep Dive: Multi-Turn Execution Sequence & Follow-up Resolution
 
 <details>
-<summary><b>🔄 Click to expand Multi-Turn Execution Flowchart</b></summary>
+<summary>
+  <img src="https://img.shields.io/badge/🔄_CLICK_TO_EXPAND-Multi--Turn_Execution_Flowchart_▼-0969da?style=for-the-badge" alt="🔄 Click to expand Multi-Turn Execution Flowchart" />
+  <br>
+  <b><kbd>👉 Click here to view the full interactive Multi-Turn Execution flowchart ▾</kbd></b>
+</summary>
 
 ```mermaid
     flowchart TD
@@ -302,6 +311,10 @@ Returns:
 ```
 recovered-rag-project/
 │
+├── .github/workflows/
+│   ├── ci.yml                            # GitHub Actions CI/CD: Automated Pytest runner & coverage on PR/Push
+│   └── sync.yml                          # GitHub to HuggingFace repository sync pipeline
+│
 ├── app/                                  # Core application backend
 │   ├── agents/                           # Multi-agent system (Pydantic-AI)
 │   │   ├── model_factory.py              # Central singleton factory routing agents to OpenRouter (Llama 3.3 70B)
@@ -409,6 +422,13 @@ streamlit run streamlit_ui/StreamlitApp.py
 ```bash
 python -m uvicorn app.main:app --reload
 ```
+
+### 5. Automated CI/CD Pipeline (GitHub Actions)
+
+Continuous Integration is configured via [`.github/workflows/ci.yml`](.github/workflows/ci.yml):
+- **Triggers**: Automated runs on every `push` and `pull_request` targeting the `main` branch.
+- **Environment**: Linux `ubuntu-latest` running Python 3.11 with cached system & wheel dependencies.
+- **Execution**: Automatically executes the entire `pytest` test suite with isolated dummy secrets to catch regressions before merge.
 
 ---
 
