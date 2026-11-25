@@ -4343,19 +4343,43 @@ def _render_voice_recorder() -> None:
             """,
             unsafe_allow_html=True,
         )
-        response = requests.post(
-            TRANSCRIBE_API_URL,
-            files={
-                "audio": (
-                    audio_file.name or "voice-query.wav",
-                    audio_bytes,
-                    audio_file.type or "audio/wav",
+        transcribed_text = ""
+        # 1. Direct in-process Groq Whisper transcription (standalone, works in Streamlit Cloud without separate backend)
+        groq_key = resolve_groq_api_key()
+        if groq_key:
+            try:
+                groq_client_inst = get_groq_client(groq_key)
+                transcription = groq_client_inst.audio.transcriptions.create(
+                    file=(
+                        audio_file.name or "voice-query.wav",
+                        audio_bytes,
+                        audio_file.type or "audio/wav",
+                    ),
+                    model=os.getenv("GROQ_WHISPER_MODEL", "whisper-large-v3"),
+                    prompt="The user is asking data analysis questions about a World Development Report, including chart references like Figure O.8, Figure 8.4, and Table 2.1.",
+                    language="en",
+                    temperature=0,
+                    response_format="json",
                 )
-            },
-            timeout=90,
-        )
-        response.raise_for_status()
-        transcribed_text = str(response.json().get("text") or "").strip()
+                transcribed_text = str(getattr(transcription, "text", "") or "").strip()
+            except Exception as direct_err:
+                logger.warning("Direct Groq Whisper transcription failed: %s; falling back to TRANSCRIBE_API_URL", direct_err)
+
+        # 2. Fallback to external FastAPI endpoint if direct call was unavailable
+        if not transcribed_text:
+            response = requests.post(
+                TRANSCRIBE_API_URL,
+                files={
+                    "audio": (
+                        audio_file.name or "voice-query.wav",
+                        audio_bytes,
+                        audio_file.type or "audio/wav",
+                    )
+                },
+                timeout=30,
+            )
+            response.raise_for_status()
+            transcribed_text = str(response.json().get("text") or "").strip()
         if not transcribed_text:
             raise RuntimeError("Transcription returned empty text.")
         st.session_state.pending_voice_query_text = transcribed_text
